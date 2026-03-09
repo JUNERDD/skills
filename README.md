@@ -9,6 +9,10 @@ This repository packages a reusable `debug` skill that forces the agent to prove
 - A bundled local NDJSON log collector with a same-origin dashboard under [`scripts/local_log_collector/`](./scripts/local_log_collector/)
 - Agent metadata for OpenAI-compatible skill registries in [`agents/openai.yaml`](./agents/openai.yaml)
 
+## Dashboard Preview
+
+![Runtime Debug dashboard preview](./docs/images/dashboard-overview.png)
+
 ## Why This Exists
 
 Most debugging prompts drift into speculative fixes. This skill pushes the agent toward a stricter loop:
