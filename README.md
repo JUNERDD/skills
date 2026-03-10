@@ -2,14 +2,14 @@
 
 Evidence-first runtime debugging for agent runtimes that support reusable local skills, prompt modules, or workflow packs.
 
-This repository is not tied to Codex alone. The core behavior lives in [`SKILL.md`](./SKILL.md), so any agent system that can load a skill directory and follow Markdown instructions can reuse it. [`agents/openai.yaml`](./agents/openai.yaml) is only an optional metadata adapter for runtimes that support OpenAI-style skill discovery.
+This repository packages the installable skill under [`src/debug/`](./src/debug/). Users can copy that folder as-is into their skill directory without rearranging files. [`src/debug/agents/openai.yaml`](./src/debug/agents/openai.yaml) is only an optional metadata adapter for runtimes that support OpenAI-style skill discovery.
 
 ## What You Get
 
 - A reusable `debug` skill that forces hypothesis-driven debugging instead of speculative fixes
-- A detailed operator reference in [`references/runtime-debugging.md`](./references/runtime-debugging.md)
-- A bundled local NDJSON collector and dashboard in [`scripts/local_log_collector/`](./scripts/local_log_collector/)
-- Optional UI metadata for compatible runtimes in [`agents/openai.yaml`](./agents/openai.yaml)
+- A detailed operator reference in [`src/debug/references/runtime-debugging.md`](./src/debug/references/runtime-debugging.md)
+- A bundled local NDJSON collector and dashboard in [`src/debug/scripts/local_log_collector/`](./src/debug/scripts/local_log_collector/)
+- Optional UI metadata for compatible runtimes in [`src/debug/agents/openai.yaml`](./src/debug/agents/openai.yaml)
 
 ## Architecture
 
@@ -45,7 +45,7 @@ That makes the debugging process easier to audit, easier to repeat, and much les
 
 ## Dashboard Preview
 
-![Runtime Debug dashboard preview](./docs/images/dashboard-overview.png)
+![Runtime Debug dashboard preview](./src/docs/images/dashboard-overview.png)
 
 ## What The Skill Enforces
 
@@ -65,26 +65,26 @@ The skill is intentionally portable. You can use it with:
 - Custom agent frameworks that mount a skill folder and inject `SKILL.md` into context
 - Internal toolchains that want the collector, references, or workflow as reusable assets
 
-If your runtime ignores [`agents/openai.yaml`](./agents/openai.yaml), that is fine. The core logic is still fully available through [`SKILL.md`](./SKILL.md).
+If your runtime ignores [`src/debug/agents/openai.yaml`](./src/debug/agents/openai.yaml), that is fine. The core logic is still fully available through [`src/debug/SKILL.md`](./src/debug/SKILL.md).
 
 ## Install
 
-Install the repository as a local skill named `debug`.
+Install the packaged skill from [`src/debug/`](./src/debug/) as a local skill named `debug`.
 
 | Runtime | Install path | Notes |
 | --- | --- | --- |
-| Codex-style runtimes | `~/.codex/skills/debug` | Reads `SKILL.md` directly |
-| Agents-style runtimes | `~/.agents/skills/debug` | Common local skill convention |
-| Custom runtimes | Any mounted `debug/` folder | Load `SKILL.md`, optionally parse `agents/openai.yaml` |
+| Codex-style runtimes | `~/.codex/skills/debug` | Copy `src/debug` there |
+| Agents-style runtimes | `~/.agents/skills/debug` | Copy `src/debug` there |
+| Custom runtimes | Any mounted `debug/` folder | Copy `src/debug`, then load `SKILL.md` and optionally parse `agents/openai.yaml` |
 
 Example:
 
 ```bash
-mkdir -p ~/.agents/skills/debug
-rsync -a ./ ~/.agents/skills/debug/
+mkdir -p ~/.agents/skills
+cp -R ./src/debug ~/.agents/skills/
 ```
 
-If your runtime supports metadata discovery, keep [`agents/openai.yaml`](./agents/openai.yaml) together with the rest of the repository.
+If your runtime supports metadata discovery, keep [`src/debug/agents/openai.yaml`](./src/debug/agents/openai.yaml) inside the copied skill folder.
 
 ## How To Invoke It
 
@@ -92,7 +92,7 @@ The exact invocation depends on the host:
 
 - In runtimes with skill commands or chips, call `debug` or `$debug`
 - In plain-text agent runtimes, tell the agent to load the `debug` skill before investigating the bug
-- In custom frameworks, inject [`SKILL.md`](./SKILL.md) as the active debugging workflow
+- In custom frameworks, inject [`src/debug/SKILL.md`](./src/debug/SKILL.md) as the active debugging workflow
 
 Example prompts:
 
@@ -124,7 +124,7 @@ Minimal smoke test:
 
 ```bash
 mkdir -p .debug-logs
-python3 scripts/local_log_collector/main.py \
+python3 src/debug/scripts/local_log_collector/main.py \
   --log-file "$PWD/.debug-logs/demo.ndjson" \
   --ready-file "$PWD/.debug-logs/demo.json" \
   --session-id "demo-session"
@@ -136,31 +136,33 @@ The ready file contains the active endpoint, dashboard URL, log file path, and s
 
 ```text
 .
-├── SKILL.md
 ├── README.md
-├── LICENSE
-├── agents/
-│   └── openai.yaml
-├── docs/
-│   └── images/
-│       └── dashboard-overview.png
-├── references/
-│   └── runtime-debugging.md
-└── scripts/
-    └── local_log_collector/
-        ├── main.py
-        ├── collector_server.py
-        ├── collector_state.py
-        ├── collector_browser.py
-        └── static/
+└── src/
+    ├── LICENSE
+    ├── debug/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   ├── references/
+    │   │   └── runtime-debugging.md
+    │   └── scripts/
+    │       └── local_log_collector/
+    │           ├── main.py
+    │           ├── collector_server.py
+    │           ├── collector_state.py
+    │           ├── collector_browser.py
+    │           └── static/
+    └── docs/
+        └── images/
+            └── dashboard-overview.png
 ```
 
 ## Customize It
 
-- Edit [`SKILL.md`](./SKILL.md) to change workflow rules, guardrails, or response shape
-- Edit [`references/runtime-debugging.md`](./references/runtime-debugging.md) to refine bootstrap commands and logging templates
-- Edit [`agents/openai.yaml`](./agents/openai.yaml) only when you need runtime-specific metadata tweaks
+- Edit [`src/debug/SKILL.md`](./src/debug/SKILL.md) to change workflow rules, guardrails, or response shape
+- Edit [`src/debug/references/runtime-debugging.md`](./src/debug/references/runtime-debugging.md) to refine bootstrap commands and logging templates
+- Edit [`src/debug/agents/openai.yaml`](./src/debug/agents/openai.yaml) only when you need runtime-specific metadata tweaks
 
 ## License
 
-Released under the [MIT License](./LICENSE).
+Released under the [MIT License](./src/LICENSE).
