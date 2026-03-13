@@ -14,7 +14,7 @@ Before starting, normalize the current debugging environment without preflightin
 - Determine whether the session already exposes a logging endpoint, log path, session ID, ready file, or other authoritative debug configuration.
 - If no authoritative logging configuration exists, determine whether a local Python 3 interpreter is available for the bundled collector. Prefer `python3`; otherwise allow `python` only when it resolves to Python 3. If no Python 3 interpreter is available, stop and tell the user you need either an existing logging session or a local Python 3 runtime before continuing in evidence-first mode.
 - Determine how the host keeps long-lived processes alive: persistent PTY, detached shell, task runner, or no background support.
-- Determine whether the host can open or automate browser pages. If not, rely on the collector's ready file and HTTP APIs instead of UI inspection.
+- Determine whether the host can open or automate browser pages. If not, rely on the collector's ready file and HTTP APIs instead of UI inspection. When browser access exists, reserve page opening for the collector dashboard by default; do not open target-app pages unless the user explicitly asked you to open the project.
 - Determine whether each planned log point runs in browser/client code, server/runtime code, or both. For browser/client code, prefer direct requests to the active collector endpoint instead of adding project-local proxy routes.
 - Determine how the user signals that reproduction is complete: explicit UI button, task-state action, or a short chat reply.
 - Do not treat target-app startup, health checks, route probes, or compile/build checks as default preflight. Only inspect them when the user explicitly asked to debug startup behavior or when a current hypothesis is about app boot, compilation, or endpoint availability.
@@ -56,6 +56,7 @@ Before starting, normalize the current debugging environment without preflightin
 - Never proactively start the target project, hit app health endpoints, probe routes, or run build/compile checks as default setup. Only do so when the user explicitly wants startup debugging or a live hypothesis requires that evidence.
 - Never clear the active session's logs before preserving any evidence you still need from the current run.
 - Never assume a previously started logging process is still alive before a new recording pass; verify it or start a new collector first.
+- Never open the target project with MCP, browser automation, or an embedded browser unless the user explicitly asked you to open the project. By default, the only page you may open is the collector dashboard.
 - Never open the same dashboard twice. If the bundled collector already opened the dashboard successfully, do not call MCP or browser automation just to open that page again.
 - Never restart the collector and leave the temporary logging code pointed at a stale ingest port.
 - Never leave injected temporary logging code behind after the bug is proven fixed and the user confirms the issue is gone.
@@ -73,6 +74,7 @@ Before starting, normalize the current debugging environment without preflightin
 - When you started the bundled collector, use its same-origin dashboard for live status and operator actions instead of building a second local UI.
 - The bundled collector should auto-open the dashboard unless you intentionally started it with `--no-open-dashboard`.
 - When the bundled collector reports a successful dashboard auto-open, treat that as sufficient and do not open the same page again through MCP. Only fall back to MCP or an embedded browser when the auto-open attempt failed or was disabled.
+- When browser automation or MCP is available, reserve it for the collector dashboard unless the user explicitly asked you to open the target project. Do not use project page opens as implicit validation.
 - When referencing bundled files, resolve paths relative to the skill directory instead of the repo root or shell cwd.
 - Before a rerun, verify the current logging process is still reachable. If it is not, re-establish a new active session before clearing logs or asking for reproduction.
 - If the active collector endpoint changes after a restart, update the inserted temporary logging code to use the new endpoint before the next run.

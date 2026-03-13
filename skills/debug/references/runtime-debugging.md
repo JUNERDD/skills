@@ -27,7 +27,7 @@ Adapt the debugging infrastructure to the current host before running commands. 
 1. Confirm where temporary debug artifacts should live. Reuse an existing host-specific scratch directory when one exists; otherwise default to `$PWD/.debug-logs/`.
 2. Confirm how the host keeps long-lived processes alive: persistent PTY, detached job, task runner, or another supported mechanism.
 3. If no authoritative logging configuration already exists, resolve a local Python 3 interpreter for the bundled collector. Prefer `python3`; otherwise allow `python` only when it resolves to Python 3. If neither is available, stop and tell the user you need either an existing logging session or Python 3 for this evidence-first mode.
-4. Confirm whether the host can open or automate browser pages. If not, rely on the ready file and HTTP APIs.
+4. Confirm whether the host can open or automate browser pages. If not, rely on the ready file and HTTP APIs. When it can, reserve page opening for the collector dashboard unless the user explicitly asked to open the target project.
 5. Confirm whether planned instrumentation runs in browser/client code, server/runtime code, or both. For browser/client code, prefer direct posts to the active collector endpoint and do not assume an app-local proxy is required.
 6. Confirm how the user signals that reproduction is complete. Use the host's real action label or request a short reply if no action exists.
 7. Do not proactively start the target app, hit app health endpoints, probe routes, or run compile/build checks as setup unless the user explicitly asked to debug startup behavior or a current hypothesis depends on that evidence.
@@ -50,6 +50,23 @@ Not allowed as default setup:
 
 Only do those app-level checks when the user explicitly asks to debug startup or availability, or when a specific hypothesis would otherwise remain untestable.
 
+## Browser opening limits
+
+The collector dashboard is the only page the skill may open by default.
+
+Allowed by default:
+
+- Reusing the collector's ready file and HTTP APIs without opening any target-app page
+- Opening the collector dashboard only when its auto-open attempt failed or was intentionally disabled
+
+Not allowed without an explicit user request to open the project:
+
+- MCP or browser-automation navigation to the target app's home page, routes, or preview URLs
+- Opening the project just to see whether it loads
+- Treating a project page open as generic validation before hypotheses or instrumentation
+
+If the user did not explicitly ask you to open the project, stay on the collector dashboard and the collector's HTTP APIs.
+
 ## Active logging session
 
 Prefer this order:
@@ -65,7 +82,7 @@ Prefer this order:
 When the bundled collector provides dashboard auto-open fields in the ready file, treat them as authoritative:
 
 - If `dashboardOpenSucceeded` is `true`, do not call MCP or browser automation to open the same dashboard again.
-- If `dashboardOpenSucceeded` is `false`, or `dashboardOpenAttempted` is `false` because auto-open was disabled, then and only then consider MCP or an embedded browser fallback.
+- If `dashboardOpenSucceeded` is `false`, or `dashboardOpenAttempted` is `false` because auto-open was disabled, then and only then consider MCP or an embedded browser fallback for the collector dashboard.
 
 ## Reusing or restarting the logging process
 
@@ -127,7 +144,7 @@ nohup "$PYTHON_BIN" <SKILL_ROOT>/scripts/local_log_collector/main.py \
 
 Resolve `<SKILL_ROOT>` to the installed debug skill directory before running the command. Generate `<SESSION_ID>` from the task plus a timestamp, for example `checkout-bug-1733456789000`. The collector attempts to open the dashboard in the default browser automatically unless you pass `--no-open-dashboard`. After the service starts, read the ready file and reuse the returned values exactly, including the dashboard auto-open result.
 
-If you are operating inside an agent runtime that has its own browser automation or embedded browser, do not open `dashboardUrl` there when the ready file reports `dashboardOpenSucceeded: true`, because that would duplicate the same page open. Only fall back to MCP or an embedded browser when the ready file reports `dashboardOpenSucceeded: false` or `dashboardOpenAttempted: false`. If the host has no browser access, continue with the ready file values plus `GET /api/state`, `GET /health`, `POST /api/clear`, and `POST /api/shutdown`.
+If you are operating inside an agent runtime that has its own browser automation or embedded browser, do not open `dashboardUrl` there when the ready file reports `dashboardOpenSucceeded: true`, because that would duplicate the same page open. Only fall back to MCP or an embedded browser for the collector dashboard when the ready file reports `dashboardOpenSucceeded: false` or `dashboardOpenAttempted: false`. Do not open target-app pages unless the user explicitly asked you to open the project. If the host has no browser access, continue with the ready file values plus `GET /api/state`, `GET /health`, `POST /api/clear`, and `POST /api/shutdown`.
 
 Ready file example:
 
@@ -178,7 +195,7 @@ Keep the update narrow:
 
 ## Dashboard and operator APIs
 
-The bundled service attempts to open `dashboardUrl` in a browser by default. Pass `--no-open-dashboard` only when you explicitly need a headless run. When the ready file reports a successful auto-open, do not reopen the same page with MCP. The bundled UI shows:
+The bundled service attempts to open `dashboardUrl` in a browser by default. Pass `--no-open-dashboard` only when you explicitly need a headless run. When the ready file reports a successful auto-open, do not reopen the same page with MCP. Do not open target-app pages from MCP or browser automation unless the user explicitly asked to open the project. The bundled UI shows:
 
 - Total recorded entries
 - Invalid NDJSON line count
