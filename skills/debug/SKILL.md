@@ -1,11 +1,81 @@
 ---
 name: debug
-description: Evidence-first runtime debugging for application bugs, regressions, flaky behavior, and unclear failures. Use when an agent is asked to debug an issue and should avoid speculative fixes by forming hypotheses, attaching to or starting a logging session, instrumenting code, collecting runtime logs, tracking active log locations in a sidecar JSON file, using the collector dashboard to inspect those locations and open source through the configured IDE, analyzing the recorded log file, applying only proven fixes, and verifying the result before removing instrumentation, especially for browser or frontend issues where logs should go directly to the active collector endpoint instead of app-local proxy APIs.
+description: Evidence-first runtime debugging for application bugs, regressions, flaky behavior, and unclear failures, with an optional MCP server for exposing the workflow to MCP-compatible agents. Use when an agent is asked to debug an issue and should avoid speculative fixes by forming hypotheses, attaching to or starting a logging session, instrumenting code, collecting runtime logs, tracking active log locations in a sidecar JSON file, using the collector dashboard to inspect those locations and open source through the configured IDE, analyzing the recorded log file, applying only proven fixes, and verifying the result before removing instrumentation, especially for browser or frontend issues where logs should go directly to the active collector endpoint instead of app-local proxy APIs. Also use when configuring, running, or troubleshooting the debug MCP server in Cursor, Windsurf, Claude Code, or another MCP client.
 ---
 
 # Debug
 
 Use runtime evidence before changing behavior. Treat code reading as context building, not proof.
+
+## MCP Server
+
+This skill is also available as an MCP server, so any MCP-compatible agent (Cursor, Windsurf, Claude Code, etc.) can use the debug workflow through standard tool calls.
+
+### Install
+
+From the installed `debug` skill directory:
+
+```bash
+cd mcp_server
+uv sync
+```
+
+### Run
+
+```bash
+uv run server.py
+```
+
+### Configure in Claude Code
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "debug": {
+      "command": "uv",
+      "args": [
+        "--project",
+        "/path/to/debug/mcp_server",
+        "run",
+        "/path/to/debug/mcp_server/server.py"
+      ],
+      "cwd": "/path/to/project"
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+The session writes `.debug-logs` under `workspace_root` when provided, then
+`JUNERDD_DEBUG_WORKSPACE_ROOT`/`DEBUG_WORKSPACE_ROOT`, then a single MCP client
+root when available, and otherwise the MCP server's current working directory.
+Configure the MCP server with the target project as `cwd` when you want the
+fallback to match the original current-directory behavior.
+
+| Tool | Description |
+|---|---|
+| `start_debug_session` | Start a collector session, returns endpoint + dashboard URL |
+| `stop_debug_session` | Stop collector, clean up all artifacts |
+| `check_collector_health` | Verify collector is alive |
+| `ingest_log` | Send a log entry (observation, variable state, control flow evidence) |
+| `get_debug_state` | Full state: entry/run/hypothesis counts |
+| `get_debug_logs` | Paginated log entries |
+| `clear_debug_logs` | Clear logs for next run |
+| `sync_instrumentation_locations` | Register active instrumentation points |
+| `open_location_in_ide` | Open source file in configured IDE |
+
+### MCP Resources
+
+- `debug://workflow` — full SKILL.md workflow
+- `debug://reference` — runtime debugging reference
+
+### MCP Prompts
+
+- `debug_workflow` — load the 16-step debugging methodology
+- `hypothesis_template` — structured hypothesis tracking template
 
 ## Host adaptation
 
