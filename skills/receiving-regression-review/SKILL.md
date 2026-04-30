@@ -21,6 +21,10 @@ The primary job is to account for every `F#` finding, every `I#` intentional vis
 
 Build a disposition ledger before editing code.
 
+Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions or broaden user-visible behavior changes. Name the affected surfaces, why the plan is scoped, and what verification will be needed. If the plan carries material regression risk, narrow it or ask before editing.
+
+Never stage changes while consuming a review report unless the user explicitly asks for staging or committing in the current request. Do not run `git add`, partial staging commands, or tooling that stages files as a side effect.
+
 Keep gate integrity aligned with evidence:
 
 - Treat `Complete Findings Index` as the enumeration source for findings.
@@ -48,9 +52,10 @@ WHEN receiving a regression review report:
 5. Restate each `F#` as a user-visible outcome, not as a code edit.
 6. Verify each item against current code, outputs, tests, fixtures, logs, or runtime behavior.
 7. Decide each disposition: fix, disprove, narrow, downgrade, confirm intentional, close coverage gap, keep coverage gap open, or ask for clarification.
-8. Address items in gate order and verify each affected user surface before moving on.
-9. End with a short disposition ledger that accounts for every item consumed from the report.
-10. Refresh the gate by rerunning `regression-review` or updating the reviewer with concrete evidence when changes materially alter user-visible behavior or coverage.
+8. Before editing code, state the intended change plan and a regression-risk self-assessment.
+9. Address items in gate order and verify each affected user surface before moving on.
+10. End with a short disposition ledger that accounts for every item consumed from the report.
+11. Refresh the gate by rerunning `regression-review` or updating the reviewer with concrete evidence when changes materially alter user-visible behavior or coverage.
 
 ## Intake Checklist
 
@@ -149,13 +154,14 @@ For multi-item reports:
 1. Clarify stale or unclear scope first.
 2. Build the disposition ledger from `Complete Findings Index`, action sections, `Intentional Changes`, and `Coverage Ledger`.
 3. Resolve report inconsistencies or stale coverage before code changes.
-4. Fix or disprove every unresolved `Block` item.
-5. Resolve `Discuss` items with proof or intent clarification.
-6. Decide whether `Watch` items need mitigation now.
-7. Confirm or challenge `Intentional Changes`.
-8. Close or explicitly carry forward `Not covered` user-visible or unknown-impact surfaces.
-9. Re-run targeted verification for every touched user surface.
-10. Refresh the regression gate if your changes materially altered user-visible behavior or coverage.
+4. Present the code-change plan and regression-risk self-assessment before editing.
+5. Fix or disprove every unresolved `Block` item.
+6. Resolve `Discuss` items with proof or intent clarification.
+7. Decide whether `Watch` items need mitigation now.
+8. Confirm or challenge `Intentional Changes`.
+9. Close or explicitly carry forward `Not covered` user-visible or unknown-impact surfaces.
+10. Re-run targeted verification for every touched user surface.
+11. Refresh the regression gate if your changes materially altered user-visible behavior or coverage.
 
 ## Disposition Ledger Format
 

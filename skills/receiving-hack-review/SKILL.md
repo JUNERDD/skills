@@ -22,6 +22,10 @@ The primary job is to account for every `F#` finding, every `I#` intentional exc
 
 Build a disposition ledger before editing code.
 
+Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions, broaden behavior changes, or weaken ownership boundaries. Name the affected boundaries, why the plan is scoped, and what verification will be needed. If the plan carries material regression or ownership risk, narrow it or ask before editing.
+
+Never stage changes while consuming a review report unless the user explicitly asks for staging or committing in the current request. Do not run `git add`, partial staging commands, or tooling that stages files as a side effect.
+
 Keep gate integrity aligned with evidence:
 
 - Treat `Complete Hack-Risk Index` as the enumeration source for findings.
@@ -50,9 +54,10 @@ WHEN receiving a hack review report:
 5. Restate each `F#` as a concrete design liability, not as a code edit.
 6. Verify each item against current code, outputs, tests, runtime behavior, search results, and ownership boundaries.
 7. Decide each disposition: fix, disprove, narrow, downgrade, confirm intentional exception, close coverage gap, keep coverage gap open, or ask for clarification.
-8. Address items in gate order and verify each affected boundary before moving on.
-9. End with a short disposition ledger that accounts for every item consumed from the report.
-10. Refresh the gate by rerunning `hack-review` or updating the reviewer with concrete evidence when changes materially alter the implementation strategy or coverage.
+8. Before editing code, state the intended change plan and a regression or ownership-risk self-assessment.
+9. Address items in gate order and verify each affected boundary before moving on.
+10. End with a short disposition ledger that accounts for every item consumed from the report.
+11. Refresh the gate by rerunning `hack-review` or updating the reviewer with concrete evidence when changes materially alter the implementation strategy or coverage.
 
 ## Intake Checklist
 
@@ -177,13 +182,14 @@ For multi-item reports:
 2. Regenerate the report if it does not match the user's exact review range, or if no scope was specified and the report was not based on the staged diff.
 3. Build the disposition ledger from `Complete Hack-Risk Index`, action sections, `Intentional Exceptions`, and `Ownership Coverage Ledger`.
 4. Resolve report inconsistencies or stale coverage before code changes.
-5. Fix or disprove every unresolved `Block` item.
-6. Resolve `Discuss` items with proof or intent clarification.
-7. Decide whether `Watch` items need mitigation now.
-8. Confirm or challenge `Intentional Exceptions`.
-9. Close or explicitly carry forward `Not covered` implementation-relevant or unknown boundaries.
-10. Re-run targeted verification for every touched boundary.
-11. Refresh the hack gate if your changes materially altered the implementation strategy or coverage.
+5. Present the code-change plan and regression or ownership-risk self-assessment before editing.
+6. Fix or disprove every unresolved `Block` item.
+7. Resolve `Discuss` items with proof or intent clarification.
+8. Decide whether `Watch` items need mitigation now.
+9. Confirm or challenge `Intentional Exceptions`.
+10. Close or explicitly carry forward `Not covered` implementation-relevant or unknown boundaries.
+11. Re-run targeted verification for every touched boundary.
+12. Refresh the hack gate if your changes materially altered the implementation strategy or coverage.
 
 ## Disposition Ledger Format
 
