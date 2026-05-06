@@ -1,6 +1,6 @@
 ---
 name: receiving-hack-review
-description: Consume a coverage-led `hack-review` Markdown report, PR feedback derived from one, or a request to address `Block`, `Discuss`, `Watch`, `Intentional Exceptions`, `Complete Hack-Risk Index`, `Ownership Coverage Ledger`, `Not covered`, or coverage-gap items. Use when Codex must verify whether each reported shortcut, ownership problem, intentional exception, and uncovered implementation boundary still applies before changing code, then fix, disprove, narrow, confirm, or carry forward every item with evidence.
+description: Consume a coverage-led `hack-review` Markdown report, PR feedback derived from one, or a request to address `Block`, `Discuss`, `Watch`, `Intentional Exceptions`, `Complete Hack-Risk Index`, `Ownership Coverage Ledger`, `Not covered`, or coverage-gap items. Use when Codex must verify whether each reported shortcut, ownership problem, intentional exception, and uncovered implementation boundary still applies before changing code, then fix, disprove, narrow, confirm, or carry forward every item with evidence while leaving Git staging untouched unless the user explicitly asks for staging, committing, or PR publication in the current request.
 ---
 
 # Receiving Hack Review
@@ -22,9 +22,20 @@ The primary job is to account for every `F#` finding, every `I#` intentional exc
 
 Build a disposition ledger before editing code.
 
-Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions, broaden behavior changes, or weaken ownership boundaries. Name the affected boundaries, why the plan is scoped, and what verification will be needed. If the plan carries material regression or ownership risk, narrow it or ask before editing.
+Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions, broaden behavior changes, or weaken ownership boundaries. Name the affected boundaries, why the plan is scoped, what verification will be needed, and that any fixes will remain unstaged unless the user explicitly requested staging or a publish flow. If the plan carries material regression or ownership risk, narrow it or ask before editing.
 
 Never stage changes while consuming a review report unless the user explicitly asks for staging or committing in the current request. Do not run `git add`, partial staging commands, or tooling that stages files as a side effect.
+
+## Git State Hard Gate
+
+Treat the Git index as user-owned state. Addressing a hack review report is not permission to prepare a commit.
+
+- Do not run `git add`, `git add -A`, `git add -p`, `git add -N`, `git commit`, `git commit --amend`, or equivalent index-mutating commands unless the user's current request explicitly asks for staging, committing, or PR publication.
+- Do not stage files after editing code just to make a follow-up review, `git diff --cached`, commit message, or PR body easier.
+- If there are already staged changes when you start, inspect them only as needed and preserve them exactly. Keep any new fixes unstaged so they do not get mixed into the user's staged set.
+- If a report was generated from a staged diff and the fix changes code, do not update the staged diff yourself. Explain that the fix is present in the working tree and ask before staging or regenerating a staged-diff gate.
+- If a tool would stage files as a side effect, do not use it. Choose an unstaged working-tree diff, branch diff, or explicit file inspection instead.
+- If you accidentally stage changes, stop immediately, unstage only your own additions when that can be done without disturbing pre-existing staged work, and report what happened.
 
 Keep gate integrity aligned with evidence:
 
@@ -54,9 +65,9 @@ WHEN receiving a hack review report:
 5. Restate each `F#` as a concrete design liability, not as a code edit.
 6. Verify each item against current code, outputs, tests, runtime behavior, search results, and ownership boundaries.
 7. Decide each disposition: fix, disprove, narrow, downgrade, confirm intentional exception, close coverage gap, keep coverage gap open, or ask for clarification.
-8. Before editing code, state the intended change plan and a regression or ownership-risk self-assessment.
+8. Before editing code, state the intended change plan, a regression or ownership-risk self-assessment, and that Git staging will remain untouched.
 9. Address items in gate order and verify each affected boundary before moving on.
-10. End with a short disposition ledger that accounts for every item consumed from the report.
+10. End with a short disposition ledger that accounts for every item consumed from the report, and mention any files changed are left unstaged unless the user asked otherwise.
 11. Refresh the gate by rerunning `hack-review` or updating the reviewer with concrete evidence when changes materially alter the implementation strategy or coverage.
 
 ## Intake Checklist
@@ -182,7 +193,7 @@ For multi-item reports:
 2. Regenerate the report if it does not match the user's exact review range, or if no scope was specified and the report was not based on the staged diff.
 3. Build the disposition ledger from `Complete Hack-Risk Index`, action sections, `Intentional Exceptions`, and `Ownership Coverage Ledger`.
 4. Resolve report inconsistencies or stale coverage before code changes.
-5. Present the code-change plan and regression or ownership-risk self-assessment before editing.
+5. Present the code-change plan, regression or ownership-risk self-assessment, and no-staging intent before editing.
 6. Fix or disprove every unresolved `Block` item.
 7. Resolve `Discuss` items with proof or intent clarification.
 8. Decide whether `Watch` items need mitigation now.
@@ -232,6 +243,8 @@ Bad:
 - Replace one duplicated wheel with a different duplicated wheel.
 - Treat `Not covered` rows as harmless notes.
 - Downgrade a `Block` item without stronger evidence.
+- Stage fixes after editing code without a current explicit staging, commit, or PR request.
+- Fold new fixes into an already staged diff while consuming the review report.
 - Stop after code changes without rerunning the affected path, ownership trace, or targeted checks.
 - Claim the gate is clean without accounting for every `F#`, `I#`, and open coverage row.
 
