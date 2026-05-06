@@ -66,13 +66,19 @@ As soon as the user answers, run:
 ```bash
 python3 "$helper" answer \
   --workspace "$workspace_root" \
-  --answer "Silent data loss is unacceptable."
+  --answer "yes, that one" \
+  --resolved-answer "Silent data loss is unacceptable, and the design must prioritize visible retry behavior and operator-friendly diagnostics."
 ```
+
+Use `--answer` for the exact user reply. Use `--resolved-answer` for the standalone confirmed conclusion that should appear in the session `Answer` field and in the planning outcome. If the user accepts the recommendation with `yes`, `按推荐来`, or similar, `--resolved-answer` should be the recommendation itself, not the acknowledgement.
 
 For a multi-line answer:
 
 ```bash
-python3 "$helper" answer --workspace "$workspace_root" --stdin <<'EOF'
+python3 "$helper" answer \
+  --workspace "$workspace_root" \
+  --resolved-answer "The core requirement is no silent data loss, visible retry behavior, and operator-friendly diagnostics." \
+  --stdin <<'EOF'
 The core requirement is:
 - no silent data loss
 - visible retry behavior
@@ -102,8 +108,9 @@ The outcome file is designed to help later AI passes write plans and design docs
 
 - normalized planning seeds grouped as goals, constraints, risks, decisions, scope boundaries, or uncategorized planning seeds
 - a low-noise Q&A summary that keeps the resolved answer for each question
-- minimal recommendation context only when the raw user reply is assent-only and would otherwise lose the confirmed decision
-- a raw user-answer echo only when that extra context is needed to show what was actually confirmed
+- raw user-answer context only when it differs from the resolved answer
+
+The planning outcome must not require reopening the source transcript to interpret answers like `按推荐来`, `yes`, or `OK`. Those belong in `Raw user answer`; the session `Answer` and outcome `Resolved answer` must be standalone decisions.
 
 `Uncategorized Planning Seeds` is a fallback planning bucket for confirmed answers that do not match a more specific planning category. It is not a second Q&A log; every confirmed answer still appears once in `Confirmed Q&A`.
 
