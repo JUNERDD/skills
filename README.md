@@ -6,7 +6,9 @@
 
 Reusable AI agent skills published from a single repository.
 
-This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable, versioned, and expanded over time.
+Current collection version: [`0.1.0`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+
+This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
 ## 🧭 Skills At A Glance
 
@@ -73,6 +75,8 @@ ln -s "$PWD/skills" ~/.agents/skills/junerdd-skill
 
 ## 🧱 Repository Model
 
+- The collection version lives in the root [`VERSION`](./VERSION) file and currently starts at `0.1.0`.
+- Release notes live in [`CHANGELOG.md`](./CHANGELOG.md), and published GitHub releases should use matching `vX.Y.Z` tags.
 - Each installable skill lives under `skills/<skill-name>/`.
 - Each skill owns its own `SKILL.md` plus any optional `agents/`, `references/`, `scripts/`, or `assets/` directories.
 - Root-level files describe the repository as a collection. Skill-specific behavior and deep operational details stay inside the relevant skill folder.
