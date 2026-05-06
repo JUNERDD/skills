@@ -1,6 +1,6 @@
 ---
 name: receiving-regression-review
-description: Consume a coverage-led `regression-review` Markdown report or related PR feedback and turn it into evidence-backed next actions. Use when Codex is given `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Complete Findings Index`, `Coverage Ledger`, `Not covered`, or coverage-gap items from a regression-review report and must verify whether each user-visible finding still applies, fix proven regressions, disprove or challenge stale findings, confirm intentional product changes, close coverage gaps, and report a disposition for every item before changing or claiming completion.
+description: Consume a coverage-led `regression-review` Markdown report or related PR feedback and turn it into evidence-backed next actions. Use when Codex is given `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Complete Findings Index`, `Coverage Ledger`, `Not covered`, or coverage-gap items from a regression-review report and must verify whether each user-visible finding still applies, fix proven regressions, disprove or challenge stale findings, confirm intentional product changes, close coverage gaps, and report a disposition for every item before changing or claiming completion while leaving Git staging untouched unless the user explicitly asks for staging, committing, or PR publication in the current request.
 ---
 
 # Receiving Regression Review
@@ -21,9 +21,20 @@ The primary job is to account for every `F#` finding, every `I#` intentional vis
 
 Build a disposition ledger before editing code.
 
-Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions or broaden user-visible behavior changes. Name the affected surfaces, why the plan is scoped, and what verification will be needed. If the plan carries material regression risk, narrow it or ask before editing.
+Before editing code, present a concrete change plan and self-assess whether the plan can introduce regressions or broaden user-visible behavior changes. Name the affected surfaces, why the plan is scoped, what verification will be needed, and that any fixes will remain unstaged unless the user explicitly requested staging or a publish flow. If the plan carries material regression risk, narrow it or ask before editing.
 
 Never stage changes while consuming a review report unless the user explicitly asks for staging or committing in the current request. Do not run `git add`, partial staging commands, or tooling that stages files as a side effect.
+
+## Git State Hard Gate
+
+Treat the Git index as user-owned state. Addressing a regression review report is not permission to prepare a commit.
+
+- Do not run `git add`, `git add -A`, `git add -p`, `git add -N`, `git commit`, `git commit --amend`, or equivalent index-mutating commands unless the user's current request explicitly asks for staging, committing, or PR publication.
+- Do not stage files after editing code just to make a follow-up review, `git diff --cached`, commit message, or PR body easier.
+- If there are already staged changes when you start, inspect them only as needed and preserve them exactly. Keep any new fixes unstaged so they do not get mixed into the user's staged set.
+- If a report was generated from a staged diff and the fix changes code, do not update the staged diff yourself. Explain that the fix is present in the working tree and ask before staging or regenerating a staged-diff gate.
+- If a tool would stage files as a side effect, do not use it. Choose an unstaged working-tree diff, branch diff, or explicit file inspection instead.
+- If you accidentally stage changes, stop immediately, unstage only your own additions when that can be done without disturbing pre-existing staged work, and report what happened.
 
 Keep gate integrity aligned with evidence:
 
@@ -52,9 +63,9 @@ WHEN receiving a regression review report:
 5. Restate each `F#` as a user-visible outcome, not as a code edit.
 6. Verify each item against current code, outputs, tests, fixtures, logs, or runtime behavior.
 7. Decide each disposition: fix, disprove, narrow, downgrade, confirm intentional, close coverage gap, keep coverage gap open, or ask for clarification.
-8. Before editing code, state the intended change plan and a regression-risk self-assessment.
+8. Before editing code, state the intended change plan, a regression-risk self-assessment, and that Git staging will remain untouched.
 9. Address items in gate order and verify each affected user surface before moving on.
-10. End with a short disposition ledger that accounts for every item consumed from the report.
+10. End with a short disposition ledger that accounts for every item consumed from the report, and mention any files changed are left unstaged unless the user asked otherwise.
 11. Refresh the gate by rerunning `regression-review` or updating the reviewer with concrete evidence when changes materially alter user-visible behavior or coverage.
 
 ## Intake Checklist
@@ -154,7 +165,7 @@ For multi-item reports:
 1. Clarify stale or unclear scope first.
 2. Build the disposition ledger from `Complete Findings Index`, action sections, `Intentional Changes`, and `Coverage Ledger`.
 3. Resolve report inconsistencies or stale coverage before code changes.
-4. Present the code-change plan and regression-risk self-assessment before editing.
+4. Present the code-change plan, regression-risk self-assessment, and no-staging intent before editing.
 5. Fix or disprove every unresolved `Block` item.
 6. Resolve `Discuss` items with proof or intent clarification.
 7. Decide whether `Watch` items need mitigation now.
@@ -202,6 +213,8 @@ Bad:
 - Fix `Intentional Changes` back to the old behavior.
 - Treat `Not covered` rows as harmless notes.
 - Downgrade a `Block` item without stronger evidence.
+- Stage fixes after editing code without a current explicit staging, commit, or PR request.
+- Fold new fixes into an already staged diff while consuming the review report.
 - Claim a finding is false because lint, typecheck, or unrelated tests passed.
 - Keep implementing while scope, baseline, completion status, or finding enumeration is unclear.
 - Stop after code changes without rerunning the affected flow or output check.
