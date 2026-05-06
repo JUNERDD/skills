@@ -156,20 +156,55 @@ def is_assent_only(answer_text: str) -> bool:
         r"that works",
         r"works for me",
         r"fine",
+        r"按推荐来",
+        r"按建议来",
+        r"按你推荐的来",
+        r"按你的建议来",
+        r"同意",
+        r"可以",
+        r"就这样",
+        r"照这个来",
     )
     return any(re.fullmatch(pattern, canonical) for pattern in assent_patterns)
 
 
+def assent_modifier_text(answer_text: str) -> str:
+    normalized = normalize_inline(answer_text)
+    if not normalized:
+        return ""
+
+    patterns = (
+        r"^(?:按推荐来|按建议来|按你推荐的来|按你的建议来|同意|可以|照这个来)[,，.。!！\s]*(?P<rest>.+)$",
+        r"^(?:yes|yeah|yep|yup|ok|okay|sure|agreed|agree|sounds good|that works|works for me)[,.\s]+(?P<rest>(?:but|however|except|and)\b.+)$",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        rest = match.group("rest").strip()
+        rest = re.sub(r"^(?:但是|但|不过|另外|同时|并且)[,，.。:：\s]*", "", rest)
+        rest = re.sub(r"^(?:but|however|except|and)\b[,.:;\s]*", "", rest, flags=re.IGNORECASE)
+        return rest.strip()
+
+    return ""
+
+
 def resolved_answer_text(entry: dict[str, str]) -> str:
+    if entry.get("answer_is_resolved"):
+        return entry["answer_text"]
+
     answer_text = entry["answer_text"]
     recommendation_text = entry["recommendation_text"]
     if is_assent_only(answer_text) and normalize_inline(recommendation_text):
         return recommendation_text
+    modifier_text = assent_modifier_text(answer_text)
+    if modifier_text and normalize_inline(recommendation_text):
+        return f"{recommendation_text}\n\nUser modification: {modifier_text}"
     return answer_text
 
 
-def uses_recommendation_context(entry: dict[str, str]) -> bool:
-    return normalize_inline(resolved_answer_text(entry)) != normalize_inline(entry["answer_text"])
+def has_distinct_raw_answer(entry: dict[str, str]) -> bool:
+    return normalize_inline(resolved_answer_text(entry)) != normalize_inline(entry["raw_answer_text"])
 
 
 UNCATEGORIZED_PLANNING_BUCKET = "Uncategorized Planning Seeds"
@@ -177,28 +212,113 @@ UNCATEGORIZED_PLANNING_BUCKET = "Uncategorized Planning Seeds"
 
 def primary_bucket(question_text: str) -> str:
     question = question_text.lower()
-    if any(token in question for token in ("goal", "objective", "success", "outcome", "purpose", "problem")):
+    if any(
+        token in question
+        for token in ("goal", "objective", "success", "outcome", "purpose", "problem", "目标", "价值", "成败", "成功", "解决")
+    ):
         return "Goals"
-    if any(token in question for token in ("scope", "non-goal", "out of scope", "defer", "phase")):
+    if any(token in question for token in ("scope", "non-goal", "out of scope", "defer", "phase", "范围", "不做", "延后", "阶段")):
         return "Scope Boundaries"
     if any(
         token in question
-        for token in ("assumption", "assume", "evidence", "prove", "validate", "unknown", "uncertain", "hypothesis")
+        for token in (
+            "assumption",
+            "assume",
+            "evidence",
+            "prove",
+            "validate",
+            "unknown",
+            "uncertain",
+            "hypothesis",
+            "假设",
+            "证据",
+            "验证",
+            "未知",
+            "不确定",
+            "验收",
+        )
     ):
         return "Assumptions and Evidence"
-    if any(token in question for token in ("risk", "failure", "prevent", "danger", "concern", "edge case", "abuse", "threat")):
+    if any(
+        token in question
+        for token in ("risk", "failure", "prevent", "danger", "concern", "edge case", "abuse", "threat", "风险", "失败", "错误", "底线", "不能")
+    ):
         return "Risks"
     if any(
         token in question
-        for token in ("choose", "decision", "prefer", "trade-off", "tradeoff", "approach", "architecture", "design", "alternative", "option")
+        for token in (
+            "choose",
+            "decision",
+            "prefer",
+            "trade-off",
+            "tradeoff",
+            "approach",
+            "architecture",
+            "design",
+            "alternative",
+            "option",
+            "选择",
+            "决策",
+            "取舍",
+            "方案",
+            "支持",
+            "入口",
+            "路径",
+            "主界面",
+            "功能",
+        )
     ):
         return "Decisions and Alternatives"
     if any(
         token in question
-        for token in ("owner", "stakeholder", "operator", "rollout", "rollback", "migrate", "migration", "monitor", "alert", "test", "verify", "deploy")
+        for token in (
+            "owner",
+            "stakeholder",
+            "operator",
+            "rollout",
+            "rollback",
+            "migrate",
+            "migration",
+            "monitor",
+            "alert",
+            "test",
+            "verify",
+            "deploy",
+            "上线",
+            "发布",
+            "回滚",
+            "监控",
+            "测试",
+            "反馈",
+            "删除",
+            "登录",
+            "注册",
+            "数据",
+        )
     ):
         return "Operations and Delivery"
-    if any(token in question for token in ("constraint", "limit", "budget", "deadline", "cannot", "requirement", "latency", "throughput", "compatibility", "compliance")):
+    if any(
+        token in question
+        for token in (
+            "constraint",
+            "limit",
+            "budget",
+            "deadline",
+            "cannot",
+            "requirement",
+            "latency",
+            "throughput",
+            "compatibility",
+            "compliance",
+            "约束",
+            "限制",
+            "预算",
+            "期限",
+            "必须",
+            "最低",
+            "合规",
+        )
+    ):
         return "Constraints"
     return UNCATEGORIZED_PLANNING_BUCKET
 
@@ -209,7 +329,8 @@ def parse_session_entries(content: str) -> list[dict[str, str]]:
         r"Asked at: (?P<asked_at>.*?)\n\n"
         r"Question:\n(?P<question>.*?)\n\n"
         r"Recommendation:\n(?P<recommendation>.*?)\n\n"
-        r"Answer:\n(?P<answer>.*?)\n\n"
+        r"Answer:\n(?P<answer>.*?)"
+        r"(?:\n\nRaw user answer:\n(?P<raw_answer>.*?))?\n\n"
         r"Answered at: (?P<answered_at>.*?)(?=\n## Question \d+\n|\Z)",
         re.MULTILINE | re.DOTALL,
     )
@@ -218,6 +339,8 @@ def parse_session_entries(content: str) -> list[dict[str, str]]:
         question_text = parse_quote_block(match.group("question"))
         recommendation_text = parse_quote_block(match.group("recommendation"))
         answer_text = parse_quote_block(match.group("answer"))
+        raw_answer_group = match.group("raw_answer")
+        raw_answer_text = parse_quote_block(raw_answer_group) if raw_answer_group is not None else answer_text
         entries.append(
             {
                 "index": match.group("index"),
@@ -226,6 +349,8 @@ def parse_session_entries(content: str) -> list[dict[str, str]]:
                 "question_text": question_text,
                 "recommendation_text": recommendation_text,
                 "answer_text": answer_text,
+                "raw_answer_text": raw_answer_text,
+                "answer_is_resolved": raw_answer_group is not None,
                 "bucket": primary_bucket(question_text),
             }
         )
@@ -465,7 +590,7 @@ def append_question(args: argparse.Namespace) -> int:
     return 0
 
 
-def resolve_answer_text(args: argparse.Namespace) -> str:
+def read_answer_input(args: argparse.Namespace) -> str:
     if args.stdin and args.answer is not None:
         raise SystemExit("[ERROR] Pass either --answer or --stdin, not both.")
     if args.stdin:
@@ -473,6 +598,40 @@ def resolve_answer_text(args: argparse.Namespace) -> str:
     if args.answer is None:
         raise SystemExit("[ERROR] Provide --answer or --stdin.")
     return args.answer
+
+
+def pending_recommendation_text(content: str, index: int) -> str:
+    pattern = re.compile(
+        rf"^## Question {index}\n\n"
+        r"Asked at: .*?\n\n"
+        r"Question:\n.*?\n\n"
+        r"Recommendation:\n(?P<recommendation>.*?)\n\n"
+        rf"Answer:\n<<PENDING_ANSWER_{index}>>",
+        re.MULTILINE | re.DOTALL,
+    )
+    match = pattern.search(content)
+    if not match:
+        return ""
+    return parse_quote_block(match.group("recommendation"))
+
+
+def confirmed_answer_text(
+    args: argparse.Namespace,
+    content: str,
+    index: int,
+    raw_answer_text: str,
+) -> str:
+    if args.resolved_answer is not None:
+        return args.resolved_answer
+
+    recommendation_text = pending_recommendation_text(content, index)
+    if is_assent_only(raw_answer_text) and normalize_inline(recommendation_text):
+        return recommendation_text
+    modifier_text = assent_modifier_text(raw_answer_text)
+    if modifier_text and normalize_inline(recommendation_text):
+        return f"{recommendation_text}\n\nUser modification: {modifier_text}"
+
+    return raw_answer_text
 
 
 def backfill_answer(args: argparse.Namespace) -> int:
@@ -483,9 +642,12 @@ def backfill_answer(args: argparse.Namespace) -> int:
         raise SystemExit("[ERROR] No pending question found in the log.")
 
     index = pending[-1]
-    answer_text = resolve_answer_text(args)
+    raw_answer_text = read_answer_input(args)
+    answer_text = confirmed_answer_text(args, content, index, raw_answer_text)
     answer_block = quote_block(answer_text, "_No answer recorded._")
-    updated = content.replace(f"<<PENDING_ANSWER_{index}>>", answer_block, 1)
+    raw_answer_block = quote_block(raw_answer_text, "_No user answer recorded._")
+    replacement = f"{answer_block}\n\nRaw user answer:\n{raw_answer_block}"
+    updated = content.replace(f"<<PENDING_ANSWER_{index}>>", replacement, 1)
     updated = updated.replace(f"<<PENDING_ANSWERED_AT_{index}>>", now_iso(), 1)
     write_file(log_path, updated)
 
@@ -560,10 +722,10 @@ def build_outcome_markdown(
         lines.append("")
         lines.append("Resolved answer:")
         lines.append(quote_block(resolved_answer_text(entry), "_No answer recorded._"))
-        if uses_recommendation_context(entry):
+        if has_distinct_raw_answer(entry):
             lines.append("")
             lines.append("Raw user answer:")
-            lines.append(quote_block(entry["answer_text"], "_No answer recorded._"))
+            lines.append(quote_block(entry["raw_answer_text"], "_No user answer recorded._"))
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -702,6 +864,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the thread/session key. Defaults to CODEX_THREAD_ID.",
     )
     answer_parser.add_argument("--answer", help="Answer text to write into the pending question.")
+    answer_parser.add_argument(
+        "--resolved-answer",
+        help="Planning-ready confirmed conclusion to store in the session Answer field.",
+    )
     answer_parser.add_argument(
         "--stdin",
         action="store_true",

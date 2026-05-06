@@ -1,4 +1,4 @@
 interface:
   display_name: "Comment Strategist"
-  short_description: "Add semantic, structured code comments"
-  default_prompt: "Use $comment-strategist to add high-value semantic comments to this code while preserving the project's comment style."
+  short_description: "Add granular, semantic code comments"
+  default_prompt: "Use $comment-strategist to add appropriately granular semantic comments to this code while preserving the project's comment style."

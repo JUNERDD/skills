@@ -91,10 +91,20 @@ For exact command patterns, helper discovery, and recovery commands, read [logge
 ## Hard Gates
 
 - Before any user-facing clarification question, run the `ask` command in the current turn and wait for success.
-- After every user answer, run the `answer` command in the current turn before doing further reasoning, summarization, or follow-up.
+- After every user answer, run the `answer` command in the current turn before follow-up analysis. Do only the minimal normalization needed for logging: pass the raw user reply as `--answer` and a planning-ready confirmed conclusion as `--resolved-answer`.
 - If `ask` or `answer` fails, stop and tell the user the logging step failed. Do not continue the grilling flow until the log is repaired.
 - Use workspace mode during normal operation. Treat `new`, `latest`, and explicit `--file` updates as repair tools, not the default path.
 - Keep one pending question at a time. Do not ask the next question until the previous answer is backfilled.
+
+## Answer Normalization
+
+Treat the transcript `Answer` field as the confirmed conclusion, not as a raw echo of the user's message. The raw user reply is audit context only.
+
+- If the user accepts the recommendation (`yes`, `按推荐来`, `sounds good`, or equivalent), set `--resolved-answer` to the actual recommendation.
+- If the user modifies the recommendation, set `--resolved-answer` to the merged decision: the accepted parts plus the user's explicit change.
+- If the user gives a vague or incomplete reply, set `--resolved-answer` to the concrete part that is confirmed and immediately ask a logged follow-up for the unresolved gap.
+- Do not write a planning outcome whose answer is only `按推荐来`, `yes`, `OK`, `later`, `MVP`, or another pointer back to context. It must stand alone for a later planning pass.
+- Preserve the exact raw user reply through `--answer`; do not hide reversals, hesitation, or wording that may matter later.
 
 ## Workflow
 
@@ -115,7 +125,8 @@ python3 "$helper" ask \
 ```bash
 python3 "$helper" answer \
   --workspace "$workspace_root" \
-  --answer "..."
+  --answer "..." \
+  --resolved-answer "..."
 ```
 
 6. Only after the answer write succeeds, decide whether the current branch is actually resolved or whether the answer created a sharper follow-up.
@@ -139,7 +150,7 @@ When asking:
 
 When the user answers:
 
-1. Run the backfill command first.
+1. Run the backfill command first, with raw answer and resolved answer separated.
 2. Then either ask the next logged question or conclude with the transcript and outcome paths.
 
 When concluding:
@@ -157,7 +168,7 @@ When concluding:
 - Never let "we will figure it out later" pass unless later has an owner, a trigger, and an acceptable risk.
 - Never recommend an answer without pressure-testing what it costs and what could falsify it.
 - Never ask a clarification question from memory and promise yourself you will log it later.
-- Never analyze the user's answer before backfilling it.
+- Never turn the user's raw acknowledgement into the final planning answer. Convert it into the confirmed decision first, while preserving the raw reply separately.
 - Never keep the current log path only in shell variables or model memory when the helper can recover it from workspace state.
 - Never rewrite earlier answers in place to reflect a changed decision. Capture reversals as new follow-up questions.
 - Never end the grilling session without writing the planning-ready outcome Markdown file.
