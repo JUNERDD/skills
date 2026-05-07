@@ -18,6 +18,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import collector_config
+import collector_browser
 import collector_ide
 import collector_server
 import collector_state
@@ -187,6 +188,55 @@ class CollectorIdeTests(unittest.TestCase):
         self.assertEqual(result['ide'], 'zed')
         self.assertEqual(result['launchStatus'], 'confirmed')
         self.assertTrue(result['confirmed'])
+
+
+class CollectorBrowserTests(unittest.TestCase):
+    def test_macos_uses_system_open_before_webbrowser(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=['/usr/bin/open', 'http://127.0.0.1:43125/'],
+            returncode=0,
+            stderr='',
+        )
+
+        with mock.patch.object(collector_browser.platform, 'system', return_value='Darwin'):
+            with mock.patch.object(collector_browser.shutil, 'which', return_value='/usr/bin/open'):
+                with mock.patch.object(collector_browser.subprocess, 'run', return_value=completed) as run_mock:
+                    with mock.patch.object(collector_browser.webbrowser, 'open_new_tab') as browser_mock:
+                        result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
+
+        self.assertTrue(result['attempted'])
+        self.assertTrue(result['succeeded'])
+        self.assertEqual(result['error'], '')
+        run_mock.assert_called_once()
+        browser_mock.assert_not_called()
+
+    def test_system_open_failure_is_reported(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=['/usr/bin/open', 'http://127.0.0.1:43125/'],
+            returncode=1,
+            stderr='No application knows how to open URL',
+        )
+
+        with mock.patch.object(collector_browser.platform, 'system', return_value='Darwin'):
+            with mock.patch.object(collector_browser.shutil, 'which', return_value='/usr/bin/open'):
+                with mock.patch.object(collector_browser.subprocess, 'run', return_value=completed):
+                    result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
+
+        self.assertTrue(result['attempted'])
+        self.assertFalse(result['succeeded'])
+        self.assertIn('macos_open_exit_1', str(result['error']))
+        self.assertIn('No application knows how to open URL', str(result['error']))
+
+    def test_webbrowser_fallback_when_no_platform_opener_exists(self) -> None:
+        with mock.patch.object(collector_browser.platform, 'system', return_value='Linux'):
+            with mock.patch.object(collector_browser.shutil, 'which', return_value=None):
+                with mock.patch.object(collector_browser.webbrowser, 'open_new_tab', return_value=True) as browser_mock:
+                    result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
+
+        self.assertTrue(result['attempted'])
+        self.assertTrue(result['succeeded'])
+        self.assertEqual(result['error'], '')
+        browser_mock.assert_called_once_with('http://127.0.0.1:43125/')
 
 
 class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):

@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.1] - 2026-05-07
+
+### Fixed
+
+- Fixed the `debug` local log collector dashboard auto-open path to prefer platform launchers before falling back to Python's `webbrowser` helper.
+- Added coverage for dashboard launcher selection, platform opener failure reporting, and fallback behavior.
+
 ## [0.1.0] - 2026-05-06
 
 Initial public collection release.
