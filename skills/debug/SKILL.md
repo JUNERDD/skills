@@ -1,6 +1,6 @@
 ---
 name: debug
-description: Evidence-first runtime debugging for application bugs, regressions, flaky behavior, and unclear failures, with an optional MCP server for exposing the workflow to MCP-compatible agents. Use when an agent is asked to debug an issue and should avoid speculative fixes by forming hypotheses, attaching to or starting a logging session, instrumenting code, collecting runtime logs, tracking active log locations in a sidecar JSON file, using the collector dashboard to inspect those locations and open source through the configured IDE, analyzing the recorded log file, applying only proven fixes, and verifying the result before removing instrumentation, especially for browser or frontend issues where logs should go directly to the active collector endpoint instead of app-local proxy APIs. Also use when configuring, running, or troubleshooting the debug MCP server in Cursor, Windsurf, Claude Code, or another MCP client.
+description: Evidence-first runtime debugging for application bugs, regressions, flaky behavior, and unclear failures, with an optional MCP server for exposing the workflow to MCP-compatible agents. Use when an agent is asked to debug an issue and should avoid speculative fixes by forming hypotheses, attaching to or starting a logging session, instrumenting code, collecting runtime logs, tracking active log locations in a sidecar JSON file, using the collector dashboard to inspect those locations and open source through the configured IDE, analyzing the recorded log file, maintaining an evolving Markdown root-cause document as evidence changes, applying only proven fixes, and verifying the result before removing instrumentation, especially for browser or frontend issues where logs should go directly to the active collector endpoint instead of app-local proxy APIs. Also use when configuring, running, or troubleshooting the debug MCP server in Cursor, Windsurf, Claude Code, or another MCP client.
 ---
 
 # Debug
@@ -71,6 +71,7 @@ fallback to match the original current-directory behavior.
 
 - `debug://workflow` — full SKILL.md workflow
 - `debug://reference` — runtime debugging reference
+- `debug://root-cause-document` — root-cause document creation, update, and template rules
 
 ### MCP Prompts
 
@@ -91,6 +92,16 @@ Before starting, normalize the current debugging environment without preflightin
 - Do not treat target-app startup, health checks, route probes, or compile/build checks as default preflight. Only inspect them when the user explicitly asked to debug startup behavior or when a current hypothesis is about app boot, compilation, or endpoint availability.
 - Store temporary artifacts in an existing host-specific scratch directory when one already exists. Otherwise default to a workspace-local hidden directory such as `.debug-logs/`. If you start the bundled collector yourself, use its `ownedArtifacts` list as the cleanup source of truth because `.debug-logs/` is often ignored by Git.
 
+## Root-Cause Document
+
+When runtime evidence identifies a leading or confirmed root cause, create and maintain an evolving Markdown document for the debugging session. Use [root-cause-document.md](./references/root-cause-document.md) for naming, update, template, and self-check rules.
+
+- Create the document once per debug session, no later than the first `CONFIRMED` root cause and before applying the fix.
+- Update the same document whenever log analysis changes a hypothesis status, narrows or replaces the root cause, records a fix, records verification evidence, or records cleanup status.
+- If the root cause changes, revise `Current Root Cause` and preserve the displaced theory under `Superseded or Rejected Causes` with the evidence that displaced it.
+- Keep root-cause documents as durable reports. Do not delete them as temporary collector artifacts unless the user explicitly asks.
+- Include the document path in user handoffs after the file exists.
+
 ## Workflow
 
 1. Generate 3-5 precise hypotheses about why the bug happens. Make them specific enough that a log can confirm or reject each one.
@@ -100,15 +111,15 @@ Before starting, normalize the current debugging environment without preflightin
 5. If restarting the collector changed the active ingest endpoint or port, update the existing temporary logging code so it no longer points at the stale port. Apply that refresh before the next reproduction run and keep the edits limited to the active debug instrumentation for the current task.
 6. Preserve any evidence you still need from the current run, then clear only the active session's existing logs so the next run starts from a low-noise baseline. Prefer the active clear endpoint when one exists; fall back to truncating the active session log file only when no clear endpoint is available.
 7. Ask the user to reproduce the issue using the reproduction handoff in [runtime-debugging.md](./references/runtime-debugging.md). Match the host's real completion mechanic exactly: use the actual button or task action label when one exists, otherwise ask for a short completion reply. Then stop and wait for the user's completion signal before continuing.
-8. Read the active session's NDJSON log file and evaluate every hypothesis as `CONFIRMED`, `REJECTED`, or `INCONCLUSIVE`, citing the relevant log evidence.
-9. Apply a fix only after the logs prove the root cause. Keep instrumentation in place while implementing the fix.
+8. Read the active session's NDJSON log file and evaluate every hypothesis as `CONFIRMED`, `REJECTED`, or `INCONCLUSIVE`, citing the relevant log evidence. When evidence identifies a leading or confirmed root cause, create or update the root-cause document using [root-cause-document.md](./references/root-cause-document.md).
+9. Apply a fix only after the logs prove the root cause. Keep instrumentation in place while implementing the fix. Update the root-cause document with the proven cause and planned verification before asking for the verification run.
 10. Before the post-fix verification run, verify the current logging process is still alive again. If it has been closed, start a new collector process and adopt its new ready file values before clearing and collecting verification logs.
 11. If restarting the collector changed the active ingest endpoint or port again, update the temporary logging code to replace the stale port before the verification run.
 12. Clear only the active session's current logs again so before/after evidence does not mix.
 13. Ask for a post-fix reproduction run and compare before/after logs. Use the same handoff rules in [runtime-debugging.md](./references/runtime-debugging.md), then wait for the user's completion signal before continuing.
-14. Remove all injected temporary logging code only after logs prove the fix worked and the user confirms the issue is gone. This includes the inserted log calls, debug-only endpoint constants, temporary headers, and any other scaffolding added only for this debugging pass.
-15. If you started the bundled collector for this task, stop it after the final evidence handoff, delete every path in `ownedArtifacts` unless the user asked to keep evidence, verify those exact paths no longer exist, and remove the scratch directory if it becomes empty. Do not use Git status, diffs, or untracked-file scans to infer cleanup because ignored artifacts may be hidden.
-16. If the fix fails, remove code changes that came from rejected hypotheses, keep useful instrumentation, generate new hypotheses from a different subsystem, and repeat.
+14. Update the root-cause document with the verification result. If verification proves the fix, mark it `Fixed and verified` and continue cleanup. If verification fails, preserve the failed-fix evidence, remove code changes that came from rejected hypotheses, keep useful instrumentation, generate new hypotheses from a different subsystem, update the same document, and repeat.
+15. Remove all injected temporary logging code only after logs prove the fix worked and the user confirms the issue is gone. This includes the inserted log calls, debug-only endpoint constants, temporary headers, and any other scaffolding added only for this debugging pass.
+16. If you started the bundled collector for this task, stop it after the final evidence handoff, delete every path in `ownedArtifacts` unless the user asked to keep evidence, verify those exact paths no longer exist, and remove the scratch directory if it becomes empty. Do not use Git status, diffs, or untracked-file scans to infer cleanup because ignored artifacts may be hidden. Update the root-cause document with cleanup status before the final response, and do not delete the root-cause document as part of collector cleanup.
 
 ## Guardrails
 
@@ -133,6 +144,8 @@ Before starting, normalize the current debugging environment without preflightin
 - Never restart the collector and leave the temporary logging code pointed at a stale ingest port.
 - Never leave injected temporary logging code behind after the bug is proven fixed and the user confirms the issue is gone.
 - Never leave bundled-collector session artifacts behind after a successful debug session unless the user explicitly asked to keep them.
+- Never delete the root-cause Markdown document as collector cleanup; it is the durable evidence report for the debug session.
+- Never let the root-cause document claim a proven cause without cited runtime evidence.
 - Never treat a clean Git status as proof that collector artifacts were removed; ignored `.debug-logs/` files must be checked by path.
 - Never delete files that belong to an externally provided logging session you did not create.
 
@@ -163,6 +176,8 @@ Before starting, normalize the current debugging environment without preflightin
 
 Read [runtime-debugging.md](./references/runtime-debugging.md) for local collector bootstrap commands, location-state JSON schema, dashboard `Locations` tab behavior, `~/.junerdd/config.json` IDE settings, CORS behavior, payload fields, logging templates, response shape, and verification rules.
 
+Read [root-cause-document.md](./references/root-cause-document.md) when runtime evidence identifies, changes, or verifies the likely root cause.
+
 ## Response Shape
 
 Use phase-based handoffs, and stop whenever the user needs to act.
@@ -178,6 +193,7 @@ Detailed handoff rules live in [runtime-debugging.md](./references/runtime-debug
 After the user reproduces the issue, continue in this order:
 
 4. Log analysis with `CONFIRMED` / `REJECTED` / `INCONCLUSIVE`
-5. Proven fix
-6. Post-fix verification request using the same visible-handoff rules
-7. Short root-cause explanation and 1-2 line fix summary after success
+5. Root-cause document path and current status once the document exists
+6. Proven fix
+7. Post-fix verification request using the same visible-handoff rules
+8. Short root-cause explanation, root-cause document path, and 1-2 line fix summary after success

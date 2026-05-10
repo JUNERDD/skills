@@ -10,6 +10,17 @@ Current collection version: [`0.1.1`](./VERSION). Release notes are tracked in [
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
+Stable production URL: [https://junerdd-skills.vercel.app](https://junerdd-skills.vercel.app)
+
+## Website (Vercel)
+
+The companion landing page is a Next.js app in [`web/`](./web/).
+
+1. In the [Vercel dashboard](https://vercel.com/new), import this GitHub repository.
+2. Under **Configure Project**, set **Root Directory** to **`web`** (critical for this monorepo layout).
+3. Add **Environment Variable** on **Production**: **`NEXT_PUBLIC_SITE_URL`** = your production domain (example: `https://skills.example.com`, no trailing slash). This should match the **primary Production domain** configured under **Project → Settings → Domains** so Open Graph, canonical URLs, `sitemap.xml`, and `robots.txt` stay consistent.
+4. After the first successful Production deployment, open your GitHub repo **Settings → General** and set **Website** to that same production URL so the repository “About” box links to the live site.
+
 ## 🧭 Skills At A Glance
 
 If you are deciding what to install, start here:

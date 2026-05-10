@@ -32,13 +32,15 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 COLLECTOR_MAIN = SKILL_ROOT / "scripts" / "local_log_collector" / "main.py"
 SKILL_MD = SKILL_ROOT / "SKILL.md"
 RUNTIME_DEBUGGING_MD = SKILL_ROOT / "references" / "runtime-debugging.md"
+ROOT_CAUSE_DOCUMENT_MD = SKILL_ROOT / "references" / "root-cause-document.md"
 
 mcp = FastMCP(
     "debug",
     instructions=(
         "Evidence-first runtime debugging MCP server. "
         "Use start_debug_session to begin, instrument your code with fetch() "
-        "calls to the returned endpoint, then use get_debug_logs to analyze evidence."
+        "calls to the returned endpoint, then use get_debug_logs to analyze evidence. "
+        "Maintain a root-cause Markdown document as the evidence changes."
     ),
 )
 
@@ -589,6 +591,12 @@ def get_reference() -> str:
     return RUNTIME_DEBUGGING_MD.read_text(encoding="utf-8")
 
 
+@mcp.resource("debug://root-cause-document")
+def get_root_cause_document_reference() -> str:
+    """Root-cause document rules: creation, updates, template, and self-check."""
+    return ROOT_CAUSE_DOCUMENT_MD.read_text(encoding="utf-8")
+
+
 # --- Prompts ---
 
 
@@ -640,6 +648,7 @@ For each hypothesis, identify:
 After reproduction, fill in:
 - Log entries that confirm/reject each hypothesis
 - Root cause (which hypothesis was CONFIRMED)
+- Root-cause document path and current status
 - Fix applied
 
 ## Verification

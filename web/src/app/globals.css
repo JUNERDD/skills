@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* CRT / 终端调色板：高对比可读 + 单色 accent */
+:root {
+  --crt-bg: #070a08;
+  --crt-fg: #e6f8e9;
+  --crt-accent: #7ae582;
+  --crt-dim: #6b8f72;
+  --crt-glow: color-mix(in srgb, var(--crt-accent) 35%, transparent);
+  --background: var(--crt-bg);
+  --foreground: var(--crt-fg);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+  --color-crt-bg: var(--crt-bg);
+  --color-crt-fg: var(--crt-fg);
+  --color-crt-accent: var(--crt-accent);
+  --color-crt-dim: var(--crt-dim);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background: var(--crt-bg);
+  color: var(--crt-fg);
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* Scanline：纯装饰覆层（低于正文层级） */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  mix-blend-mode: multiply;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.24) 2px 4px
+  );
+  opacity: 0.45;
+}
+
+.crt-vignette {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  background: radial-gradient(
+    ellipse 75% 70% at 50% 45%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+.crt-noise {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 减少动效：隐藏 WebGL 层由组件内处理；此处减弱覆层动画感 */
+@media (prefers-reduced-motion: reduce) {
+  .crt-overlay,
+  .crt-vignette,
+  .crt-noise {
+    opacity: 0.25;
+  }
+}
