@@ -76,7 +76,6 @@ export function Hero() {
             <CopyAgentInstallButton
               idleLabel="Copy install prompt"
               copiedLabel="Copied prompt"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[color:var(--crt-accent)] px-6 py-3 text-sm font-semibold text-black transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             />
             <Link
               href={REPO_URL}

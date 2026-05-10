@@ -84,7 +84,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
         <span className="sr-only">JUNERDD Skills — reusable AI agent skills</span>
-        {children}
+        <div className="app-root">{children}</div>
         <AppToaster />
       </body>
     </html>

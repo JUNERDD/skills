@@ -27,19 +27,24 @@ export function FinalCta() {
           <div
             role="figure"
             aria-label="Agent installation instruction"
-            className="relative border border-white/10 bg-[color:var(--surface-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            className="overflow-hidden rounded-lg border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[0_24px_80px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.08)]"
           >
-            <pre
-              tabIndex={0}
-              className="overflow-x-auto px-5 py-5 pr-20 text-[13px] leading-relaxed text-white md:text-[14px]"
-            >
-              <code>{AGENT_INSTALL_INSTRUCTION}</code>
+            <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-black/24 px-4 py-3 sm:px-5">
+              <span className="font-sans text-[11px] font-bold uppercase text-white/46">
+                Prompt
+              </span>
+              <CopyAgentInstallButton
+                idleLabel="Copy"
+                copiedLabel="Copied"
+                className="shrink-0"
+                variant="compact"
+              />
+            </div>
+            <pre tabIndex={0} className="px-4 py-5 text-[13px] leading-7 text-white sm:px-5 md:text-[14px]">
+              <code className="block whitespace-pre-wrap break-words">
+                {AGENT_INSTALL_INSTRUCTION}
+              </code>
             </pre>
-            <CopyAgentInstallButton
-              idleLabel="Copy"
-              copiedLabel="Copied"
-              className="absolute right-3 top-3 inline-flex min-h-8 items-center justify-center border border-white/16 px-3 font-mono text-[11px] text-white/58 transition hover:border-white/38 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
-            />
           </div>
         </motion.div>
 
