@@ -27,7 +27,7 @@ export function SkillsList() {
           </p>
         </motion.div>
 
-        <ul className="mt-14 divide-y divide-white/10 border-y border-white/10 md:grid md:grid-cols-2 md:gap-2 md:divide-y-0 md:border-0 md:bg-transparent">
+        <ul className="mt-10 grid gap-3 sm:mt-14 md:grid-cols-2">
           {SKILLS.map((skill, index) => (
             <motion.li
               key={skill.slug}
@@ -38,11 +38,11 @@ export function SkillsList() {
                 duration: 0.45,
                 delay: Math.min(index * 0.02, 0.18),
               }}
-              className="bg-[color:var(--surface-0)] md:rounded-lg md:bg-[color:var(--surface-1)]"
+              className="rounded-lg border border-white/10 bg-[color:var(--surface-1)]"
             >
               <Link
                 href={`/skills/${skill.slug}`}
-                className="group flex h-full min-h-52 flex-col rounded-lg px-0 py-6 transition-colors hover:bg-white/6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white md:p-10"
+                className="group flex h-full min-h-40 flex-col rounded-lg p-5 transition-colors hover:bg-white/6 active:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white sm:min-h-52 md:p-10"
               >
                 <p className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-white/38">
                   {skill.category}
@@ -53,6 +53,9 @@ export function SkillsList() {
                 <p className="mt-2 font-mono text-sm leading-relaxed text-[color:var(--crt-dim)]">
                   {skill.blurb}
                 </p>
+                <span className="mt-auto pt-5 font-mono text-xs text-white/38 transition-colors group-hover:text-white/70">
+                  Open guide
+                </span>
               </Link>
             </motion.li>
           ))}
