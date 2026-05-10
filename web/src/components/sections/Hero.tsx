@@ -3,7 +3,8 @@
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import { AsciiBackdrop } from '@/components/ascii/AsciiBackdrop';
-import { INSTALL_DOC_RAW, REPO_URL } from '@/lib/skills-data';
+import { CopyAgentInstallButton } from '@/components/install/CopyAgentInstallButton';
+import { REPO_URL } from '@/lib/skills-data';
 import { SiteHeader } from './SiteHeader';
 
 const group = {
@@ -72,14 +73,11 @@ export function Hero() {
             variants={item}
             className="flex flex-col gap-3 sm:flex-row sm:items-center"
           >
-            <Link
-              href={INSTALL_DOC_RAW}
-              target="_blank"
-              rel="noreferrer noopener"
+            <CopyAgentInstallButton
+              idleLabel="Copy install prompt"
+              copiedLabel="Copied prompt"
               className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[color:var(--crt-accent)] px-6 py-3 text-sm font-semibold text-black transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              Installation guide
-            </Link>
+            />
             <Link
               href={REPO_URL}
               target="_blank"

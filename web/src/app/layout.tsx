@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Syne } from "next/font/google";
+import { AppToaster } from "@/components/ui/AppToaster";
 import { REPO_URL } from "@/lib/skills-data";
 import { getMetadataBase, getSiteOrigin } from "@/lib/site-url";
 import "./globals.css";
@@ -84,6 +85,7 @@ export default function RootLayout({
         />
         <span className="sr-only">JUNERDD Skills — reusable AI agent skills</span>
         {children}
+        <AppToaster />
       </body>
     </html>
   );
