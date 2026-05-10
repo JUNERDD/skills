@@ -10,7 +10,7 @@ const LazyAscii = dynamic(() => import('./AsciiScene'), {
 export function AsciiBackdrop() {
   return (
     <div
-      className="fixed inset-0 z-0 h-full w-full overflow-hidden pointer-events-none [&_canvas]:block"
+      className="absolute inset-0 z-0 h-full w-full overflow-hidden pointer-events-none [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:block"
       aria-hidden
     >
       <LazyAscii />

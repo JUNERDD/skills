@@ -77,15 +77,12 @@ export default function RootLayout({
       lang="en"
       className={`${syne.variable} ${ibmMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-[var(--crt-bg)] text-[color:var(--crt-fg)] font-mono">
+      <body className="min-h-full bg-[var(--surface-0)] text-[color:var(--ink)] font-mono">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
         <span className="sr-only">JUNERDD Skills — reusable AI agent skills</span>
-        <div className="crt-overlay" aria-hidden />
-        <div className="crt-noise" aria-hidden />
-        <div className="crt-vignette" aria-hidden />
         {children}
       </body>
     </html>

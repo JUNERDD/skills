@@ -17,13 +17,13 @@ export default function OpenGraphImage() {
           flexDirection: "column",
           justifyContent: "center",
           padding: 72,
-          background: "linear-gradient(145deg, #0a0d12 0%, #121820 52%, #0c1018 100%)",
-          color: "#c8e6c9",
+          background: "linear-gradient(145deg, #050505 0%, #151515 54%, #080808 100%)",
+          color: "#f4f4f1",
           fontFamily:
             'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace',
         }}
       >
-        <div style={{ fontSize: 56, fontWeight: 700, letterSpacing: "-0.04em", color: "#e8ffef" }}>
+        <div style={{ fontSize: 56, fontWeight: 700, color: "#f8f8f4" }}>
           JUNERDD Skills
         </div>
         <div
@@ -33,7 +33,7 @@ export default function OpenGraphImage() {
             lineHeight: 1.35,
             maxWidth: 900,
             opacity: 0.92,
-            color: "#9cd4a9",
+            color: "#b6b6b2",
           }}
         >
           Reusable AI agent skills — install independently or as a curated collection.
@@ -42,7 +42,6 @@ export default function OpenGraphImage() {
           style={{
             marginTop: "auto",
             fontSize: 22,
-            letterSpacing: "0.12em",
             textTransform: "uppercase",
             opacity: 0.55,
           }}

@@ -2,6 +2,7 @@
 
 import { motion } from 'motion/react';
 import Link from 'next/link';
+import { AsciiBackdrop } from '@/components/ascii/AsciiBackdrop';
 import { INSTALL_DOC_RAW, REPO_URL } from '@/lib/skills-data';
 import { SiteHeader } from './SiteHeader';
 
@@ -28,34 +29,44 @@ export function Hero() {
   return (
     <section
       aria-labelledby="brand-heading"
-      className="relative min-h-svh w-full"
+      className="relative isolate min-h-svh w-full overflow-hidden bg-[color:var(--surface-0)]"
     >
+      <AsciiBackdrop />
+      <div
+        className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(90deg,rgba(5,5,5,0.92)_0%,rgba(5,5,5,0.62)_34%,rgba(5,5,5,0.12)_70%,rgba(5,5,5,0.42)_100%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-40 bg-[linear-gradient(to_bottom,transparent,var(--surface-0))]"
+        aria-hidden
+      />
       <SiteHeader />
-      <div className="mx-auto flex min-h-svh max-w-2xl flex-col justify-end gap-8 px-6 pb-14 pt-28 sm:items-start sm:px-10 sm:pb-24">
+      <div className="relative z-10 mx-auto flex min-h-svh w-full max-w-6xl flex-col justify-end gap-8 px-6 pb-14 pt-28 sm:items-start sm:px-10 sm:pb-24">
         <motion.div
           variants={group}
           initial="hidden"
           animate="show"
-          className="flex w-full flex-col gap-5"
+          className="flex w-full max-w-2xl flex-col gap-5"
         >
           <motion.p
             variants={item}
-            className="font-sans text-[11px] uppercase tracking-[0.35em] text-[color:var(--crt-dim)]"
+            className="font-sans text-xs font-semibold text-white/70"
           >
-            Collection
+            Agent skill collection
           </motion.p>
           <motion.h1
             id="brand-heading"
             variants={item}
-            className="font-sans text-[clamp(2.4rem,6vw,3.75rem)] font-extrabold leading-[1.02] tracking-tight text-[color:var(--crt-fg)] drop-shadow-[0_0_40px_var(--crt-glow)]"
+            className="font-sans text-5xl font-extrabold leading-none text-[color:var(--crt-fg)] drop-shadow-[0_0_34px_var(--crt-glow)] sm:text-6xl lg:text-7xl"
           >
-            JUNERDD Skills
+            <span className="block">JUNERDD</span>
+            <span className="block">Skills</span>
           </motion.h1>
           <motion.p
             variants={item}
             className="max-w-xl text-base leading-relaxed text-[color:var(--crt-dim)] sm:text-lg"
           >
-            Reusable AI agent skills published from a single repository.
+            Reusable AI agent skills packaged as installable workflows.
           </motion.p>
           <motion.div
             variants={item}
@@ -65,7 +76,7 @@ export function Hero() {
               href={INSTALL_DOC_RAW}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex min-h-11 items-center justify-center border border-[color:var(--crt-accent)] bg-[color:color-mix(in_srgb,var(--crt-accent)_16%,transparent)] px-6 py-3 text-sm font-semibold text-[color:var(--crt-accent)] transition hover:bg-[color:color-mix(in_srgb,var(--crt-accent)_28%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--crt-accent)]"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[color:var(--crt-accent)] px-6 py-3 text-sm font-semibold text-black transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               Installation guide
             </Link>
@@ -73,24 +84,13 @@ export function Hero() {
               href={REPO_URL}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex min-h-11 items-center px-4 py-2 text-sm text-[color:var(--crt-accent)] underline-offset-[6px] transition hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--crt-accent)] sm:justify-center"
+              className="inline-flex min-h-11 items-center rounded-lg border border-white/16 px-5 py-2 text-sm text-[color:var(--crt-fg)] transition hover:border-white/42 hover:bg-white/8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:justify-center"
             >
               View repository
             </Link>
           </motion.div>
         </motion.div>
       </div>
-      <motion.div
-        className="pointer-events-none absolute bottom-8 left-1/2 hidden -translate-x-1/2 sm:block"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5 }}
-        transition={{ delay: 1.05, duration: 0.5 }}
-        aria-hidden
-      >
-        <span className="font-mono text-[10px] tracking-[0.52em] text-[color:var(--crt-dim)]">
-          SCROLL
-        </span>
-      </motion.div>
     </section>
   );
 }

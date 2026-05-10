@@ -1,14 +1,24 @@
 @import "tailwindcss";
 
-/* CRT / 终端调色板：高对比可读 + 单色 accent */
 :root {
-  --crt-bg: #070a08;
-  --crt-fg: #e6f8e9;
-  --crt-accent: #7ae582;
-  --crt-dim: #6b8f72;
-  --crt-glow: color-mix(in srgb, var(--crt-accent) 35%, transparent);
-  --background: var(--crt-bg);
-  --foreground: var(--crt-fg);
+  --surface-0: #050505;
+  --surface-1: #0d0d0e;
+  --surface-2: #18191b;
+  --ink: #f4f4f1;
+  --muted: #9b9b98;
+  --accent: #f8f8f4;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 24%, transparent);
+  --scrollbar-track: color-mix(in srgb, var(--surface-0) 88%, white 12%);
+  --scrollbar-thumb: color-mix(in srgb, var(--ink) 34%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--ink) 58%, transparent);
+  --crt-bg: var(--surface-0);
+  --crt-fg: var(--ink);
+  --crt-accent: var(--accent);
+  --crt-dim: var(--muted);
+  --crt-glow: var(--accent-glow);
+  --background: var(--surface-0);
+  --foreground: var(--ink);
 }
 
 @theme inline {
@@ -24,57 +34,58 @@
 
 html {
   scrollbar-gutter: stable;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
 }
 
 body {
   margin: 0;
-  background: var(--crt-bg);
-  color: var(--crt-fg);
+  background:
+    linear-gradient(180deg, var(--surface-0) 0%, #080808 56%, var(--surface-0) 100%);
+  color: var(--ink);
   font-family: var(--font-mono), ui-monospace, monospace;
+  text-rendering: geometricPrecision;
 }
 
-/* Scanline：纯装饰覆层（低于正文层级） */
-.crt-overlay {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  mix-blend-mode: multiply;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0 2px,
-    rgba(0, 0, 0, 0.24) 2px 4px
-  );
-  opacity: 0.45;
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
-.crt-vignette {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  background: radial-gradient(
-    ellipse 75% 70% at 50% 45%,
-    transparent 40%,
-    rgba(0, 0, 0, 0.55) 100%
-  );
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
 }
 
-.crt-noise {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  opacity: 0.07;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
+@supports selector(::-webkit-scrollbar) {
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
 
-/* 减少动效：隐藏 WebGL 层由组件内处理；此处减弱覆层动画感 */
-@media (prefers-reduced-motion: reduce) {
-  .crt-overlay,
-  .crt-vignette,
-  .crt-noise {
-    opacity: 0.25;
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 56px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background:
+      linear-gradient(var(--scrollbar-thumb), var(--scrollbar-thumb)) padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background:
+      linear-gradient(var(--scrollbar-thumb-hover), var(--scrollbar-thumb-hover)) padding-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
