@@ -40,11 +40,17 @@ html {
 
 body {
   margin: 0;
+  position: relative;
   background:
     linear-gradient(180deg, var(--surface-0) 0%, #080808 56%, var(--surface-0) 100%);
   color: var(--ink);
   font-family: var(--font-mono), ui-monospace, monospace;
   text-rendering: geometricPrecision;
+}
+
+.app-root {
+  min-height: 100%;
+  isolation: isolate;
 }
 
 ::selection {
