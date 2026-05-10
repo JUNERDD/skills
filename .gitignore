@@ -2,3 +2,9 @@
 .debug-logs/
 __pycache__/
 *.pyc
+
+# Next.js (web/)
+**/node_modules/
+**/.next/
+**/out/
+**/next-env.d.ts
