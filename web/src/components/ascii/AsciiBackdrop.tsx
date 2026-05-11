@@ -8,18 +8,26 @@ const LazyAscii = dynamic(() => import('./AsciiScene'), {
   loading: () => null,
 });
 
-const mobileTexture = `] 0 { 1 * } / > [ 0 ]   { 1 }  *  / 0
-  { } 1 < 0  *  ]   [ 1 /   > 0   { }
-0   / 1 ]  { * }    < 0 [ 1 ]   /
-  [ 0 ]   *  { 1 }  /  >   0  < 1
-{ 1 }   /   0 [ ]  *  < 1   { 0 }
-  / 0   [ 1 ]   { }  *   > 0   /
-1   { }  *   [ 0 ]   /  <   1  >
-  < 0  /   { 1 }   [ ]  *  0   ]`;
+const mobileTextureRows = [
+  '] 0 { 1 * } / > [ 0 ]   { 1 }  *  / 0   ]  1',
+  '  { } 1 < 0  *  ]   [ 1 /   > 0   { }  /  0',
+  '0   / 1 ]  { * }    < 0 [ 1 ]   /  *   { 1 }',
+  '  [ 0 ]   *  { 1 }  /  >   0  < 1   ]  /',
+  '{ 1 }   /   0 [ ]  *  < 1   { 0 }   >  [ ]',
+  '  / 0   [ 1 ]   { }  *   > 0   /   1  <  *',
+  '1   { }  *   [ 0 ]   /  <   1  >   { }  0',
+  '  < 0  /   { 1 }   [ ]  *  0   ]   /  1  >',
+];
+
+const mobileTexture = Array.from({ length: 7 }, (_, groupIndex) =>
+  mobileTextureRows
+    .map((row, rowIndex) => `${' '.repeat((groupIndex + rowIndex) % 5)}${row}`)
+    .join('\n'),
+).join('\n');
 
 function MobileAsciiTexture() {
   return (
-    <pre className="absolute inset-0 overflow-hidden whitespace-pre-wrap px-4 pt-16 font-mono text-[11px] leading-[1.9] text-white/[0.13] opacity-90 [mask-image:linear-gradient(to_bottom,rgba(0,0,0,0.75),rgba(0,0,0,0.38)_48%,rgba(0,0,0,0.15))]">
+    <pre className="absolute inset-0 overflow-hidden whitespace-pre-wrap px-4 pt-16 font-mono text-[11px] leading-[1.85] text-white/[0.18] [mask-image:linear-gradient(to_bottom,rgba(0,0,0,0.85),rgba(0,0,0,0.62)_52%,rgba(0,0,0,0.24))]">
       {mobileTexture}
     </pre>
   );

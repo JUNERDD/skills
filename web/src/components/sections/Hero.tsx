@@ -34,7 +34,7 @@ export function Hero() {
     >
       <AsciiBackdrop />
       <div
-        className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(90deg,rgba(5,5,5,0.92)_0%,rgba(5,5,5,0.62)_34%,rgba(5,5,5,0.12)_70%,rgba(5,5,5,0.42)_100%)]"
+        className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(180deg,rgba(5,5,5,0.12)_0%,rgba(5,5,5,0.38)_42%,rgba(5,5,5,0.94)_100%)] sm:bg-[linear-gradient(90deg,rgba(5,5,5,0.92)_0%,rgba(5,5,5,0.62)_34%,rgba(5,5,5,0.12)_70%,rgba(5,5,5,0.42)_100%)]"
         aria-hidden
       />
       <div
@@ -58,7 +58,7 @@ export function Hero() {
           <motion.h1
             id="brand-heading"
             variants={item}
-            className="max-w-full font-sans text-[2.65rem] font-extrabold leading-none text-[color:var(--crt-fg)] drop-shadow-[0_0_34px_var(--crt-glow)] sm:text-6xl lg:text-7xl"
+            className="max-w-full font-sans text-[2.48rem] font-extrabold leading-none text-[color:var(--crt-fg)] drop-shadow-[0_0_34px_var(--crt-glow)] sm:text-6xl lg:text-7xl"
           >
             <span className="block">JUNERDD</span>
             <span className="block">Skills</span>
