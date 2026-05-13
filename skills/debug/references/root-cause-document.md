@@ -11,7 +11,7 @@ Use this reference when runtime evidence identifies, changes, or verifies the li
 - If the repo already has an obvious location for reports or review artifacts, follow that directory convention, but still append the random id immediately before `.md` unless that convention already guarantees a unique per-run filename.
 - Otherwise write to `tmp/reviews/YYYY-MM-DD-root-cause-report-<random-id>.md`.
 - Do not overwrite an existing report. If the chosen path already exists, generate a new id and choose a new path before writing.
-- Report the document path in every handoff after the file exists.
+- Report the document path in every handoff after the file exists and until final cleanup deletes it.
 - Use absolute file links with line anchors when the environment supports clickable local links.
 - Do not include secrets, tokens, passwords, API keys, or PII. Redact sensitive runtime values and state what was redacted.
 
@@ -22,7 +22,8 @@ Use this reference when runtime evidence identifies, changes, or verifies the li
 - When evidence is still incomplete, mark the document status as `Working theory` or `Incomplete` instead of presenting the cause as proven.
 - After applying the fix, update `Fix and Verification` before asking for the verification reproduction.
 - After verification, record whether the before/after evidence proves the fix. If verification fails, mark the document status as `Superseded`, `Still failing`, or `Incomplete`, preserve the failed-fix evidence, and continue the investigation in the same document.
-- After successful cleanup, record that temporary instrumentation and collector-owned artifacts were removed, or state what was intentionally retained at the user's request.
+- Before successful final cleanup deletes this document, record that temporary instrumentation and collector-owned artifacts were removed, then state that the root-cause document is scheduled for deletion. If the user explicitly asks to keep evidence, record that retention instead.
+- After recording the final cleanup status, delete the root-cause Markdown file and verify the path no longer exists unless the user explicitly asked to keep evidence.
 
 ## Document Shape
 
@@ -77,7 +78,7 @@ Look here first:
 - Verification status: `[Not run | Passed | Failed | Blocked]`
 - Before evidence: `[pre-fix log or observation]`
 - After evidence: `[post-fix log or observation]`
-- Cleanup status: `[temporary logs removed, collector artifacts deleted, or retained by request]`
+- Cleanup status: `[temporary logs removed, collector artifacts deleted, root-cause document scheduled for deletion, or retained by request]`
 
 ## Superseded or Rejected Causes
 
@@ -92,7 +93,7 @@ Look here first:
 - `[yes | no]` Every `CONFIRMED` root-cause statement cites runtime evidence.
 - `[yes | no]` Every rejected or superseded cause explains what evidence displaced it.
 - `[yes | no]` The current status matches the latest verification result.
-- `[yes | no]` Temporary instrumentation and collector artifacts are either cleaned up or explicitly retained.
+- `[yes | no]` Temporary instrumentation, collector artifacts, and root-cause document retention/deletion are accounted for.
 - `[yes | no]` Secrets, tokens, passwords, API keys, and PII are absent or redacted.
 ```
 
@@ -103,4 +104,4 @@ Look here first:
 - Separate verified runtime facts from inferred consequences.
 - Preserve enough rejected-hypothesis evidence to explain why the investigation changed direction.
 - Prefer concise tables for ledgers and timelines; use short cards or bullets for causal explanation.
-- Treat the document as a durable debugging artifact, not temporary collector state. Do not delete it during collector cleanup unless the user explicitly asks.
+- Treat the document as active-session evidence. Keep it through intermediate log clears and incomplete investigations, but delete it during final successful cleanup unless the user explicitly asks to keep evidence.

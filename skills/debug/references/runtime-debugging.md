@@ -379,7 +379,7 @@ When the session does not expose a clear endpoint, fall back to truncating only 
 : > "<LOG_FILE>"
 ```
 
-Never clear a different session's logs, and never clear the active session until you have already captured any evidence you still need from the current run.
+Never clear a different session's logs, and never clear the active session until you have already captured any evidence you still need from the current run. Intermediate log clears do not delete the root-cause document; delete that document only during final successful cleanup unless the user explicitly asked to keep evidence.
 
 ## Session artifact cleanup
 
@@ -387,17 +387,21 @@ Only delete artifacts you own.
 
 - If the logging session was provided by the host, another tool, or the user, do not delete its files.
 - If you started the bundled collector for the current task, stop it after post-fix verification succeeds and after any final evidence handoff the user still needs.
+- Track the root-cause document path separately because it is not part of the collector's `ownedArtifacts` list.
+- Before deleting the root-cause document, update it with final verification status, cleanup status, and whether evidence is being retained by request or the document is scheduled for deletion.
+- When using the debug MCP server, pass the final root-cause document path as `root_cause_document_path` to `stop_debug_session` after that document has been updated.
 - Capture the ready-file payload, including `dashboardToken`, `shutdownUrl`, and `ownedArtifacts`, before deleting anything.
 - Stop the collector with the session-scoped `X-Debug-Dashboard-Token` header and confirm it is no longer reachable before deleting artifacts. If shutdown fails, do not report cleanup as complete.
 - Then delete every path listed in `ownedArtifacts`, which should include the session NDJSON log, location-state file, ready file, and service log.
 - Do not rely on Git visibility for cleanup verification. `.debug-logs/` is commonly in `.gitignore`, so ignored leftovers will not appear in normal status output.
 - After deletion, check every `ownedArtifacts` path directly and fail the cleanup if any owned path still exists.
 - If the scratch directory becomes empty after that deletion, remove it too.
+- After temporary instrumentation and collector artifacts are removed, delete the root-cause Markdown document unless the user explicitly asked to keep evidence. Verify the document path no longer exists and mention the deletion in the final response.
 
 One safe pattern is:
 
 ```bash
-python3 - <<'PY' "<READY_FILE>"
+python3 - <<'PY' "<READY_FILE>" "<ROOT_CAUSE_DOCUMENT_OR_EMPTY>"
 from __future__ import annotations
 
 import json
@@ -408,6 +412,11 @@ import urllib.error
 import urllib.request
 
 ready_path = Path(sys.argv[1])
+root_cause_document = (
+    Path(sys.argv[2]).expanduser().resolve()
+    if len(sys.argv) > 2 and sys.argv[2]
+    else None
+)
 payload = json.loads(ready_path.read_text(encoding='utf-8'))
 artifacts = [Path(path) for path in payload.get('ownedArtifacts', []) if path]
 shutdown_url = payload.get('shutdownUrl')
@@ -453,6 +462,16 @@ remaining = [str(artifact) for artifact in artifacts if artifact.exists()]
 if remaining:
     raise SystemExit('[ERROR] Collector cleanup left owned artifacts:\n' + '\n'.join(remaining))
 
+if root_cause_document:
+    if root_cause_document.suffix.lower() != '.md':
+        raise SystemExit(f'[ERROR] Refusing to delete non-Markdown root-cause document: {root_cause_document}')
+    try:
+        root_cause_document.unlink()
+    except FileNotFoundError:
+        pass
+    if root_cause_document.exists():
+        raise SystemExit(f'[ERROR] Root-cause document still exists after cleanup: {root_cause_document}')
+
 artifact_anchor = payload.get('logFile') or (str(artifacts[0]) if artifacts else '')
 if artifact_anchor:
     artifact_dir = Path(artifact_anchor).parent
@@ -463,7 +482,7 @@ if artifact_anchor:
 PY
 ```
 
-If you already captured the artifact list in memory, use that list directly rather than re-reading a ready file you are about to delete.
+If you already captured the artifact list in memory, use that list directly rather than re-reading a ready file you are about to delete. If the user asked to keep evidence, pass an empty root-cause document argument and report that the document was intentionally retained.
 
 ## Log format
 
@@ -584,5 +603,5 @@ Quote or cite the specific log entries that support the judgment.
 - Tag verification runs with a distinct `runId` such as `post-fix`.
 - Compare before and after logs before claiming success.
 - Remove all injected temporary logging code only after log proof and user confirmation. Remove the inserted log calls and any temporary endpoint constants, headers, or other debug-only scaffolding that was added for the current debugging pass.
-- When you started the bundled collector, stop it with the dashboard token, delete every path in `ownedArtifacts`, and verify those exact paths no longer exist after success unless the user explicitly asked to keep the evidence files.
+- When you started the bundled collector, stop it with the dashboard token, delete every path in `ownedArtifacts`, verify those exact paths no longer exist, then delete the root-cause Markdown document after success unless the user explicitly asked to keep evidence.
 - If a hypothesis is rejected, remove the code changes based on that hypothesis instead of letting speculative changes accumulate.

@@ -40,7 +40,8 @@ mcp = FastMCP(
         "Evidence-first runtime debugging MCP server. "
         "Use start_debug_session to begin, instrument your code with fetch() "
         "calls to the returned endpoint, then use get_debug_logs to analyze evidence. "
-        "Maintain a root-cause Markdown document as the evidence changes."
+        "Maintain a root-cause Markdown document as the evidence changes, then delete "
+        "that document during final cleanup unless the user asks to keep evidence."
     ),
 )
 
@@ -117,12 +118,39 @@ def _kill_and_reap_process(proc: subprocess.Popen, timeout: float = 2.0) -> None
     proc.wait(timeout=timeout)
 
 
-def _cleanup_collector_session() -> list[str]:
+def _resolve_root_cause_document_path(
+    session: dict[str, Any],
+    root_cause_document_path: str,
+) -> tuple[Path | None, str | None]:
+    if not root_cause_document_path:
+        return None, None
+
+    workspace_root = Path(session.get("workspace_root", "")).expanduser().resolve()
+    candidate = Path(root_cause_document_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = workspace_root / candidate
+    candidate = candidate.resolve()
+
+    if candidate.suffix.lower() != ".md":
+        return None, "root_cause_document_path must point to a Markdown (.md) file."
+
+    try:
+        candidate.relative_to(workspace_root)
+    except ValueError:
+        return None, "root_cause_document_path must be inside the active workspace_root."
+
+    return candidate, None
+
+
+def _cleanup_collector_session(
+    root_cause_document_path: str = "",
+) -> tuple[list[str], list[str]]:
     global _active_session, _collector_process
 
     session = _active_session
     proc = _collector_process
     deleted: list[str] = []
+    errors: list[str] = []
 
     if session is not None:
         shutdown_url = session.get("shutdown_url")
@@ -159,8 +187,27 @@ def _cleanup_collector_session() -> list[str]:
                 log_dir.rmdir()
                 deleted.append(str(log_dir))
 
+        root_cause_document, root_cause_error = _resolve_root_cause_document_path(
+            session,
+            root_cause_document_path,
+        )
+        if root_cause_error:
+            errors.append(root_cause_error)
+        elif root_cause_document is not None:
+            try:
+                root_cause_document.unlink()
+                deleted.append(str(root_cause_document))
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                errors.append(f"Failed to delete root-cause document: {exc}")
+            if root_cause_document.exists():
+                errors.append(
+                    f"Root-cause document still exists after cleanup: {root_cause_document}"
+                )
+
     _active_session = None
-    return deleted
+    return deleted, errors
 
 
 def _handle_shutdown_signal(signum: int, _frame: object) -> None:
@@ -358,6 +405,7 @@ async def start_debug_session(
                         "shutdown_url": raw.get("shutdownUrl"),
                         "dashboard_token": raw.get("dashboardToken"),
                         "log_file": str(log_file),
+                        "workspace_root": str(ws),
                         "pid": proc.pid,
                         "owned_artifacts": raw.get("ownedArtifacts", []),
                     }
@@ -383,18 +431,30 @@ async def start_debug_session(
 
 
 @mcp.tool()
-def stop_debug_session() -> dict[str, Any]:
+def stop_debug_session(root_cause_document_path: str = "") -> dict[str, Any]:
     """Stop the active debug collector and clean up artifacts.
 
     Shuts down the collector process, deletes all session artifacts
     (log files, ready files, location state), and removes the scratch
     directory if empty.
+
+    Args:
+        root_cause_document_path: Optional root-cause Markdown document path to
+            delete after final verification and cleanup status have been recorded.
+            Relative paths resolve under the active workspace root. Only Markdown
+            files inside the workspace root are accepted.
     """
     if _active_session is None and _collector_process is None:
         return {"error": "No active debug session."}
 
-    deleted = _cleanup_collector_session()
-    return {"status": "stopped", "deleted_artifacts": deleted}
+    deleted, errors = _cleanup_collector_session(root_cause_document_path)
+    result: dict[str, Any] = {
+        "status": "stopped_with_cleanup_errors" if errors else "stopped",
+        "deleted_artifacts": deleted,
+    }
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 @mcp.tool()
@@ -510,6 +570,8 @@ def clear_debug_logs() -> dict[str, Any]:
     """Clear all debug logs for the current session.
 
     Use this before a new reproduction run so stale entries don't pollute evidence.
+    This does not delete the root-cause document; pass its path to stop_debug_session
+    during final cleanup after the fix is verified.
     """
     session = _require_session()
     if "error" in session:

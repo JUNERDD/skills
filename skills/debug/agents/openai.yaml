@@ -1,4 +1,4 @@
 interface:
   display_name: "Runtime Debug"
   short_description: "Evidence-first debugging with root-cause reports"
-  default_prompt: "Use $debug to instrument this bug, capture runtime evidence, maintain a root-cause report, and prove the fix."
+  default_prompt: "Use $debug to instrument this bug, capture runtime evidence, maintain a root-cause report during investigation, prove the fix, then clean up logs and delete the report."

@@ -1,4 +1,4 @@
-export const COLLECTION_VERSION = "0.1.1";
+export const COLLECTION_VERSION = "0.1.2";
 
 export const REPO_URL = "https://github.com/JUNERDD/skills";
 export const INSTALL_DOC_RAW =
@@ -166,7 +166,7 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A prove-it debugging system for runtime bugs, regressions, flaky behavior, and unclear failures.",
     overview:
-      "Use this skill when code reading is not enough. It forces hypotheses, logging, reproduction, root-cause notes, and post-fix verification before cleanup. The bundled collector can capture browser or app logs into NDJSON and expose a same-origin dashboard for live inspection.",
+      "Use this skill when code reading is not enough. It forces hypotheses, logging, reproduction, root-cause notes, and post-fix verification before cleanup. The bundled collector can capture browser or app logs into NDJSON and expose a same-origin dashboard for live inspection, then final cleanup removes collector artifacts and the root-cause document unless evidence retention is requested.",
     bestFor: [
       "Frontend issues where browser logs need to reach an active collector directly.",
       "Runtime failures that are easy to guess about but hard to prove from static code.",
@@ -180,14 +180,14 @@ export const SKILLS: SkillDetail[] = [
       "Apply only proven fixes, then collect fresh post-fix logs before removing instrumentation.",
     ],
     outputs: [
-      "A root-cause document that evolves with the evidence.",
-      "Temporary instrumentation and a cleanup path.",
+      "A root-cause document that evolves during investigation and is deleted after successful final cleanup unless retained by request.",
+      "Temporary instrumentation plus collector, log, and root-cause document cleanup.",
       "A verified fix backed by fresh runtime logs.",
     ],
     guardrails: [
       "Do not ship speculative fixes without runtime proof.",
       "Do not create app-local proxy APIs for browser logs unless direct collector delivery is proven blocked.",
-      "Remove temporary instrumentation only after the post-fix run proves the issue is resolved.",
+      "Keep root-cause documents through intermediate log clears, then delete them during final successful cleanup unless the user asks to retain evidence.",
     ],
     entryPoints: [
       {
