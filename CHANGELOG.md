@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.2] - 2026-05-13
+
+### Changed
+
+- Updated the `debug` workflow so root-cause documents are kept during active investigation and intermediate log clears, then deleted during final successful cleanup unless evidence retention is requested.
+- Extended the debug MCP server `stop_debug_session` tool with an optional root-cause document path for final cleanup.
+- Synchronized the website collection version and debug skill copy for the new cleanup behavior.
+
 ## [0.1.1] - 2026-05-07
 
 ### Fixed

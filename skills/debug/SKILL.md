@@ -58,7 +58,7 @@ fallback to match the original current-directory behavior.
 | Tool | Description |
 |---|---|
 | `start_debug_session` | Start a collector session, returns endpoint + dashboard URL |
-| `stop_debug_session` | Stop collector, clean up all artifacts |
+| `stop_debug_session` | Stop collector, clean up all collector artifacts, and optionally delete the root-cause document path after final cleanup |
 | `check_collector_health` | Verify collector is alive |
 | `ingest_log` | Send a log entry (observation, variable state, control flow evidence) |
 | `get_debug_state` | Full state: entry/run/hypothesis counts |
@@ -97,10 +97,10 @@ Before starting, normalize the current debugging environment without preflightin
 When runtime evidence identifies a leading or confirmed root cause, create and maintain an evolving Markdown document for the debugging session. Use [root-cause-document.md](./references/root-cause-document.md) for naming, update, template, and self-check rules.
 
 - Create the document once per debug session, no later than the first `CONFIRMED` root cause and before applying the fix.
-- Update the same document whenever log analysis changes a hypothesis status, narrows or replaces the root cause, records a fix, records verification evidence, or records cleanup status.
+- Update the same document whenever log analysis changes a hypothesis status, narrows or replaces the root cause, records a fix, records verification evidence, or records the final cleanup plan.
 - If the root cause changes, revise `Current Root Cause` and preserve the displaced theory under `Superseded or Rejected Causes` with the evidence that displaced it.
-- Keep root-cause documents as durable reports. Do not delete them as temporary collector artifacts unless the user explicitly asks.
-- Include the document path in user handoffs after the file exists.
+- Keep the document during active investigation and intermediate log clears. After the fix is verified and final cleanup starts, update it with final verification and cleanup status, then delete the root-cause Markdown file unless the user explicitly asked to keep evidence.
+- Include the document path in user handoffs after the file exists and until final cleanup deletes it.
 
 ## Workflow
 
@@ -109,17 +109,17 @@ When runtime evidence identifies a leading or confirmed root cause, create and m
 3. Add the minimum instrumentation needed to test all hypotheses in parallel. Prefer 2-6 logs; never skip instrumentation; do not exceed 10 logs. When instrumenting browser/client JavaScript, send logs directly to the active collector endpoint unless runtime evidence proves direct delivery is blocked in the current host. When the current session supports location tracking, sync the current active source-location set after instrumentation edits and before reproduction. For exact sync payload and validation rules, read [runtime-debugging.md](./references/runtime-debugging.md).
 4. Before each reproduction run or deliberate re-recording pass, verify that the current logging process is still alive. Prefer the active `healthUrl` or `stateUrl` when one exists. If the process has been closed or the check fails, start a new collector process and treat its new ready file values as authoritative before continuing.
 5. If restarting the collector changed the active ingest endpoint or port, update the existing temporary logging code so it no longer points at the stale port. Apply that refresh before the next reproduction run and keep the edits limited to the active debug instrumentation for the current task.
-6. Preserve any evidence you still need from the current run, then clear only the active session's existing logs so the next run starts from a low-noise baseline. Prefer the active clear endpoint when one exists; fall back to truncating the active session log file only when no clear endpoint is available.
+6. Preserve any evidence you still need from the current run, then clear only the active session's existing logs so the next run starts from a low-noise baseline. Prefer the active clear endpoint when one exists; fall back to truncating the active session log file only when no clear endpoint is available. Do not delete the root-cause document during this intermediate reset.
 7. Ask the user to reproduce the issue using the reproduction handoff in [runtime-debugging.md](./references/runtime-debugging.md). Match the host's real completion mechanic exactly: use the actual button or task action label when one exists, otherwise ask for a short completion reply. Then stop and wait for the user's completion signal before continuing.
 8. Read the active session's NDJSON log file and evaluate every hypothesis as `CONFIRMED`, `REJECTED`, or `INCONCLUSIVE`, citing the relevant log evidence. When evidence identifies a leading or confirmed root cause, create or update the root-cause document using [root-cause-document.md](./references/root-cause-document.md).
 9. Apply a fix only after the logs prove the root cause. Keep instrumentation in place while implementing the fix. Update the root-cause document with the proven cause and planned verification before asking for the verification run.
 10. Before the post-fix verification run, verify the current logging process is still alive again. If it has been closed, start a new collector process and adopt its new ready file values before clearing and collecting verification logs.
 11. If restarting the collector changed the active ingest endpoint or port again, update the temporary logging code to replace the stale port before the verification run.
-12. Clear only the active session's current logs again so before/after evidence does not mix.
+12. Clear only the active session's current logs again so before/after evidence does not mix. Do not delete the root-cause document during this verification reset.
 13. Ask for a post-fix reproduction run and compare before/after logs. Use the same handoff rules in [runtime-debugging.md](./references/runtime-debugging.md), then wait for the user's completion signal before continuing.
-14. Update the root-cause document with the verification result. If verification proves the fix, mark it `Fixed and verified` and continue cleanup. If verification fails, preserve the failed-fix evidence, remove code changes that came from rejected hypotheses, keep useful instrumentation, generate new hypotheses from a different subsystem, update the same document, and repeat.
+14. Update the root-cause document with the verification result. If verification proves the fix, mark it `Fixed and verified`, record the final cleanup plan, and continue cleanup. If verification fails, preserve the failed-fix evidence, remove code changes that came from rejected hypotheses, keep useful instrumentation, generate new hypotheses from a different subsystem, update the same document, and repeat.
 15. Remove all injected temporary logging code only after logs prove the fix worked and the user confirms the issue is gone. This includes the inserted log calls, debug-only endpoint constants, temporary headers, and any other scaffolding added only for this debugging pass.
-16. If you started the bundled collector for this task, stop it after the final evidence handoff, delete every path in `ownedArtifacts` unless the user asked to keep evidence, verify those exact paths no longer exist, and remove the scratch directory if it becomes empty. Do not use Git status, diffs, or untracked-file scans to infer cleanup because ignored artifacts may be hidden. Update the root-cause document with cleanup status before the final response, and do not delete the root-cause document as part of collector cleanup.
+16. If you started the bundled collector for this task, stop it after the final evidence handoff, delete every path in `ownedArtifacts` unless the user asked to keep evidence, verify those exact paths no longer exist, and remove the scratch directory if it becomes empty. Do not use Git status, diffs, or untracked-file scans to infer cleanup because ignored artifacts may be hidden. After temporary instrumentation and collector artifacts are removed, delete the root-cause Markdown document unless the user asked to keep evidence, verify that path no longer exists, and report that deletion in the final response.
 
 ## Guardrails
 
@@ -144,7 +144,8 @@ When runtime evidence identifies a leading or confirmed root cause, create and m
 - Never restart the collector and leave the temporary logging code pointed at a stale ingest port.
 - Never leave injected temporary logging code behind after the bug is proven fixed and the user confirms the issue is gone.
 - Never leave bundled-collector session artifacts behind after a successful debug session unless the user explicitly asked to keep them.
-- Never delete the root-cause Markdown document as collector cleanup; it is the durable evidence report for the debug session.
+- Never delete the root-cause Markdown document during intermediate log clears or failed/incomplete investigations.
+- Never leave the root-cause Markdown document behind after a successful debug session unless the user explicitly asked to keep evidence.
 - Never let the root-cause document claim a proven cause without cited runtime evidence.
 - Never treat a clean Git status as proof that collector artifacts were removed; ignored `.debug-logs/` files must be checked by path.
 - Never delete files that belong to an externally provided logging session you did not create.
@@ -196,4 +197,4 @@ After the user reproduces the issue, continue in this order:
 5. Root-cause document path and current status once the document exists
 6. Proven fix
 7. Post-fix verification request using the same visible-handoff rules
-8. Short root-cause explanation, root-cause document path, and 1-2 line fix summary after success
+8. Short root-cause explanation, root-cause document deletion status, and 1-2 line fix summary after success
