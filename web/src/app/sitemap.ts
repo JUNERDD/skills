@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
-import { SKILLS } from "@/lib/skills-data";
+import { listSkillSlugs } from "@/lib/content/provider";
 import { getSiteOrigin } from "@/lib/site-url";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = getSiteOrigin();
   const lastModified = new Date();
+  const slugs = await listSkillSlugs();
 
   return [
     {
@@ -13,8 +14,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1,
     },
-    ...SKILLS.map((skill) => ({
-      url: `${origin}/skills/${skill.slug}`,
+    ...slugs.map((slug) => ({
+      url: `${origin}/skills/${slug}`,
       lastModified,
       changeFrequency: "monthly" as const,
       priority: 0.82,

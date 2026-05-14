@@ -3,8 +3,8 @@
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/sections/SiteHeader';
-import { REPO_URL, getSkillInstallCommand } from '@/lib/skills-data';
-import type { SkillDetail } from '@/lib/skills-data';
+import { REPO_URL, getSkillInstallCommand } from '@/lib/content/urls';
+import type { SkillDetail } from '@/lib/content/types';
 
 type SkillDetailPageProps = {
   next?: Pick<SkillDetail, 'slug' | 'title' | 'blurb'>;
@@ -138,9 +138,9 @@ export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps)
   const installCommand = getSkillInstallCommand(skill.slug);
 
   return (
-    <div className="relative isolate min-h-screen overflow-x-hidden bg-[color:var(--surface-0)]">
+    <div className="relative isolate min-h-screen overflow-x-clip bg-[color:var(--surface-0)]">
+      <SiteHeader />
       <section className="relative isolate border-b border-white/12 bg-[color:var(--surface-0)]">
-        <SiteHeader />
         <div className="relative z-10 mx-auto max-w-6xl px-6 pb-10 pt-28 sm:px-10 md:pb-12 md:pt-32">
           <motion.div
             variants={group}
@@ -171,7 +171,7 @@ export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps)
       </section>
 
       <main className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:px-10 lg:grid-cols-[16rem_1fr] lg:py-20">
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
+        <aside className="lg:sticky lg:top-24 lg:h-fit lg:self-start">
           <div className="border-y border-white/12 py-6">
             <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/40">
               Contents

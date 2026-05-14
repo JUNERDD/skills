@@ -2,7 +2,7 @@
 
 import { motion } from 'motion/react';
 import { CopyAgentInstallButton } from '@/components/install/CopyAgentInstallButton';
-import { AGENT_INSTALL_INSTRUCTION } from '@/lib/skills-data';
+import { AGENT_INSTALL_INSTRUCTION } from '@/lib/content/urls';
 
 export function FinalCta() {
   return (

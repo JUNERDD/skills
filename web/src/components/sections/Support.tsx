@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { COLLECTION_VERSION } from '@/lib/skills-data';
+import { COLLECTION_VERSION } from '@/lib/content/urls';
 
 export function Support() {
   return (

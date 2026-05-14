@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/ui/Button';
 import type { AppButtonVariant } from '@/components/ui/Button';
 import { notify } from '@/components/ui/AppToaster';
-import { AGENT_INSTALL_INSTRUCTION } from '@/lib/skills-data';
+import { AGENT_INSTALL_INSTRUCTION } from '@/lib/content/urls';
 
 type CopyAgentInstallButtonProps = {
   className?: string;

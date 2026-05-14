@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.1.2`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.1.3`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -28,6 +28,7 @@ If you are deciding what to install, start here:
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
+- [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
@@ -70,6 +71,7 @@ Examples:
 npx skills@latest add JUNERDD/skills --skill debug
 npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill split-commits
+npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
@@ -159,6 +161,28 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/split-commits/SKILL.md`](./skills/split-commits/SKILL.md)
 - Optional runtime metadata: [`skills/split-commits/agents/openai.yaml`](./skills/split-commits/agents/openai.yaml)
+
+### `multitask-coordinator`
+
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents. It keeps the parent agent responsible for framing, delegation decisions, worker ownership boundaries, synthesis, verification, and user communication.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill multitask-coordinator
+```
+
+Best for:
+
+- deciding whether complex repo work should be handled locally or delegated
+- assigning disjoint worker scopes in large repositories, monorepos, or dirty worktrees
+- synthesizing explorer, implementation, review, or verification results without duplicating work
+- preserving parent-agent ownership of final integration, validation, and user-facing status
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/multitask-coordinator/SKILL.md`](./skills/multitask-coordinator/SKILL.md)
+- Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
 
 ### `debug`
 
@@ -394,6 +418,10 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       └── report-template.md
+    ├── multitask-coordinator/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
     ├── receiving-hack-review/
     │   ├── SKILL.md
     │   └── agents/

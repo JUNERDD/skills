@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { cx } from '@/lib/classnames';
-import { REPO_URL } from '@/lib/skills-data';
+import { REPO_URL } from '@/lib/content/urls';
 
 export function SiteHeader() {
   const [isScrolled, setIsScrolled] = useState(false);
