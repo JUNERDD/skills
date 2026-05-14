@@ -1,29 +1,14 @@
-export const COLLECTION_VERSION = "0.1.2";
+import type { SkillDetail } from "@/lib/content/types";
 
-export const REPO_URL = "https://github.com/JUNERDD/skills";
-export const INSTALL_DOC_RAW =
-  "https://raw.githubusercontent.com/JUNERDD/skills/refs/heads/main/docs/INSTALL.md";
-export const AGENT_INSTALL_INSTRUCTION = `Fetch and follow instructions from ${INSTALL_DOC_RAW}`;
-
-export type SkillEntryPoint = {
-  label: string;
-  path: string;
-  description: string;
-};
-
-export type SkillDetail = {
-  slug: string;
-  title: string;
-  category: string;
-  blurb: string;
-  lead: string;
-  overview: string;
-  bestFor: string[];
-  workflow: string[];
-  outputs: string[];
-  guardrails: string[];
-  entryPoints: SkillEntryPoint[];
-};
+export type { SkillDetail, SkillEntryPoint } from "@/lib/content/types";
+export {
+  AGENT_INSTALL_INSTRUCTION,
+  COLLECTION_VERSION,
+  INSTALL_DOC_RAW,
+  REPO_URL,
+  getSkillInstallCommand,
+  getSkillSourceUrl,
+} from "@/lib/content/urls";
 
 export const SKILLS: SkillDetail[] = [
   {
@@ -154,6 +139,51 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/split-commits/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "multitask-coordinator",
+    title: "multitask-coordinator",
+    category: "Agent coordination",
+    blurb: "Coordinate complex subagent work with clear ownership boundaries.",
+    lead:
+      "A parent-agent workflow for deciding when to delegate, assigning worker scopes, synthesizing results, and verifying the final outcome.",
+    overview:
+      "Use this skill for non-trivial multi-step work where background subagents may help but the parent agent must keep ownership of framing, delegation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, choosing explorer or worker shapes, defining disjoint scopes, and turning worker outputs into reviewed evidence.",
+    bestFor: [
+      "Deciding whether a complex repo task should be handled directly or delegated.",
+      "Assigning clear worker ownership boundaries in large repositories, monorepos, or dirty worktrees.",
+      "Coordinating independent exploration, implementation, review, or verification slices.",
+      "Synthesizing worker outputs while preserving parent-agent accountability for the final result.",
+    ],
+    workflow: [
+      "Read applicable repository rules and check the dirty worktree before assigning ownership.",
+      "Map success criteria, affected systems, likely owner files, shared contracts, and verification commands.",
+      "Choose zero, one, or a small set of workers based on independence, scope clarity, and synthesis cost.",
+      "Give each worker a concrete objective, allowed scope, forbidden actions, validation expectation, and output contract.",
+      "Review worker evidence, resolve conflicts or gaps, integrate only adopted work, and run the narrowest credible verification.",
+    ],
+    outputs: [
+      "A delegation decision that explains what stays with the parent and what, if anything, is assigned to workers.",
+      "Worker prompts with explicit ownership boundaries, constraints, validation, and expected output.",
+      "A synthesis of adopted results, blockers, command evidence, residual risks, and final verification.",
+    ],
+    guardrails: [
+      "Do not delegate trivial requests or immediate blocking work that the parent must handle now.",
+      "Do not assign sibling workers overlapping write ownership for shared files, schemas, generated artifacts, or global config.",
+      "Do not accept worker output as fact without reviewing changed files, artifacts, command output, or other concrete evidence.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/multitask-coordinator/SKILL.md",
+        description: "Delegation decisions, worker prompt contracts, synthesis, and verification rules.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/multitask-coordinator/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],
@@ -451,14 +481,6 @@ export const SKILLS: SkillDetail[] = [
 
 export function getSkillBySlug(slug: string) {
   return SKILLS.find((skill) => skill.slug === slug);
-}
-
-export function getSkillSourceUrl(slug: string) {
-  return `${REPO_URL}/tree/main/skills/${slug}`;
-}
-
-export function getSkillInstallCommand(slug: string) {
-  return `npx skills@latest add JUNERDD/skills --skill ${slug}`;
 }
 
 export function getSkillNeighbors(slug: string) {

@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { SkillDetailPage } from '@/components/skill-detail/SkillDetailPage';
-import { getSkillBySlug, getSkillNeighbors, SKILLS } from '@/lib/skills-data';
+import {
+  getSkillBySlug,
+  getSkillNeighbors,
+  listSkillSlugs,
+} from '@/lib/content/provider';
 import { getSiteOrigin } from '@/lib/site-url';
 
 type SkillPageProps = {
@@ -10,15 +14,17 @@ type SkillPageProps = {
 
 export const dynamicParams = false;
 
-export function generateStaticParams() {
-  return SKILLS.map((skill) => ({ slug: skill.slug }));
+export async function generateStaticParams() {
+  const slugs = await listSkillSlugs();
+
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
   params,
 }: SkillPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const skill = getSkillBySlug(slug);
+  const skill = await getSkillBySlug(slug);
 
   if (!skill) {
     return {
@@ -51,13 +57,13 @@ export async function generateMetadata({
 
 export default async function SkillPage({ params }: SkillPageProps) {
   const { slug } = await params;
-  const skill = getSkillBySlug(slug);
+  const skill = await getSkillBySlug(slug);
 
   if (!skill) {
     notFound();
   }
 
-  const { next, previous } = getSkillNeighbors(skill.slug);
+  const { next, previous } = await getSkillNeighbors(skill.slug);
 
   return <SkillDetailPage next={next} previous={previous} skill={skill} />;
 }

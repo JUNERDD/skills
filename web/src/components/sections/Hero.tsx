@@ -4,8 +4,7 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import { AsciiBackdrop } from '@/components/ascii/AsciiBackdrop';
 import { CopyAgentInstallButton } from '@/components/install/CopyAgentInstallButton';
-import { REPO_URL } from '@/lib/skills-data';
-import { SiteHeader } from './SiteHeader';
+import { REPO_URL } from '@/lib/content/urls';
 
 const group = {
   hidden: {},
@@ -41,7 +40,6 @@ export function Hero() {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-40 bg-[linear-gradient(to_bottom,transparent,var(--surface-0))]"
         aria-hidden
       />
-      <SiteHeader />
       <div className="relative z-10 mx-auto flex min-h-[92svh] w-full max-w-6xl flex-col justify-end gap-8 px-5 pb-10 pt-24 sm:min-h-svh sm:items-start sm:px-10 sm:pb-24">
         <motion.div
           variants={group}

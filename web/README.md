@@ -13,6 +13,25 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Content architecture
+
+The site is structured as a CMS-ready content app. UI routes and components read
+skills through `src/lib/content/provider.ts` instead of importing the static
+catalog directly.
+
+Current provider:
+
+- `src/lib/content/static-provider.ts` reads the existing in-repo catalog from
+  `src/lib/skills-data.ts`.
+- `src/lib/content/types.ts` owns the public skill data shape used by pages and
+  components.
+- `src/lib/content/urls.ts` owns lightweight constants and URL/install helpers
+  that are safe for client components.
+
+When replacing the static catalog with a headless CMS, add a new provider beside
+`static-provider.ts` and switch the exports in `provider.ts`. Keep the page and
+component props stable so the UI remains provider-agnostic.
+
 ## Deploy on Vercel (recommended)
 
 This app lives in the monorepo subdirectory **`web/`**. In Vercel, the project **Root Directory must be `web`**, not the repository root.

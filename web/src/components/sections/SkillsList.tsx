@@ -2,9 +2,13 @@
 
 import { motion } from 'motion/react';
 import Link from 'next/link';
-import { SKILLS } from '@/lib/skills-data';
+import type { SkillListItem } from '@/lib/content/types';
 
-export function SkillsList() {
+type SkillsListProps = {
+  skills: SkillListItem[];
+};
+
+export function SkillsList({ skills }: SkillsListProps) {
   return (
     <section aria-labelledby="skills-heading" className="border-t border-white/10 bg-[color:var(--surface-0)]">
       <div className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
@@ -28,7 +32,7 @@ export function SkillsList() {
         </motion.div>
 
         <ul className="mt-10 grid gap-3 sm:mt-14 md:grid-cols-2">
-          {SKILLS.map((skill, index) => (
+          {skills.map((skill, index) => (
             <motion.li
               key={skill.slug}
               initial={{ opacity: 0, y: 16 }}

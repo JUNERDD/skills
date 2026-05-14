@@ -4,6 +4,19 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.3] - 2026-05-14
+
+### Added
+
+- Added the `multitask-coordinator` skill for coordinating complex multi-step agent work, worker ownership boundaries, synthesis, and verification.
+- Added root `AGENTS.md` repository instructions requiring README and website sync checks when project skills change.
+- Added a CMS-ready content provider layer to the website while keeping the current in-repo skill catalog as the static provider.
+
+### Changed
+
+- Updated the root README and website skill catalog to include `multitask-coordinator`.
+- Refactored website pages and components to consume skill content through provider APIs instead of importing the static catalog directly.
+
 ## [0.1.2] - 2026-05-13
 
 ### Changed
