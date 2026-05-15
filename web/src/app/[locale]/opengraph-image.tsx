@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { routing, type Locale } from "@/i18n/routing";
 
 export const runtime = "edge";
 
@@ -6,7 +7,29 @@ export const alt = "JUNERDD Skills — reusable agent skills";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpenGraphImage() {
+const copy: Record<Locale, { footer: string; subtitle: string }> = {
+  en: {
+    footer: "skills · agents · repos",
+    subtitle:
+      "Reusable AI agent skills — install independently or as a curated collection.",
+  },
+  "zh-CN": {
+    footer: "skills · agents · repos",
+    subtitle: "可复用 AI agent skills，可单独安装，也可作为精选集合使用。",
+  },
+};
+
+type OpenGraphImageProps = {
+  params: Promise<{ locale: string }>;
+};
+
+export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
+  const { locale: requestedLocale } = await params;
+  const locale = routing.locales.includes(requestedLocale as Locale)
+    ? (requestedLocale as Locale)
+    : routing.defaultLocale;
+  const labels = copy[locale];
+
   return new ImageResponse(
     (
       <div
@@ -36,7 +59,7 @@ export default function OpenGraphImage() {
             color: "#b6b6b2",
           }}
         >
-          Reusable AI agent skills — install independently or as a curated collection.
+          {labels.subtitle}
         </div>
         <div
           style={{
@@ -46,7 +69,7 @@ export default function OpenGraphImage() {
             opacity: 0.55,
           }}
         >
-          skills · agents · repos
+          {labels.footer}
         </div>
       </div>
     ),

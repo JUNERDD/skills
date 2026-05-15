@@ -50,3 +50,18 @@ After production is live:
 1. GitHub → repository **Settings** → **General** → **Website** → paste the same production URL used in `NEXT_PUBLIC_SITE_URL`.
 
 The site already links out to the GitHub repository from the header and hero CTAs.
+
+## Internationalization
+
+The app uses `next-intl` with an unprefixed default English locale and a
+prefixed Chinese locale:
+
+- English: `/`, `/skills/<slug>`
+- Chinese: `/zh-CN`, `/zh-CN/skills/<slug>`
+- Routing config: `src/i18n/routing.ts`
+- Request messages: `src/i18n/request.ts`
+- Locale negotiation proxy: `src/proxy.ts`
+- Shared UI dictionaries and skill catalog overrides: `src/lib/i18n/`
+
+Keep user-facing pages under `src/app/[locale]/` so metadata, navigation, and
+static generation stay locale-aware.

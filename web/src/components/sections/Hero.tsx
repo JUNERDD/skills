@@ -1,10 +1,10 @@
 'use client';
 
 import { motion } from 'motion/react';
-import Link from 'next/link';
 import { AsciiBackdrop } from '@/components/ascii/AsciiBackdrop';
 import { CopyAgentInstallButton } from '@/components/install/CopyAgentInstallButton';
 import { REPO_URL } from '@/lib/content/urls';
+import type { SiteDictionary } from '@/lib/i18n/dictionaries';
 
 const group = {
   hidden: {},
@@ -25,7 +25,12 @@ const item = {
   },
 };
 
-export function Hero() {
+type HeroProps = {
+  copyLabels: SiteDictionary['copyButton'];
+  labels: SiteDictionary['hero'];
+};
+
+export function Hero({ copyLabels, labels }: HeroProps) {
   return (
     <section
       aria-labelledby="brand-heading"
@@ -51,7 +56,7 @@ export function Hero() {
             variants={item}
             className="font-sans text-xs font-semibold text-white/70"
           >
-            Agent skill collection
+            {labels.eyebrow}
           </motion.p>
           <motion.h1
             id="brand-heading"
@@ -65,25 +70,29 @@ export function Hero() {
             variants={item}
             className="max-w-xl text-base leading-relaxed text-[color:var(--crt-dim)] sm:text-lg"
           >
-            Reusable AI agent skills packaged as installable workflows.
+            {labels.tagline}
           </motion.p>
           <motion.div
             variants={item}
             className="flex flex-col gap-3 sm:flex-row sm:items-center"
           >
             <CopyAgentInstallButton
-              idleLabel="Copy install prompt"
-              copiedLabel="Copied prompt"
+              copiedLabel={labels.copiedInstall}
+              errorDescription={copyLabels.errorDescription}
+              errorTitle={copyLabels.errorTitle}
+              failedLabel={copyLabels.failedLabel}
+              idleLabel={labels.copyInstall}
+              successTitle={copyLabels.successTitle}
               className="w-full sm:w-auto"
             />
-            <Link
+            <a
               href={REPO_URL}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-white/16 px-5 py-2 text-sm text-[color:var(--crt-fg)] transition hover:border-white/42 hover:bg-white/8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto"
             >
-              View repository
-            </Link>
+              {labels.repository}
+            </a>
           </motion.div>
         </motion.div>
       </div>

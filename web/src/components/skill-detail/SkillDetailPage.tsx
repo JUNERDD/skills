@@ -1,12 +1,21 @@
 'use client';
 
 import { motion } from 'motion/react';
-import Link from 'next/link';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from '@/i18n/navigation';
 import { SiteHeader } from '@/components/sections/SiteHeader';
+import { notify } from '@/components/ui/AppToaster';
+import { cx } from '@/lib/classnames';
+import { copyText } from '@/lib/clipboard';
 import { REPO_URL, getSkillInstallCommand } from '@/lib/content/urls';
 import type { SkillDetail } from '@/lib/content/types';
+import type { Locale } from '@/lib/i18n/config';
+import type { SiteDictionary } from '@/lib/i18n/dictionaries';
 
 type SkillDetailPageProps = {
+  labels: SiteDictionary['skillDetail'];
+  locale: Locale;
+  navLabels: SiteDictionary['nav'];
   next?: Pick<SkillDetail, 'slug' | 'title' | 'blurb'>;
   previous?: Pick<SkillDetail, 'slug' | 'title' | 'blurb'>;
   skill: SkillDetail;
@@ -41,11 +50,13 @@ function entryHref(path: string) {
 function DetailSection({
   children,
   eyebrow,
+  flushTop = false,
   id,
   title,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   eyebrow: string;
+  flushTop?: boolean;
   id: string;
   title: string;
 }) {
@@ -56,7 +67,10 @@ function DetailSection({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-64px' }}
       transition={{ duration: 0.48, ease }}
-      className="scroll-mt-28 border-t border-white/12 py-12 md:py-16"
+      className={cx(
+        "scroll-mt-28 pb-12 md:pb-16",
+        flushTop ? "pt-0" : "pt-12 md:pt-16",
+      )}
     >
       <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/46">
         {eyebrow}
@@ -69,7 +83,13 @@ function DetailSection({
   );
 }
 
-function TextList({ items }: { items: string[] }) {
+function TextList({
+  items,
+  signalLabel,
+}: {
+  items: string[];
+  signalLabel: string;
+}) {
   return (
     <ul className="divide-y divide-white/10 border-y border-white/10">
       {items.map((text) => (
@@ -78,7 +98,7 @@ function TextList({ items }: { items: string[] }) {
           className="grid gap-3 py-5 font-mono text-sm leading-relaxed text-[color:var(--crt-dim)] md:grid-cols-[9rem_1fr] md:text-[0.95rem]"
         >
           <span className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-white/40">
-            Signal
+            {signalLabel}
           </span>
           <span>{text}</span>
         </li>
@@ -107,6 +127,60 @@ function WorkflowList({ items }: { items: string[] }) {
   );
 }
 
+function InstallCommandCopyButton({
+  command,
+  labels,
+}: {
+  command: string;
+  labels: SiteDictionary['skillDetail'];
+}) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+    }
+
+    try {
+      await copyText(command);
+      setState('copied');
+      notify({ title: labels.installCommandCopied });
+    } catch {
+      setState('failed');
+      notify({
+        title: labels.copyInstallCommandFailed,
+        type: 'error',
+      });
+    }
+
+    timeoutRef.current = window.setTimeout(() => setState('idle'), 1800);
+  };
+
+  return (
+    <button
+      aria-live="polite"
+      className="inline-flex min-h-7 min-w-[4.75rem] shrink-0 items-center justify-center border border-white/14 px-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/54 transition hover:border-white/38 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      onClick={handleCopy}
+      type="button"
+    >
+      {state === 'copied'
+        ? labels.copiedInstallCommand
+        : state === 'failed'
+          ? labels.copyInstallCommandFailed
+          : labels.copyInstallCommand}
+    </button>
+  );
+}
+
 function NeighborLink({
   label,
   skill,
@@ -119,27 +193,34 @@ function NeighborLink({
   return (
     <Link
       href={`/skills/${skill.slug}`}
-      className="group block border-t border-white/12 py-6 transition-colors hover:border-white/38 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+      className="group block min-h-40 rounded-lg border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018))] p-5 transition-[background-color,border-color,box-shadow] hover:border-white/32 hover:bg-white/[0.055] hover:shadow-[0_18px_56px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:p-6"
     >
       <span className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/40">
         {label}
       </span>
-      <span className="mt-3 block font-mono text-base font-semibold text-white transition-colors group-hover:text-white/82">
+      <span className="mt-5 block font-mono text-base font-semibold text-white transition-colors group-hover:text-white/90">
         {skill.title}
       </span>
-      <span className="mt-2 block font-mono text-sm leading-relaxed text-[color:var(--crt-dim)]">
+      <span className="mt-3 block font-mono text-sm leading-relaxed text-[color:var(--crt-dim)] transition-colors group-hover:text-white/64">
         {skill.blurb}
       </span>
     </Link>
   );
 }
 
-export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps) {
+export function SkillDetailPage({
+  labels,
+  locale,
+  navLabels,
+  next,
+  previous,
+  skill,
+}: SkillDetailPageProps) {
   const installCommand = getSkillInstallCommand(skill.slug);
 
   return (
     <div className="relative isolate min-h-screen overflow-x-clip bg-[color:var(--surface-0)]">
-      <SiteHeader />
+      <SiteHeader labels={navLabels} locale={locale} />
       <section className="relative isolate border-b border-white/12 bg-[color:var(--surface-0)]">
         <div className="relative z-10 mx-auto max-w-6xl px-6 pb-10 pt-28 sm:px-10 md:pb-12 md:pt-32">
           <motion.div
@@ -172,35 +253,38 @@ export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps)
 
       <main className="relative z-10 mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:px-10 lg:grid-cols-[16rem_1fr] lg:py-20">
         <aside className="lg:sticky lg:top-24 lg:h-fit lg:self-start">
-          <div className="border-y border-white/12 py-6">
+          <div className="pb-6">
             <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/40">
-              Contents
+              {labels.contents}
             </p>
             <nav className="mt-5 flex flex-col gap-3 font-mono text-sm text-white/64">
               <a className="transition hover:text-white" href="#overview">
-                Overview
+                {labels.navOverview}
               </a>
               <a className="transition hover:text-white" href="#best-for">
-                Best for
+                {labels.navBestFor}
               </a>
               <a className="transition hover:text-white" href="#workflow">
-                Workflow
+                {labels.navWorkflow}
               </a>
               <a className="transition hover:text-white" href="#outputs">
-                Outputs
+                {labels.navOutputs}
               </a>
               <a className="transition hover:text-white" href="#guardrails">
-                Guardrails
+                {labels.navGuardrails}
               </a>
               <a className="transition hover:text-white" href="#entry-points">
-                Entry points
+                {labels.navEntryPoints}
               </a>
             </nav>
           </div>
           <div className="mt-8">
-            <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/40">
-              Install
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-sans text-xs font-bold uppercase tracking-[0.18em] text-white/40">
+                {labels.install}
+              </p>
+              <InstallCommandCopyButton command={installCommand} labels={labels} />
+            </div>
             <code className="mt-4 block break-words border-y border-white/12 py-4 font-mono text-xs leading-relaxed text-white/72">
               {installCommand}
             </code>
@@ -208,32 +292,37 @@ export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps)
         </aside>
 
         <article>
-          <DetailSection eyebrow="01" id="overview" title="What this skill does">
+          <DetailSection
+            eyebrow="01"
+            flushTop
+            id="overview"
+            title={labels.overview}
+          >
             <p className="max-w-3xl text-base leading-8 text-[color:var(--crt-dim)] md:text-lg">
               {skill.overview}
             </p>
           </DetailSection>
 
-          <DetailSection eyebrow="02" id="best-for" title="When to use it">
-            <TextList items={skill.bestFor} />
+          <DetailSection eyebrow="02" id="best-for" title={labels.useCase}>
+            <TextList items={skill.bestFor} signalLabel={labels.signal} />
           </DetailSection>
 
-          <DetailSection eyebrow="03" id="workflow" title="How it works">
+          <DetailSection eyebrow="03" id="workflow" title={labels.workflow}>
             <WorkflowList items={skill.workflow} />
           </DetailSection>
 
-          <DetailSection eyebrow="04" id="outputs" title="What you get back">
-            <TextList items={skill.outputs} />
+          <DetailSection eyebrow="04" id="outputs" title={labels.outputs}>
+            <TextList items={skill.outputs} signalLabel={labels.signal} />
           </DetailSection>
 
-          <DetailSection eyebrow="05" id="guardrails" title="Important boundaries">
-            <TextList items={skill.guardrails} />
+          <DetailSection eyebrow="05" id="guardrails" title={labels.guardrails}>
+            <TextList items={skill.guardrails} signalLabel={labels.signal} />
           </DetailSection>
 
-          <DetailSection eyebrow="06" id="entry-points" title="Files worth opening">
+          <DetailSection eyebrow="06" id="entry-points" title={labels.entryPoints}>
             <div className="divide-y divide-white/10 border-y border-white/10">
               {skill.entryPoints.map((entry) => (
-                <Link
+                <a
                   key={entry.path}
                   href={entryHref(entry.path)}
                   target="_blank"
@@ -251,14 +340,19 @@ export function SkillDetailPage({ next, previous, skill }: SkillDetailPageProps)
                       {entry.description}
                     </span>
                   </span>
-                </Link>
+                </a>
               ))}
             </div>
           </DetailSection>
 
-          <section className="grid gap-6 border-t border-white/12 py-12 md:grid-cols-2">
-            <NeighborLink label="Previous skill" skill={previous} />
-            <NeighborLink label="Next skill" skill={next} />
+          <section
+            aria-label={labels.relatedSkills}
+            className="mt-8 py-6 sm:py-8"
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <NeighborLink label={labels.previous} skill={previous} />
+              <NeighborLink label={labels.next} skill={next} />
+            </div>
           </section>
         </article>
       </main>

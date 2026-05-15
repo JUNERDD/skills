@@ -1,13 +1,28 @@
 'use client';
 
 import { motion } from 'motion/react';
-import Link from 'next/link';
+import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
+import { Link, usePathname } from '@/i18n/navigation';
 import { cx } from '@/lib/classnames';
 import { REPO_URL } from '@/lib/content/urls';
+import {
+  localeLabels,
+  localeShortLabels,
+  locales,
+  localizePath,
+  type Locale,
+} from '@/lib/i18n/config';
+import type { SiteDictionary } from '@/lib/i18n/dictionaries';
 
-export function SiteHeader() {
+type SiteHeaderProps = {
+  labels: SiteDictionary['nav'];
+  locale: Locale;
+};
+
+export function SiteHeader({ labels, locale }: SiteHeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const updateHeader = () => setIsScrolled(window.scrollY > 12);
@@ -33,18 +48,38 @@ export function SiteHeader() {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
         <Link
           href="/"
+          aria-label={labels.home}
           className="font-sans text-xs font-extrabold text-white drop-shadow-[0_0_12px_var(--crt-glow)] transition-opacity hover:opacity-72 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-4"
         >
           JUNERDD
         </Link>
-        <Link
-          href={REPO_URL}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="font-mono text-xs text-white/58 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-4"
-        >
-          GitHub
-        </Link>
+        <div className="flex items-center gap-4">
+          <nav aria-label={labels.languageSwitcher} className="flex items-center gap-1">
+            {locales.map((targetLocale) => (
+              <NextLink
+                key={targetLocale}
+                href={localizePath(pathname, targetLocale)}
+                hrefLang={targetLocale}
+                aria-current={targetLocale === locale ? 'page' : undefined}
+                className={cx(
+                  'inline-flex min-h-7 min-w-7 items-center justify-center border border-white/12 px-2 font-mono text-[10px] font-semibold text-white/46 transition hover:border-white/38 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white',
+                  targetLocale === locale && 'border-white/32 bg-white/8 text-white',
+                )}
+                title={localeLabels[locale][targetLocale]}
+              >
+                {localeShortLabels[locale][targetLocale]}
+              </NextLink>
+            ))}
+          </nav>
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="font-mono text-xs text-white/58 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-4"
+          >
+            {labels.github}
+          </a>
+        </div>
       </div>
     </motion.header>
   );

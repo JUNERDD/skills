@@ -22,7 +22,7 @@ export function notify({ description, title, type = 'success' }: AppToast) {
   });
 }
 
-function ToastList() {
+function ToastList({ closeLabel }: { closeLabel: string }) {
   const { toasts } = Toast.useToastManager();
 
   return (
@@ -38,7 +38,7 @@ function ToastList() {
               {toast.title}
             </Toast.Title>
             <Toast.Close
-              aria-label="Dismiss notification"
+              aria-label={closeLabel}
               className="row-span-2 inline-flex size-6 items-center justify-center border border-white/14 font-mono text-xs text-white/58 transition hover:border-white/38 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
             >
               x
@@ -55,12 +55,12 @@ function ToastList() {
   );
 }
 
-export function AppToaster() {
+export function AppToaster({ closeLabel }: { closeLabel: string }) {
   return (
     <Toast.Provider limit={3} timeout={2800} toastManager={toastManager}>
       <Toast.Portal>
         <Toast.Viewport className="fixed bottom-4 right-4 z-50 flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-3 outline-none sm:bottom-6 sm:right-6">
-          <ToastList />
+          <ToastList closeLabel={closeLabel} />
         </Toast.Viewport>
       </Toast.Portal>
     </Toast.Provider>

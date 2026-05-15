@@ -3,17 +3,29 @@
 import { Canvas } from '@react-three/fiber';
 import { AsciiField } from './AsciiField';
 
-export default function AsciiScene() {
+type AsciiSceneProps = {
+  onReady?: () => void;
+};
+
+export default function AsciiScene({ onReady }: AsciiSceneProps) {
   return (
     <Canvas
-      className="block h-full w-full"
+      className="block h-full w-full bg-[color:var(--surface-0)]"
       dpr={[1, 1.5]}
-      gl={{ alpha: true, antialias: false, stencil: false, depth: true }}
+      gl={{
+        alpha: false,
+        antialias: false,
+        depth: true,
+        premultipliedAlpha: false,
+        stencil: false,
+      }}
       onCreated={({ gl }) => {
-        gl.setClearColor('#000000', 0);
+        gl.setClearColor('#050505', 1);
+        gl.clear(true, true, true);
         if (typeof window !== 'undefined') {
           gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         }
+        onReady?.();
       }}
       camera={{
         position: [0, 0, 9.2],

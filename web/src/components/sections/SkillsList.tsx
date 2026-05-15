@@ -1,14 +1,16 @@
 'use client';
 
 import { motion } from 'motion/react';
-import Link from 'next/link';
+import { Link } from '@/i18n/navigation';
 import type { SkillListItem } from '@/lib/content/types';
+import type { SiteDictionary } from '@/lib/i18n/dictionaries';
 
 type SkillsListProps = {
+  labels: SiteDictionary['skillsList'];
   skills: SkillListItem[];
 };
 
-export function SkillsList({ skills }: SkillsListProps) {
+export function SkillsList({ labels, skills }: SkillsListProps) {
   return (
     <section aria-labelledby="skills-heading" className="border-t border-white/10 bg-[color:var(--surface-0)]">
       <div className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
@@ -23,11 +25,10 @@ export function SkillsList({ skills }: SkillsListProps) {
             id="skills-heading"
             className="font-sans text-2xl font-bold text-[color:var(--crt-fg)] md:text-[1.85rem]"
           >
-            Skills at a glance
+            {labels.title}
           </h2>
           <p className="font-mono text-sm leading-relaxed text-[color:var(--crt-dim)] md:text-[0.95rem]">
-            Every local installable gets a field manual. Open a guide for the workflow,
-            boundaries, outputs, and source entry points.
+            {labels.description}
           </p>
         </motion.div>
 
@@ -58,7 +59,7 @@ export function SkillsList({ skills }: SkillsListProps) {
                   {skill.blurb}
                 </p>
                 <span className="mt-auto pt-5 font-mono text-xs text-white/38 transition-colors group-hover:text-white/70">
-                  Open guide
+                  {labels.openGuide}
                 </span>
               </Link>
             </motion.li>
