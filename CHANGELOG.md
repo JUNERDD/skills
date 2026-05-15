@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.5] - 2026-05-15
+
+### Changed
+
+- Refined the multitask-coordinator skill around complex subagent work, shared contract ownership, atomic migrations, and evidence-backed synthesis.
+- Updated the root README and website skill catalog to match the revised multitask-coordinator positioning.
+
 ## [0.1.4] - 2026-05-15
 
 ### Added
