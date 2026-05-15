@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.1.3`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.1.4`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -26,6 +26,7 @@ The companion landing page is a Next.js app in [`web/`](./web/).
 If you are deciding what to install, start here:
 
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
+- [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
@@ -73,6 +74,7 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 npx skills@latest add JUNERDD/skills --skill comment-strategist
+npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
@@ -119,6 +121,29 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/comment-strategist/SKILL.md`](./skills/comment-strategist/SKILL.md)
 - Optional runtime metadata: [`skills/comment-strategist/agents/openai.yaml`](./skills/comment-strategist/agents/openai.yaml)
+
+### `exhaustive-code-slimmer`
+
+[`skills/exhaustive-code-slimmer/`](./skills/exhaustive-code-slimmer/) exhaustively searches for behavior-preserving code reductions. It combines audit scripts, deletion-first candidate search, oracle design, and an approval gate for architecture-level refactors so slimming improves maintainability instead of producing dense or risky code.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
+```
+
+Best for:
+
+- finding removable files, branches, exports, dependencies, wrappers, and duplicate logic
+- running deletion candidates against a build/test/lint/smoke oracle before accepting changes
+- identifying architecture problems that block safe code reduction and presenting DX-oriented options before refactoring
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/exhaustive-code-slimmer/SKILL.md`](./skills/exhaustive-code-slimmer/SKILL.md)
+- Code-slim audit script: [`skills/exhaustive-code-slimmer/scripts/code_slim_audit.py`](./skills/exhaustive-code-slimmer/scripts/code_slim_audit.py)
+- Exhaustive shrink script: [`skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py`](./skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py)
+- Optional runtime metadata: [`skills/exhaustive-code-slimmer/agents/openai.yaml`](./skills/exhaustive-code-slimmer/agents/openai.yaml)
 
 ### `git-commit`
 
@@ -408,6 +433,21 @@ When you add more skills later:
     │           ├── collector_state.py
     │           ├── collector_browser.py
     │           └── static/
+    ├── exhaustive-code-slimmer/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   ├── references/
+    │   │   ├── code_cleanliness_guide.md
+    │   │   ├── dx_architecture_gate.md
+    │   │   ├── language_tactics.md
+    │   │   ├── oracle_design.md
+    │   │   ├── research_basis.md
+    │   │   └── transformation_catalog.md
+    │   └── scripts/
+    │       ├── architecture_dx_scan.py
+    │       ├── code_slim_audit.py
+    │       └── exhaustive_shrink.py
     ├── git-commit/
     │   ├── SKILL.md
     │   └── agents/

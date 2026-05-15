@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exhaustive Code Slimmer"
+  short_description: "Maximize safe code deletion with DX-aware architecture gating"
+  default_prompt: "Use $exhaustive-code-slimmer to exhaustively shrink this codebase while preserving behavior, following the code-cleanliness guide and pausing for approval before architecture-level refactors."

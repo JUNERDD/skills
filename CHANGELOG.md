@@ -4,6 +4,16 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.4] - 2026-05-15
+
+### Added
+
+- Added the `exhaustive-code-slimmer` skill for approval-gated, behavior-preserving code reduction with DX-aware architecture checks.
+
+### Changed
+
+- Updated the root README and website skill catalog to include `exhaustive-code-slimmer`.
+
 ## [0.1.3] - 2026-05-14
 
 ### Added
