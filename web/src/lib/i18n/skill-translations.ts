@@ -147,16 +147,18 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "用清晰的所有权边界协调复杂 subagent 工作。",
       lead: "一个 parent-agent 工作流，用于判断何时委派、分配 worker 范围、综合结果并验证最终产出。",
       overview:
-        "用于非平凡多步骤任务，其中后台 subagents 可能有帮助，但 parent agent 必须负责问题框定、委派决策、worker 所有权边界、综合、验证和用户沟通。它提供决策检查清单，帮助判断何时直接处理、选择 explorer 或 worker 形态、定义不重叠范围，并把 worker 输出转化为经过审查的证据。",
+        "用于非平凡多步骤任务，其中后台 subagents 可能有帮助，但 parent agent 必须负责问题框定、共享契约、委派决策、worker 所有权边界、综合、验证和用户沟通。它提供决策检查清单，帮助判断何时直接处理、选择 explorer 或 worker 形态、定义不重叠范围、保护原子迁移，并把 worker 输出转化为经过审查的证据。",
       bestFor: [
         "判断复杂仓库任务应由 parent 直接处理还是委派。",
         "在大型仓库、monorepo 或 dirty worktree 中分配明确的 worker 所有权边界。",
+        "让共享契约、package exports、排序和破坏性迁移边界保持在 parent-agent 所有权下。",
         "协调独立的探索、实现、审查或验证切片。",
         "在不重复工作的情况下综合 worker 输出，并保持 parent 对最终结果负责。",
       ],
       workflow: [
         "阅读适用仓库规则，并在分配所有权前检查 dirty worktree。",
         "映射成功标准、受影响系统、可能 owner 文件、共享契约和验证命令。",
+        "保持共享文件和契约由 parent 拥有，除非一个 worker 被明确指定为唯一 owner。",
         "基于独立性、范围清晰度和综合成本选择零个、一个或少量 workers。",
         "给每个 worker 明确目标、允许范围、禁止动作、验证期望和输出契约。",
         "审查 worker 证据，解决冲突或缺口，只整合被采纳的工作，并运行最窄可信验证。",

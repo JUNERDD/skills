@@ -210,16 +210,18 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A parent-agent workflow for deciding when to delegate, assigning worker scopes, synthesizing results, and verifying the final outcome.",
     overview:
-      "Use this skill for non-trivial multi-step work where background subagents may help but the parent agent must keep ownership of framing, delegation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, choosing explorer or worker shapes, defining disjoint scopes, and turning worker outputs into reviewed evidence.",
+      "Use this skill for non-trivial multi-step work where background subagents may help but the parent agent must keep ownership of framing, shared contracts, delegation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, choosing explorer or worker shapes, defining disjoint scopes, protecting atomic migrations, and turning worker outputs into reviewed evidence.",
     bestFor: [
       "Deciding whether a complex repo task should be handled directly or delegated.",
       "Assigning clear worker ownership boundaries in large repositories, monorepos, or dirty worktrees.",
+      "Keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership.",
       "Coordinating independent exploration, implementation, review, or verification slices.",
       "Synthesizing worker outputs while preserving parent-agent accountability for the final result.",
     ],
     workflow: [
       "Read applicable repository rules and check the dirty worktree before assigning ownership.",
       "Map success criteria, affected systems, likely owner files, shared contracts, and verification commands.",
+      "Keep shared files and contracts parent-owned unless one worker is explicitly assigned as the sole owner.",
       "Choose zero, one, or a small set of workers based on independence, scope clarity, and synthesis cost.",
       "Give each worker a concrete objective, allowed scope, forbidden actions, validation expectation, and output contract.",
       "Review worker evidence, resolve conflicts or gaps, integrate only adopted work, and run the narrowest credible verification.",
