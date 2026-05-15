@@ -1,4 +1,4 @@
-export const COLLECTION_VERSION = "0.1.3";
+export const COLLECTION_VERSION = "0.1.4";
 
 export const REPO_URL = "https://github.com/JUNERDD/skills";
 export const INSTALL_DOC_RAW =

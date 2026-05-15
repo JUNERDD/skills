@@ -56,6 +56,65 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "exhaustive-code-slimmer",
+    title: "exhaustive-code-slimmer",
+    category: "Code cleanup",
+    blurb: "Maximize safe code deletion with DX-aware architecture gates.",
+    lead:
+      "A deletion-first workflow for reducing maintained code while preserving externally observable behavior.",
+    overview:
+      "Use this skill when a codebase needs aggressive but disciplined simplification. It builds a behavior-preservation oracle, audits removable code, tests deletion and simplification candidates, and pauses for explicit approval before architecture-level refactors so code slimming improves developer experience instead of creating dense or risky code.",
+    bestFor: [
+      "Finding removable files, branches, exports, dependencies, wrappers, and duplicate logic.",
+      "Running code-reduction candidates against build, typecheck, test, lint, smoke, or contract oracles.",
+      "Diagnosing architecture problems that block safe deletion and proposing DX-oriented options before refactoring.",
+    ],
+    workflow: [
+      "Record baseline files, LOC, bytes, dependencies, large files, duplicate blocks, and generated or vendor directories.",
+      "Run the audit and architecture DX scans when a repository is available.",
+      "Design the strongest available behavior-preservation oracle before deleting code.",
+      "Enumerate deletion, simplification, dependency, config, test, and architecture candidates across every layer.",
+      "Search exact or partitioned candidate sets until no untested candidate remains in the current frontier.",
+    ],
+    outputs: [
+      "Before and after metrics, accepted candidates, rejected high-risk candidates, and shrink ratio.",
+      "Oracle commands and residual blind spots for the final code-reduction result.",
+      "Approval-gated architecture options when structural cleanup is needed before safe slimming.",
+    ],
+    guardrails: [
+      "Do not count minification, obfuscation, whitespace-only deletion, or comment deletion as code slimming.",
+      "Do not delete public APIs, migrations, compatibility shims, security checks, operational logging, or config without evidence.",
+      "Do not perform architecture-level refactors until the user explicitly approves one option or scope.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/exhaustive-code-slimmer/SKILL.md",
+        description: "Exhaustive slimming workflow, oracle rules, and approval gates.",
+      },
+      {
+        label: "Code-slim audit",
+        path: "skills/exhaustive-code-slimmer/scripts/code_slim_audit.py",
+        description: "Repository inventory, metrics, and candidate enumeration helper.",
+      },
+      {
+        label: "Exhaustive shrink",
+        path: "skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py",
+        description: "Exact and partitioned candidate search against an oracle command.",
+      },
+      {
+        label: "Transformation catalog",
+        path: "skills/exhaustive-code-slimmer/references/transformation_catalog.md",
+        description: "Deletion and simplification candidate catalog.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/exhaustive-code-slimmer/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "git-commit",
     title: "git-commit",
     category: "Git workflow",
