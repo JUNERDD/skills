@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SemVer collection version, with or without a leading v"
+        required: true
+        type: string
+      notes:
+        description: "Release note lines. Each non-empty line becomes a changelog bullet unless it already starts with '- '."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare release files
+        env:
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: node scripts/prepare-release.mjs "${{ inputs.version }}"
+
+      - name: Validate generated diff
+        run: git diff --check
+
+      - name: Commit release
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          version="${VERSION_INPUT#v}"
+          tag="v${version}"
+
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION CHANGELOG.md README.md web/src/lib/content/urls.ts
+          git commit -m "chore: release ${version}"
+          git tag "$tag"
+          git push origin "HEAD:${GITHUB_REF_NAME}" "$tag"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_INPUT: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          version="${VERSION_INPUT#v}"
+          tag="v${version}"
+          printf '%s\n' "$RELEASE_NOTES" > release-notes.md
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file release-notes.md

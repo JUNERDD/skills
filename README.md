@@ -94,6 +94,7 @@ ln -s "$PWD/skills" ~/.agents/skills/junerdd-skill
 
 - The collection version lives in the root [`VERSION`](./VERSION) file.
 - Release notes live in [`CHANGELOG.md`](./CHANGELOG.md), and published GitHub releases should use matching `vX.Y.Z` tags.
+- Use the release workflow to publish a collection version. It updates `VERSION`, the README version line, website version metadata, and `CHANGELOG.md` from one workflow input.
 - Each installable skill lives under `skills/<skill-name>/`.
 - Each skill owns its own `SKILL.md` plus any optional `agents/`, `references/`, `scripts/`, or `assets/` directories.
 - Root-level files describe the repository as a collection. Skill-specific behavior and deep operational details stay inside the relevant skill folder.
@@ -191,7 +192,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents. It keeps the parent agent responsible for framing, delegation decisions, worker ownership boundaries, synthesis, verification, and user communication.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents. It keeps the parent agent responsible for framing, shared contracts, delegation decisions, worker ownership boundaries, synthesis, verification, and user communication.
 
 Install:
 
@@ -203,6 +204,7 @@ Best for:
 
 - deciding whether complex repo work should be handled locally or delegated
 - assigning disjoint worker scopes in large repositories, monorepos, or dirty worktrees
+- keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership
 - synthesizing explorer, implementation, review, or verification results without duplicating work
 - preserving parent-agent ownership of final integration, validation, and user-facing status
 

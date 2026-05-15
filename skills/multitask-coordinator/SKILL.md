@@ -1,13 +1,25 @@
 ---
 name: multitask-coordinator
-description: Coordinate non-trivial multi-step work with background subagents when delegation is allowed. Use for complex tasks, large repositories, monorepos, dirty worktrees, independent exploration or implementation slices, review passes, or verification work where the parent agent must decide whether to delegate, define worker ownership boundaries, avoid duplicate foreground/background work, synthesize outputs, handle blockers, and still handle trivial requests directly.
+description: Coordinate non-trivial multi-step work with background subagents when delegation is allowed. Use for complex tasks, long-running execution, large repositories, monorepos, dirty worktrees, independent exploration or implementation slices, atomic migrations, review passes, or verification work where the parent agent must decide whether to delegate, define worker ownership boundaries, avoid duplicate foreground/background work, synthesize outputs, handle blockers, and still handle trivial requests directly.
 ---
 
 # Multitask Coordinator
 
-Use the parent agent as the coordinator. Keep responsibility for task framing, delegation decisions, worker prompts, integration, verification, and user communication with the parent. Use background subagents only when the current system, developer, user, and tool constraints allow delegation.
+Use the parent agent as the coordinator. Keep responsibility for task framing, delegation decisions, worker prompts, shared contracts, integration, verification, and user communication with the parent. Use background subagents only when the current system, developer, user, and tool constraints allow delegation.
 
 If subagents are unavailable or not allowed, apply the same workflow locally as a task-decomposition checklist.
+
+## Coordination Invariants
+
+Before dispatching work, stabilize the coordination surface:
+
+- Restate the objective, completion criteria, non-goals, validation requirements, and rollback boundary when they affect implementation choices.
+- Keep the parent as owner of shared contracts, package exports, public APIs, cross-worker sequencing, deletion of old entrypoints, and final acceptance.
+- Delegate only bounded work that can finish independently and return evidence.
+- Avoid using workers to decide product tradeoffs, compatibility policy, rollout strategy, or irreversible architecture boundaries unless the user explicitly asked for proposals.
+- Treat the task as incomplete until the parent has integrated outputs and run or explicitly skipped the agreed validation.
+
+For atomic or destructive migrations, prefer workers for audits, isolated implementation slices, or review passes. Do not let workers independently remove old paths before the parent has mapped every in-scope call site and assigned one owner for the replacement contract.
 
 ## Fast Decision
 
@@ -16,6 +28,7 @@ Handle work directly when:
 - The task is one command, one known file read, one small edit, or one direct answer.
 - The next step depends on immediate user interaction, approval, credentials, or a continuous single-context exchange.
 - The task touches a sensitive or externally visible surface where the parent must stay in the loop.
+- The next critical-path step is defining or changing a shared contract that other work depends on.
 
 Delegate only when all are true:
 
@@ -25,6 +38,8 @@ Delegate only when all are true:
 - The result can be reviewed or verified from evidence, changed files, commands, logs, or concrete artifacts.
 
 Prefer zero or one worker unless parallelism clearly reduces risk or latency. Use two to four workers for large independent boundaries. Avoid five or more workers unless there is a written plan, disjoint ownership, and a clear synthesis path.
+
+Before any dispatch, explicitly choose the parent's immediate local task. Do not delegate the work that blocks the parent's next step.
 
 ## Choose Worker Shape
 
@@ -44,6 +59,8 @@ Use multiple sibling workers when:
 
 Use proposal-only workers when multiple implementation directions are useful but the write boundaries would overlap. Use isolated worktrees when competing patches are valuable and available.
 
+Use review-only workers after a large change when independent scrutiny can find regressions without touching files.
+
 ## Before Dispatch
 
 1. Read current instructions and workspace rules.
@@ -54,6 +71,7 @@ Use proposal-only workers when multiple implementation directions are useful but
    - Define success criteria, affected systems, likely owner files, shared contracts, and verification commands.
    - Check the dirty worktree before assigning write scopes. Treat existing changes as user-owned unless proven otherwise.
    - Decide the parent's immediate next local task before delegating.
+   - Mark shared files and contracts as parent-owned unless one worker is explicitly assigned as the sole owner.
 
 3. Dispatch the smallest useful worker set.
    - Give each worker a disjoint objective and ownership boundary.
@@ -73,6 +91,13 @@ Do not let sibling workers edit the same files, shared helper, schema, generated
 
 For dirty worktrees, pass the relevant `git status --short` context to workers and instruct them to preserve unrelated changes. If the dirty state makes ownership ambiguous, keep edits local or ask the user.
 
+For one-shot migrations, use this default split:
+
+- Parent: shared API/contract, execution order, integration, old-entry deletion, final validation.
+- Explorer: call-site and risk audit.
+- Worker: one package, feature boundary, or adapter boundary with exclusive write ownership.
+- Reviewer: focused regression or consistency pass after integration.
+
 ## Worker Prompt Contract
 
 Every worker prompt should include:
@@ -91,6 +116,7 @@ For implementation workers, also state: "You are not alone in this codebase. Do 
 - Keep the parent on adjacent non-overlapping work: refine requirements, inspect interfaces, prepare validation, or organize synthesis questions.
 - Do not redo a delegated investigation or implementation in the foreground.
 - Wait only when the next critical-path step requires the worker result, the system requires waiting, or the user asks for it.
+- If a worker uncovers a contract conflict, pause dependent implementation and resolve the contract in the parent before continuing.
 
 ## Synthesis
 
@@ -119,6 +145,7 @@ When results conflict, locate the source of disagreement before editing. Use a n
 - Treat subagents as extra attention, not replacement ownership.
 - Do not delegate trivial requests.
 - Do not assign the same work to both the parent and a worker.
+- Do not split shared contract design across sibling workers.
 - Do not create vague worker prompts; vague prompts produce duplication, conflict, and unverifiable output.
 - Do not over-split work. Use one coherent worker when synthesis cost would exceed parallel benefit.
 - Do not accept worker output as fact without review. Verify critical behavior, patches, and test claims.
