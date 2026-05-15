@@ -33,9 +33,11 @@
 }
 
 html {
+  background: var(--surface-0);
   scrollbar-gutter: stable;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   scrollbar-width: thin;
+  color-scheme: dark;
 }
 
 body {

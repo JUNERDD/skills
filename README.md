@@ -15,6 +15,8 @@ Stable production URL: [https://junerdd-skills.vercel.app](https://junerdd-skill
 ## Website (Vercel)
 
 The companion landing page is a Next.js app in [`web/`](./web/).
+English is served from unprefixed paths such as `/` and `/skills/<slug>`;
+Chinese is served from `/zh-CN` and `/zh-CN/skills/<slug>`.
 
 1. In the [Vercel dashboard](https://vercel.com/new), import this GitHub repository.
 2. Under **Configure Project**, set **Root Directory** to **`web`** (critical for this monorepo layout).

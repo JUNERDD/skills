@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 const LazyAscii = dynamic(() => import('./AsciiScene'), {
   ssr: false,
-  loading: () => null,
+  loading: () => <MobileAsciiTexture />,
 });
 
 const mobileTextureRows = [
@@ -34,11 +34,18 @@ function MobileAsciiTexture() {
 }
 
 export function AsciiBackdrop() {
+  const [isSceneReady, setIsSceneReady] = useState(false);
   const [shouldRenderScene, setShouldRenderScene] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 640px)');
-    const update = () => setShouldRenderScene(media.matches);
+    const update = () => {
+      const shouldRender = media.matches;
+      setShouldRenderScene(shouldRender);
+      if (!shouldRender) {
+        setIsSceneReady(false);
+      }
+    };
 
     update();
     media.addEventListener('change', update);
@@ -48,10 +55,24 @@ export function AsciiBackdrop() {
 
   return (
     <div
-      className="absolute inset-0 z-0 h-full w-full overflow-hidden pointer-events-none [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:block"
+      className="absolute inset-0 z-0 h-full w-full overflow-hidden pointer-events-none [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:block [&_canvas]:bg-[color:var(--surface-0)]"
       aria-hidden
     >
-      {shouldRenderScene ? <LazyAscii /> : <MobileAsciiTexture />}
+      <div
+        className="absolute inset-0 bg-[color:var(--surface-0)]"
+        aria-hidden
+      />
+      {(!shouldRenderScene || !isSceneReady) ? <MobileAsciiTexture /> : null}
+      {shouldRenderScene ? (
+        <div
+          className={[
+            'absolute inset-0 transition-opacity duration-500 ease-out',
+            isSceneReady ? 'opacity-100' : 'opacity-0',
+          ].join(' ')}
+        >
+          <LazyAscii onReady={() => setIsSceneReady(true)} />
+        </div>
+      ) : null}
     </div>
   );
 }
