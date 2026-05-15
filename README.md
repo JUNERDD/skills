@@ -94,7 +94,7 @@ ln -s "$PWD/skills" ~/.agents/skills/junerdd-skill
 
 - The collection version lives in the root [`VERSION`](./VERSION) file.
 - Release notes live in [`CHANGELOG.md`](./CHANGELOG.md), and published GitHub releases should use matching `vX.Y.Z` tags.
-- Use the release workflow to publish a collection version. It updates `VERSION`, the README version line, website version metadata, and `CHANGELOG.md` from one workflow input.
+- Use the release workflow to prepare a collection release. It opens a release PR that updates `VERSION`, the README version line, website version metadata, and `CHANGELOG.md` from one workflow input; merging that PR publishes the matching GitHub Release.
 - Each installable skill lives under `skills/<skill-name>/`.
 - Each skill owns its own `SKILL.md` plus any optional `agents/`, `references/`, `scripts/`, or `assets/` directories.
 - Root-level files describe the repository as a collection. Skill-specific behavior and deep operational details stay inside the relevant skill folder.

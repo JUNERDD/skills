@@ -11,12 +11,20 @@ on:
         description: "Release note lines. Each non-empty line becomes a changelog bullet unless it already starts with '- '."
         required: true
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+      - CHANGELOG.md
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,34 +40,62 @@ jobs:
       - name: Validate generated diff
         run: git diff --check
 
-      - name: Commit release
+      - name: Create release pull request
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION_INPUT: ${{ inputs.version }}
         run: |
           version="${VERSION_INPUT#v}"
           tag="v${version}"
+          branch="release/${tag}"
 
-          if git rev-parse "$tag" >/dev/null 2>&1; then
+          if git rev-parse "$tag" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "$tag" >/dev/null 2>&1; then
             echo "Tag $tag already exists"
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "Release branch $branch already exists"
             exit 1
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
           git add VERSION CHANGELOG.md README.md web/src/lib/content/urls.ts
           git commit -m "chore: release ${version}"
-          git tag "$tag"
-          git push origin "HEAD:${GITHUB_REF_NAME}" "$tag"
+          git push -u origin "$branch"
 
-      - name: Create GitHub release
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore: release ${version}" \
+            --body "Generated release files for ${tag}. Merge this PR to publish the GitHub release."
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION_INPUT: ${{ inputs.version }}
-          RELEASE_NOTES: ${{ inputs.notes }}
         run: |
-          version="${VERSION_INPUT#v}"
+          version="$(tr -d '[:space:]' < VERSION)"
           tag="v${version}"
-          printf '%s\n' "$RELEASE_NOTES" > release-notes.md
+
+          if git rev-parse "$tag" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists; skipping release."
+            exit 0
+          fi
+
+          node scripts/release-notes.mjs "$version" > release-notes.md
+          git tag "$tag"
+          git push origin "$tag"
           gh release create "$tag" \
             --title "$tag" \
             --notes-file release-notes.md
