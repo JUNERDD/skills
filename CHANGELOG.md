@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.6] - 2026-05-19
+
+### Changed
+
+- Updated the debug skill and bundled local log collector to distinguish dashboard auto-open from frontend page load.
+- Added POST /api/dashboard-opened and POST /api/dashboard-open-failed plus MCP record_dashboard_open_failure for pre-reproduction fallback opens.
+
 ## [0.1.5] - 2026-05-15
 
 ### Changed
