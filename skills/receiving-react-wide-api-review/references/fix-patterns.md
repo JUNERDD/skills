@@ -52,6 +52,41 @@ function EmailField() {
 }
 ```
 
+For a component that owns a full header, toolbar, or section boundary, grouping
+related fields can be safer than forcing every prop to stay primitive:
+
+```tsx
+type PreviewHeaderProps = {
+  title: string;
+  mode: {
+    isEditing: boolean;
+    isSnapshotView: boolean;
+    isAiEditMode: boolean;
+  };
+  status: {
+    isSaving: boolean;
+    isGenerating: boolean;
+  };
+  permissions: {
+    canEnterEdit: boolean;
+    canPersistSlides: boolean;
+  };
+  actions: {
+    onSaveEdit(): void;
+    onCancelEdit(): void;
+    onOpenFullscreen(): void;
+  };
+};
+```
+
+Only introduce these groups when the component owns that concern and consumers
+do not need to observe unrelated changes.
+
+When grouped props cross a `memo` boundary or appear in dependency arrays,
+preserve referential identity at the owner boundary or split the group further.
+Do not add `useMemo` everywhere by default; use it when identity is part of the
+boundary contract or the render cost justifies it.
+
 ## 2. Replace pass-through with an adapter at the owner boundary
 
 ```tsx
@@ -90,6 +125,9 @@ return (
 );
 ```
 
+This is an intermediate boundary shape. Continue passing only the groups each
+child owns, and keep action groups stable only when downstream identity matters.
+
 ## 4. Fix a hook options dependency
 
 Before:
@@ -107,10 +145,16 @@ After:
 ```tsx
 function useGrid(options: GridOptions) {
   const { endpoint, pagination, sorting } = options;
+  const { page, pageSize } = pagination;
+  const { key: sortKey, direction } = sorting;
 
   useEffect(() => {
-    syncGrid({ endpoint, pagination, sorting });
-  }, [endpoint, pagination.page, pagination.pageSize, sorting.key, sorting.direction]);
+    syncGrid({
+      endpoint,
+      pagination: { page, pageSize },
+      sorting: { key: sortKey, direction },
+    });
+  }, [endpoint, page, pageSize, sortKey, direction]);
 }
 ```
 
@@ -128,11 +172,21 @@ return (
 );
 ```
 
+Plain React context does not provide selectors: every consumer of a changed
+provider value can re-render. Split context when consumers divide cleanly by
+domain or update frequency; for high-frequency or large shared state, prefer a
+selector-capable store, `useSyncExternalStore`, context selector utility, or a
+field-level hook.
+
 ## 6. Collapse callback explosion into a typed command
 
 ```tsx
+type EditorFieldChange = {
+  [K in keyof EditorValue]: { type: 'field/change'; field: K; value: EditorValue[K] };
+}[keyof EditorValue];
+
 type EditorAction =
-  | { type: 'field/change'; field: keyof EditorValue; value: EditorValue[keyof EditorValue] }
+  | EditorFieldChange
   | { type: 'save' }
   | { type: 'cancel' };
 ```

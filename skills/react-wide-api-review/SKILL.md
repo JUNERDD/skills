@@ -187,7 +187,7 @@ python skills/react-wide-api-review/scripts/react_wide_api_inventory.py ./src --
 python skills/react-wide-api-review/scripts/react_wide_api_trace.py ./src --symbol UserEditor --symbol useUserEditor --field form
 ```
 
-The scripts are intentionally heuristic. They can help identify wide types, JSX call sites, hook parameters, hook return bags, provider values, simple pass-through edges, and symbol/field references. They do not replace AST field-flow tracing when AST is available, TypeScript ownership reasoning, or call-site inspection.
+The scripts are intentionally heuristic. They can help identify wide types, component props from file-local types, inline object parameter types, destructuring, direct property reads, JSX call sites, hook parameters, hook return bags, provider values, simple pass-through edges, and symbol/field references. They do not replace AST field-flow tracing when AST is available, TypeScript ownership reasoning, or call-site inspection.
 
 ## Output Rules
 

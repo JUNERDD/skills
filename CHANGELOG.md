@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.8] - 2026-05-19
+
+### Changed
+
+- Improved react-wide-api-review inventory coverage for wide component props across file-local props types, inline object types, destructuring, direct property reads, React component annotations, and JSX call sites.
+- Hardened receiving-react-wide-api-review fix guidance with React best-practice guardrails for grouped prop identity, hook dependencies, context selector boundaries, and typed command actions.
+
 ## [0.1.7] - 2026-05-19
 
 ### Changed
