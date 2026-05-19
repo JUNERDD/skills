@@ -42,12 +42,13 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
     },
     "exhaustive-code-slimmer": {
       category: "代码清理",
-      blurb: "用 DX 感知的架构门禁最大化安全删码。",
-      lead: "一个删除优先的工作流，用于减少需维护代码，同时保持外部可观察行为不变。",
+      blurb: "用 AST 证据和 DX 感知架构门禁最大化安全删码。",
+      lead: "一个 AST 优先、删除优先的工作流，用于减少需维护代码，同时保持外部可观察行为不变。",
       overview:
-        "当代码库需要激进但有纪律的简化时使用此 skill。它会建立行为保持 oracle，审计可删除代码，测试删除和简化候选项，并在架构级重构前暂停等待明确批准，让瘦身提升可维护性，而不是制造稠密或高风险代码。",
+        "当代码库需要激进但有纪律的简化时使用此 skill。它会建立行为保持 oracle，对结构性删除结论优先使用 AST 或 language-server 证据，审计可删除代码，测试删除和简化候选项，并在架构级重构前暂停等待明确批准，让瘦身提升可维护性，而不是制造稠密或高风险代码。",
       bestFor: [
         "寻找可删除文件、分支、导出、依赖、包装层和重复逻辑。",
+        "对结构性删除结论先使用 AST、language-server、parser 或静态工具证据，再退回文本搜索。",
         "用 build、typecheck、test、lint、smoke 或 contract oracle 验证删减候选项。",
         "诊断阻碍安全删除的架构问题，并在重构前提出 DX 导向的选项。",
       ],
@@ -55,21 +56,23 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "记录基线文件、LOC、字节数、依赖、大文件、重复块以及生成或 vendor 目录。",
         "在仓库可用时运行审计和架构 DX 扫描。",
         "删除代码前设计当前可用的最强行为保持 oracle。",
-        "跨每一层枚举删除、简化、依赖、配置、测试和架构候选项。",
+        "用可用的 AST 优先证据跨每一层枚举删除、简化、依赖、配置、测试和架构候选项。",
         "搜索精确或分区后的候选集合，直到当前前沿没有未测试候选项。",
       ],
       outputs: [
         "前后指标、已接受候选项、被拒绝的高风险候选项和瘦身比例。",
-        "最终代码缩减结果的 oracle 命令和剩余盲点。",
+        "最终代码缩减结果的 oracle 命令、候选证据模式和剩余盲点。",
         "当安全瘦身需要结构清理时，给出需批准的架构选项。",
       ],
       guardrails: [
         "不要把压缩、混淆、纯空白删除或注释删除算作代码瘦身。",
         "没有证据时不要删除公共 API、迁移、兼容 shim、安全检查、运维日志或配置。",
+        "当 AST 或符号感知证据能解析同一结构性结论时，不要把 regex 或搜索未命中当作最终依据。",
         "在用户明确批准某个选项或范围前，不要执行架构级重构。",
       ],
       entryPoints: [
         { description: "穷尽式瘦身工作流、oracle 规则和批准门禁。", label: "工作流" },
+        { description: "AST 优先的候选项生成、证据标签和 fallback 规则。", label: "AST 优先候选项" },
         { description: "仓库清单、指标和候选项枚举助手。", label: "代码瘦身审计" },
         { description: "基于 oracle 命令的精确和分区候选搜索。", label: "穷尽式收缩" },
         { description: "删除和简化候选项目录。", label: "转换目录" },
@@ -378,6 +381,79 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       ],
       entryPoints: [
         { description: "Disposition ledger 和 regression-response 要求。", label: "工作流" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
+    "react-wide-api-review": {
+      category: "代码审查",
+      blurb: "审计过宽的 React 和 TypeScript API 字段流。",
+      lead: "一个 AST-first 审查工作流，用于发现过大的 React API surface，并追踪字段所有权如何穿过组件、hook 和 context 边界。",
+      overview:
+        "当 React 或 TypeScript 代码需要 scoped wide-API 架构门禁时使用此 skill。它会盘点过宽 props、hook 参数、hook 返回值、context value、form controller、table config、view model 和 pass-through 链路，然后写出 coverage-led Markdown report，包含 findings、有意例外、field-flow ledger 和 recursive coverage。",
+      bestFor: [
+        "发现 leaf component、hook、context 或 controller 接收了超出自身所有权的字段。",
+        "追踪 pass-through、spread propagation、context fan-out、hook return bag 和 selector 机会。",
+        "产出以 field-flow 证据为基础的 Markdown gate report。",
+      ],
+      workflow: [
+        "检查代码前先设定明确 review scope 和 baseline。",
+        "对组件、hook、context 和 JSX field-flow 结论优先使用 type-aware 或 syntax AST。",
+        "AST 覆盖不可用或不完整时，用内置 inventory 和 trace scripts 生成候选项。",
+        "建立 field-flow 和 recursive coverage ledgers，覆盖 scope 内每个相关边界。",
+        "把每个 finding 分类为 Block、Discuss、Watch 或 Intentional Exception，并基于模板写报告。",
+      ],
+      outputs: [
+        "一份 coverage-led React wide-API Markdown report。",
+        "与 findings 和未覆盖实现边界对齐的 gate recommendation。",
+        "带 evidence labels 和 blind spots 的 field-flow 与 recursive coverage ledgers。",
+      ],
+      guardrails: [
+        "不要因为对象大就判定有问题，除非太多字段跨过了错误边界。",
+        "不要把 component-level 请求静默扩大成 repo-wide review。",
+        "没有明确批准时，不要建议会改变用户可见 UI 行为的字段边界重构。",
+        "不要把 memoization 或 deep equality 当作所有权问题的主要修复。",
+      ],
+      entryPoints: [
+        { description: "Scope、field-flow tracing、gate mapping 和报告规则。", label: "工作流" },
+        { description: "标准报告章节和 coverage ledger 形状。", label: "报告模板" },
+        { description: "过宽 React API surface 的启发式候选扫描器。", label: "Inventory helper" },
+        { description: "启发式 symbol 和 field-flow trace helper。", label: "Trace helper" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
+    "receiving-react-wide-api-review": {
+      category: "代码审查后续",
+      blurb: "消费 React wide API review，并用证据解决每个条目。",
+      lead: "一个响应工作流，用于验证、修复、挑战或延续 React wide-API review findings，同时不扰动 Git staging state。",
+      overview:
+        "在收到 react-wide-api-review report 或等价 PR feedback 后使用此 skill。它会在编辑前为每个 finding、有意例外、field-flow row 和 open coverage row 建立 disposition ledger，然后验证当前字段所有权，只应用有范围的修复或有证据的挑战。",
+      bestFor: [
+        "验证每个 React wide API finding 在当前代码中是否仍成立。",
+        "修复 pass-through、context fan-out、hook return、hook options、form controller 或 table controller 边界。",
+        "报告完整 disposition，并保持 staged changes 不变，除非用户明确要求。",
+      ],
+      workflow: [
+        "阅读完整 report，并确认 scope、baseline、completion status 和 item enumeration。",
+        "从 index、action sections、有意例外、field-flow ledger 和 recursive coverage ledger 建立 disposition ledger。",
+        "编辑代码前，尽可能用 AST 或 language-server 证据验证每个条目。",
+        "应用修复前说明 scoped change plan 和 no-staging intent。",
+        "对每个条目执行 fix、disprove、narrow、confirm 或 carry forward；当 API shape 有实质变化时刷新 gate。",
+      ],
+      outputs: [
+        "覆盖整份 consumed report 的 disposition ledger。",
+        "针对已确认 wide-API 所有权问题的有范围代码修改。",
+        "disproved、narrowed、intentional 或 carried-forward 条目的证据。",
+      ],
+      guardrails: [
+        "不要在未验证当前 field flow 的情况下机械执行报告。",
+        "除非用户明确批准 product-facing change，否则不要改变 rendered UI 行为。",
+        "除非当前请求明确要求，否则不要 stage、commit 或修改 Git index。",
+        "仍有 finding、exception、ledger row 或 coverage gap 缺少 disposition 时，不要声称完成。",
+      ],
+      entryPoints: [
+        { description: "Disposition ledger、verification 和 no-staging 规则。", label: "工作流" },
+        { description: "标准最终 disposition report 形状。", label: "Disposition 模板" },
+        { description: "为 disposition ledger 提取 report item 的启发式 helper。", label: "Report intake helper" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },

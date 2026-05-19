@@ -28,7 +28,7 @@ Chinese is served from `/zh-CN` and `/zh-CN/skills/<slug>`.
 If you are deciding what to install, start here:
 
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
-- [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
+- [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code with AST-first evidence
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
@@ -37,6 +37,8 @@ If you are deciding what to install, start here:
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
 - [`receiving-regression-review`](#receiving-regression-review) - consume a regression-review report and verify each finding before changing code
+- [`react-wide-api-review`](#react-wide-api-review) - audit excessive React and TypeScript API field flow
+- [`receiving-react-wide-api-review`](#receiving-react-wide-api-review) - consume a React wide API review and resolve every item with evidence
 
 ## 📦 Install
 
@@ -81,6 +83,8 @@ npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
 npx skills@latest add JUNERDD/skills --skill receiving-regression-review
+npx skills@latest add JUNERDD/skills --skill react-wide-api-review
+npx skills@latest add JUNERDD/skills --skill receiving-react-wide-api-review
 ```
 
 Manual symlink install still works if you prefer not to use the agent prompt:
@@ -127,7 +131,7 @@ Key entry points:
 
 ### `exhaustive-code-slimmer`
 
-[`skills/exhaustive-code-slimmer/`](./skills/exhaustive-code-slimmer/) exhaustively searches for behavior-preserving code reductions. It combines audit scripts, deletion-first candidate search, oracle design, and an approval gate for architecture-level refactors so slimming improves maintainability instead of producing dense or risky code.
+[`skills/exhaustive-code-slimmer/`](./skills/exhaustive-code-slimmer/) exhaustively searches for behavior-preserving code reductions. It combines AST-first structural evidence, audit scripts, deletion-first candidate search, oracle design, and an approval gate for architecture-level refactors so slimming improves maintainability instead of producing dense or risky code.
 
 Install:
 
@@ -138,12 +142,14 @@ npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 Best for:
 
 - finding removable files, branches, exports, dependencies, wrappers, and duplicate logic
+- using AST, language-server, parser, or static-tool evidence before text search for structural deletion claims
 - running deletion candidates against a build/test/lint/smoke oracle before accepting changes
 - identifying architecture problems that block safe code reduction and presenting DX-oriented options before refactoring
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/exhaustive-code-slimmer/SKILL.md`](./skills/exhaustive-code-slimmer/SKILL.md)
+- AST-first candidate generation: [`skills/exhaustive-code-slimmer/references/ast_first_candidate_generation.md`](./skills/exhaustive-code-slimmer/references/ast_first_candidate_generation.md)
 - Code-slim audit script: [`skills/exhaustive-code-slimmer/scripts/code_slim_audit.py`](./skills/exhaustive-code-slimmer/scripts/code_slim_audit.py)
 - Exhaustive shrink script: [`skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py`](./skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py)
 - Optional runtime metadata: [`skills/exhaustive-code-slimmer/agents/openai.yaml`](./skills/exhaustive-code-slimmer/agents/openai.yaml)
@@ -400,6 +406,53 @@ Key entry points:
 - Workflow and guardrails: [`skills/receiving-regression-review/SKILL.md`](./skills/receiving-regression-review/SKILL.md)
 - Optional runtime metadata: [`skills/receiving-regression-review/agents/openai.yaml`](./skills/receiving-regression-review/agents/openai.yaml)
 
+### `react-wide-api-review`
+
+[`skills/react-wide-api-review/`](./skills/react-wide-api-review/) performs a scoped, coverage-led audit of oversized React and TypeScript API surfaces. It traces field flow through component props, hooks, contexts, form controllers, table configs, view models, and pass-through chains, then writes a Markdown gate report with findings, intentional exceptions, and coverage ledgers.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill react-wide-api-review
+```
+
+Best for:
+
+- finding component props, hook returns, context values, or controller objects that are too wide for their consumers
+- tracing pass-through and spread propagation before recommending a narrower owner
+- producing an AST-first review report with field-flow and recursive coverage ledgers
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/react-wide-api-review/SKILL.md`](./skills/react-wide-api-review/SKILL.md)
+- Report template: [`skills/react-wide-api-review/references/report-template.md`](./skills/react-wide-api-review/references/report-template.md)
+- Inventory helper: [`skills/react-wide-api-review/scripts/react_wide_api_inventory.py`](./skills/react-wide-api-review/scripts/react_wide_api_inventory.py)
+- Trace helper: [`skills/react-wide-api-review/scripts/react_wide_api_trace.py`](./skills/react-wide-api-review/scripts/react_wide_api_trace.py)
+- Optional runtime metadata: [`skills/react-wide-api-review/agents/openai.yaml`](./skills/react-wide-api-review/agents/openai.yaml)
+
+### `receiving-react-wide-api-review`
+
+[`skills/receiving-react-wide-api-review/`](./skills/receiving-react-wide-api-review/) consumes a `react-wide-api-review` report or equivalent PR feedback. It builds a disposition ledger for every finding, intentional exception, field-flow row, and open coverage row before fixing, disproving, narrowing, confirming, or carrying items forward with evidence.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill receiving-react-wide-api-review
+```
+
+Best for:
+
+- verifying whether each wide React API finding still applies to the current code
+- fixing field ownership, subscription, context, hook return, or pass-through issues without broad rewrites
+- preserving Git staging state while reporting a complete disposition for every consumed item
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/receiving-react-wide-api-review/SKILL.md`](./skills/receiving-react-wide-api-review/SKILL.md)
+- Disposition template: [`skills/receiving-react-wide-api-review/references/disposition-template.md`](./skills/receiving-react-wide-api-review/references/disposition-template.md)
+- Report intake helper: [`skills/receiving-react-wide-api-review/scripts/extract_react_wide_api_report_items.py`](./skills/receiving-react-wide-api-review/scripts/extract_react_wide_api_report_items.py)
+- Optional runtime metadata: [`skills/receiving-react-wide-api-review/agents/openai.yaml`](./skills/receiving-react-wide-api-review/agents/openai.yaml)
+
 ## 🌱 Growing The Repository
 
 When you add more skills later:
@@ -442,6 +495,7 @@ When you add more skills later:
     │   ├── agents/
     │   │   └── openai.yaml
     │   ├── references/
+    │   │   ├── ast_first_candidate_generation.md
     │   │   ├── code_cleanliness_guide.md
     │   │   ├── dx_architecture_gate.md
     │   │   ├── language_tactics.md
@@ -470,10 +524,38 @@ When you add more skills later:
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml
+    ├── receiving-react-wide-api-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   ├── references/
+    │   │   ├── ast-verification.md
+    │   │   ├── disposition-template.md
+    │   │   ├── fix-patterns.md
+    │   │   ├── report-intake.md
+    │   │   └── verification.md
+    │   └── scripts/
+    │       └── extract_react_wide_api_report_items.py
     ├── receiving-regression-review/
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml
+    ├── react-wide-api-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   ├── references/
+    │   │   ├── ast-first-analysis.md
+    │   │   ├── checklist.md
+    │   │   ├── field-flow-taxonomy.md
+    │   │   ├── migration.md
+    │   │   ├── patterns.md
+    │   │   ├── recursive-audit.md
+    │   │   ├── report-template.md
+    │   │   └── scoring-model.md
+    │   └── scripts/
+    │       ├── react_wide_api_inventory.py
+    │       └── react_wide_api_trace.py
     ├── regression-review/
     │   ├── SKILL.md
     │   ├── agents/
