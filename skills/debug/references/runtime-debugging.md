@@ -12,6 +12,7 @@ Use this reference when the debugging task needs exact logging, local collector 
 - IDE config and source opening
 - Refreshing stale collector ports in existing log code
 - Dashboard and operator APIs
+- Dashboard frontend open record
 - CORS behavior
 - Clearing the active log file
 - Session artifact cleanup
@@ -30,7 +31,7 @@ Adapt the debugging infrastructure to the current host before running commands. 
 1. Confirm where temporary debug artifacts should live. Reuse an existing host-specific scratch directory when one exists; otherwise default to `$PWD/.debug-logs/`. Scratch directories such as `.debug-logs/` may be ignored by Git, so do not use `git status`, `git diff`, or untracked-file scans as the cleanup source of truth for collector artifacts.
 2. Confirm how the host keeps long-lived processes alive: persistent PTY, detached job, task runner, or another supported mechanism.
 3. If no authoritative logging configuration already exists, resolve a local Python 3 interpreter for the bundled collector. Prefer `python3`; otherwise allow `python` only when it resolves to Python 3. If neither is available, stop and tell the user you need either an existing logging session or Python 3 for this evidence-first mode.
-4. Confirm whether the host can open or automate browser pages. If not, rely on the ready file and HTTP APIs. When it can, reserve page opening for the collector dashboard unless the user explicitly asked to open the target project.
+4. Confirm whether the host can open or automate browser pages. If not, rely on the ready file and HTTP APIs. When it can, reserve page opening for the collector dashboard unless the user explicitly asked to open the target project. Before the first reproduction handoff, the bundled collector dashboard should have `dashboardFrontendOpenRecorded: true`; if not, open `dashboardUrl` and re-check state. Record failed fallback opens through `dashboardFrontendOpenFailedUrl`, and stop after two fallback failures.
 5. Confirm whether planned instrumentation runs in browser/client code, server/runtime code, or both. For browser/client code, prefer direct posts to the active collector endpoint and do not assume an app-local proxy is required.
 6. Confirm how the user signals that reproduction is complete. Use the host's real action label or request a short reply if no action exists.
 7. Do not proactively start the target app, hit app health endpoints, probe routes, or run compile/build checks as setup unless the user explicitly asked to debug startup behavior or a current hypothesis depends on that evidence.
@@ -61,6 +62,7 @@ Allowed by default:
 
 - Reusing the collector's ready file and HTTP APIs without opening any target-app page
 - Opening the collector dashboard only when its auto-open attempt failed or was intentionally disabled
+- Opening the collector dashboard before the first reproduction handoff when `GET /api/state` reports `dashboardFrontendOpenRecorded: false`, stopping after two recorded fallback failures
 
 Not allowed without an explicit user request to open the project:
 
@@ -87,8 +89,10 @@ If a reused authoritative session does not expose `syncLocationsUrl` or another 
 
 When the bundled collector provides dashboard auto-open fields in the ready file, treat them as authoritative:
 
-- If `dashboardOpenSucceeded` is `true`, do not call MCP or browser automation to open the same dashboard again.
+- If `dashboardOpenSucceeded` is `true`, do not call MCP or browser automation to open the same dashboard again during startup.
 - If `dashboardOpenSucceeded` is `false`, or `dashboardOpenAttempted` is `false` because auto-open was disabled, then and only then consider MCP or an embedded browser fallback for the collector dashboard.
+
+Dashboard auto-open success only means the host accepted the browser open request. The dashboard frontend records its first actual page load through `POST /api/dashboard-opened`, exposed in ready/state payloads as `dashboardFrontendOpenRecorded` and `dashboardFrontendOpenedAt`. Before the first reproduction handoff, query `stateUrl`; if `dashboardFrontendOpenRecorded` is false and browser access exists, open `dashboardUrl`, then re-query state. If that fallback open fails, record it through `dashboardFrontendOpenFailedUrl` with the session token. Make at most two fallback open attempts before continuing with ready/state HTTP APIs. Do not repeat this after the record exists.
 
 ## Reusing or restarting the logging process
 
@@ -156,9 +160,9 @@ nohup "$PYTHON_BIN" <SKILL_ROOT>/scripts/local_log_collector/main.py \
   > "$PWD/.debug-logs/<SESSION_ID>.service.log" 2>&1 &
 ```
 
-Resolve `<SKILL_ROOT>` to the installed debug skill directory before running the command. Generate `<SESSION_ID>` from the task plus a timestamp, for example `checkout-bug-1733456789000`. Set `--workspace-root` to the repository root that relative `location` fields should resolve against. If you omit `--location-state-file`, the collector derives `<SESSION_ID>.locations.json` next to the ready file when a ready file exists, otherwise next to the NDJSON log file. Use `--default-ide` only as a fallback when `~/.junerdd/config.json` does not already specify one. The collector attempts to open the dashboard in the default browser automatically unless you pass `--no-open-dashboard`. After the service starts, read the ready file and reuse the returned values exactly, including the dashboard auto-open result, `locationStateFile`, `serviceLogFile`, and `ownedArtifacts`.
+Resolve `<SKILL_ROOT>` to the installed debug skill directory before running the command. Generate `<SESSION_ID>` from the task plus a timestamp, for example `checkout-bug-1733456789000`. Set `--workspace-root` to the repository root that relative `location` fields should resolve against. If you omit `--location-state-file`, the collector derives `<SESSION_ID>.locations.json` next to the ready file when a ready file exists, otherwise next to the NDJSON log file. Use `--default-ide` only as a fallback when `~/.junerdd/config.json` does not already specify one. The collector attempts to open the dashboard in the default browser automatically unless you pass `--no-open-dashboard`. After the service starts, read the ready file and reuse the returned values exactly, including the dashboard auto-open result, dashboard frontend open record fields, `locationStateFile`, `serviceLogFile`, and `ownedArtifacts`.
 
-If you are operating inside an agent runtime that has its own browser automation or embedded browser, do not open `dashboardUrl` there when the ready file reports `dashboardOpenSucceeded: true`, because that would duplicate the same page open. Only fall back to MCP or an embedded browser for the collector dashboard when the ready file reports `dashboardOpenSucceeded: false` or `dashboardOpenAttempted: false`. Do not open target-app pages unless the user explicitly asked you to open the project. If the host has no browser access, continue with the ready file values plus `GET /api/state`, `GET /health`, `POST /api/clear`, and `POST /api/shutdown`.
+If you are operating inside an agent runtime that has its own browser automation or embedded browser, do not open `dashboardUrl` there immediately when the ready file reports `dashboardOpenSucceeded: true`, because that would duplicate the same page open. Only fall back to MCP or an embedded browser at startup when the ready file reports `dashboardOpenSucceeded: false` or `dashboardOpenAttempted: false`. Before the first reproduction handoff, query `GET /api/state`; if the bundled collector still reports `dashboardFrontendOpenRecorded: false`, open `dashboardUrl` even if the startup auto-open succeeded, then re-query state. For failed fallback attempts, call `POST /api/dashboard-open-failed` with the token, error, and attempted URL. Do not exceed two fallback open attempts. Do not open target-app pages unless the user explicitly asked you to open the project. If the host has no browser access, continue with the ready file values plus `GET /api/state`, `GET /health`, `POST /api/clear`, and `POST /api/shutdown`.
 
 Ready file example:
 
@@ -169,6 +173,14 @@ Ready file example:
   "dashboardToken": "<SESSION_SCOPED_TOKEN>",
   "stateUrl": "http://127.0.0.1:43125/api/state",
   "syncLocationsUrl": "http://127.0.0.1:43125/api/locations/sync",
+  "dashboardFrontendOpenedUrl": "http://127.0.0.1:43125/api/dashboard-opened",
+  "dashboardFrontendOpenFailedUrl": "http://127.0.0.1:43125/api/dashboard-open-failed",
+  "dashboardFrontendOpenRecorded": false,
+  "dashboardFrontendOpenedAt": null,
+  "dashboardFrontendOpenFailureCount": 0,
+  "dashboardFrontendOpenLastFailureAt": null,
+  "dashboardFrontendOpenLastError": "",
+  "dashboardFrontendOpenLastFailedUrl": "",
   "clearUrl": "http://127.0.0.1:43125/api/clear",
   "shutdownUrl": "http://127.0.0.1:43125/api/shutdown",
   "healthUrl": "http://127.0.0.1:43125/health",
@@ -332,7 +344,7 @@ Keep the update narrow:
 
 ## Dashboard and operator APIs
 
-The bundled service attempts to open `dashboardUrl` in a browser by default. Pass `--no-open-dashboard` only when you explicitly need a headless run. When the ready file reports a successful auto-open, do not reopen the same page with MCP. Do not open target-app pages from MCP or browser automation unless the user explicitly asked to open the project. The bundled UI shows:
+The bundled service attempts to open `dashboardUrl` in a browser by default. Pass `--no-open-dashboard` only when you explicitly need a headless run. When the ready file reports a successful auto-open, do not immediately reopen the same page with MCP; wait for the pre-reproduction frontend-open-record check. Do not open target-app pages from MCP or browser automation unless the user explicitly asked to open the project. The bundled UI shows:
 
 - Total recorded entries
 - Invalid NDJSON line count
@@ -345,10 +357,29 @@ The same service also exposes:
 
 - `GET /api/state` for live summary data
 - `POST /api/locations/sync` to replace the active temporary log-point list
+- `POST /api/dashboard-open-failed` to record a failed dashboard open attempt before the frontend has loaded
+- `POST /api/dashboard-opened` for the dashboard frontend to record its first real page load
 - `POST /api/clear` to truncate the current session log file
 - `POST /api/shutdown` to stop the collector after the response returns
 
-Both the ready file and `GET /api/state` include `locationStateFile`, `serviceLogFile`, an `ownedArtifacts` list, a session-scoped `dashboardToken`, and the sync URL for active locations. When you started the bundled collector yourself, treat that artifact list as the authoritative cleanup target after the debug session succeeds, and use the returned `dashboardToken` for mutating operator calls. Browser-initiated dashboard calls must stay same-origin. Local agent or CLI calls may omit `Origin` when they already hold the session token.
+Both the ready file and `GET /api/state` include `locationStateFile`, `serviceLogFile`, an `ownedArtifacts` list, a session-scoped `dashboardToken`, active-location URLs, and dashboard frontend open-record fields. When you started the bundled collector yourself, treat that artifact list as the authoritative cleanup target after the debug session succeeds, and use the returned `dashboardToken` for mutating operator calls. Browser-initiated dashboard calls must stay same-origin. Local agent or CLI calls may omit `Origin` when they already hold the session token.
+
+## Dashboard frontend open record
+
+The dashboard page sends one same-origin `POST /api/dashboard-opened` request after it first reads collector state and obtains the session token. The collector records only the first successful request for the session by setting `dashboardFrontendOpenRecorded: true` and `dashboardFrontendOpenedAt` in both ready-file and state payloads; later dashboard reloads or duplicate tabs must not update that timestamp.
+
+The agent records failed fallback opens by calling:
+
+```bash
+curl -X POST "<DASHBOARD_FRONTEND_OPEN_FAILED_URL>" \
+  -H 'Content-Type: application/json' \
+  -H 'X-Debug-Dashboard-Token: <DASHBOARD_TOKEN>' \
+  --data '{"error":"<OPEN_ERROR>","attemptedUrl":"<DASHBOARD_URL>"}'
+```
+
+The collector increments `dashboardFrontendOpenFailureCount` and updates `dashboardFrontendOpenLastFailureAt`, `dashboardFrontendOpenLastError`, and `dashboardFrontendOpenLastFailedUrl` only while `dashboardFrontendOpenRecorded` is false. If startup auto-open fails, the collector records that as the first failure for visibility; the pre-reproduction retry budget still allows at most two fallback open attempts. Once the frontend load record exists, later failure reports are ignored.
+
+Before asking the user for the first reproduction run, query `stateUrl`. If `dashboardFrontendOpenRecorded` is false and browser access exists, open `dashboardUrl`, then query `stateUrl` again. If the open fails, record the failure and retry at most once more. After two fallback attempts fail, stop opening the dashboard and continue with ready/state HTTP APIs. Do not keep reopening the dashboard after the record exists. If the host cannot open a browser, continue with ready/state HTTP APIs and mention that the dashboard frontend open record could not be created by this host.
 
 ## CORS behavior
 
@@ -357,7 +388,7 @@ The bundled collector must not introduce browser CORS issues:
 - Serve the dashboard from the same collector origin so UI actions stay same-origin.
 - Answer `OPTIONS` preflight requests for `/ingest`.
 - Return wildcard CORS headers only for `/ingest`, with `Access-Control-Allow-Headers: Content-Type, X-Debug-Session-Id` and `Access-Control-Allow-Methods: POST, OPTIONS`.
-- Keep dashboard/operator APIs same-origin from the browser. Do not return wildcard CORS headers for `POST /api/locations/sync`, `POST /api/clear`, `POST /api/shutdown`, `POST /api/config`, or `POST /api/open-location`.
+- Keep dashboard/operator APIs same-origin from the browser. Do not return wildcard CORS headers for `POST /api/locations/sync`, `POST /api/dashboard-open-failed`, `POST /api/dashboard-opened`, `POST /api/clear`, `POST /api/shutdown`, `POST /api/config`, or `POST /api/open-location`.
 - Require the session-scoped `X-Debug-Dashboard-Token` header on mutating requests so random webpages cannot clear logs, rewrite config, or trigger local IDE opens. When a browser sends an `Origin`, reject it unless it matches the collector origin. Local non-browser callers may omit `Origin`.
 
 This collector behavior exists so browser/client instrumentation can post directly to the collector from frontend apps, including Next.js dev apps. Do not add project-local proxy routes such as `/api/_dev/*` unless you have already proven that direct browser delivery is blocked in the current host.

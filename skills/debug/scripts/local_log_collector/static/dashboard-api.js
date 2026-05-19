@@ -4,6 +4,8 @@ export const API_ROUTES = {
   logDetail: '/api/logs/detail',
   locations: '/api/locations',
   config: '/api/config',
+  dashboardOpenFailed: '/api/dashboard-open-failed',
+  dashboardOpened: '/api/dashboard-opened',
   openLocation: '/api/open-location',
   clear: '/api/clear',
   shutdown: '/api/shutdown',

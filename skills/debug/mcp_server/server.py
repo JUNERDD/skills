@@ -404,6 +404,14 @@ async def start_debug_session(
                         "open_location_url": raw.get("openLocationUrl"),
                         "shutdown_url": raw.get("shutdownUrl"),
                         "dashboard_token": raw.get("dashboardToken"),
+                        "dashboard_frontend_opened_url": raw.get("dashboardFrontendOpenedUrl"),
+                        "dashboard_frontend_open_failed_url": raw.get("dashboardFrontendOpenFailedUrl"),
+                        "dashboard_frontend_open_recorded": raw.get("dashboardFrontendOpenRecorded"),
+                        "dashboard_frontend_opened_at": raw.get("dashboardFrontendOpenedAt"),
+                        "dashboard_frontend_open_failure_count": raw.get("dashboardFrontendOpenFailureCount"),
+                        "dashboard_frontend_open_last_failure_at": raw.get("dashboardFrontendOpenLastFailureAt"),
+                        "dashboard_frontend_open_last_error": raw.get("dashboardFrontendOpenLastError"),
+                        "dashboard_frontend_open_last_failed_url": raw.get("dashboardFrontendOpenLastFailedUrl"),
                         "log_file": str(log_file),
                         "workspace_root": str(ws),
                         "pid": proc.pid,
@@ -473,6 +481,36 @@ def check_collector_health() -> dict[str, Any]:
         return {"status": "healthy", "details": result}
     except (urllib.error.URLError, OSError) as e:
         return {"status": "unhealthy", "error": str(e)}
+
+
+@mcp.tool()
+def record_dashboard_open_failure(
+    error: str,
+    attempted_url: str = "",
+) -> dict[str, Any]:
+    """Record a failed dashboard open attempt before the frontend has loaded.
+
+    Args:
+        error: Error returned by the browser/open tool.
+        attempted_url: Dashboard URL that failed to open. Defaults to the active dashboard URL.
+    """
+    session = _require_session()
+    if "error" in session:
+        return session
+
+    failed_url = session.get("dashboard_frontend_open_failed_url")
+    token = session.get("dashboard_token")
+    if not failed_url:
+        return {"error": "No dashboard-open-failed URL in session."}
+
+    payload = {
+        "error": error or "dashboard_open_failed",
+        "attemptedUrl": attempted_url or session.get("dashboard_url") or "",
+    }
+    try:
+        return _http_post(failed_url, data=payload, token=token)
+    except (urllib.error.URLError, OSError) as e:
+        return {"error": f"Failed to record dashboard open failure: {e}"}
 
 
 @mcp.tool()

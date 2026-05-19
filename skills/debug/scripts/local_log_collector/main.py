@@ -95,16 +95,6 @@ def install_signal_handlers(server: CollectorServer) -> None:
     signal.signal(signal.SIGTERM, _shutdown)
 
 
-def write_ready_file(server: CollectorServer) -> None:
-    if not server.ready_file:
-        return
-
-    payload = build_ready_payload(server)
-    temp_path = server.ready_file.with_suffix(f'{server.ready_file.suffix}.tmp')
-    temp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding='utf-8')
-    os.replace(temp_path, server.ready_file)
-
-
 def main() -> int:
     args = parse_args()
     log_file = Path(args.log_file).expanduser().resolve()
@@ -146,8 +136,13 @@ def main() -> int:
         server.dashboard_open_attempted = bool(open_result['attempted'])
         server.dashboard_open_succeeded = bool(open_result['succeeded'])
         server.dashboard_open_error = str(open_result['error'])
+        if server.dashboard_open_attempted and not server.dashboard_open_succeeded:
+            server.record_dashboard_frontend_open_failed(
+                error=server.dashboard_open_error or 'dashboard_auto_open_failed',
+                attempted_url=server.dashboard_url,
+            )
 
-    write_ready_file(server)
+    server.write_ready_file()
 
     print(json.dumps(build_ready_payload(server), ensure_ascii=True), flush=True)
 

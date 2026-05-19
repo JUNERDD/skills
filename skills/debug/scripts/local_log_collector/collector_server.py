@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 import json
+import os
 import secrets
 import threading
 import time
@@ -39,6 +40,7 @@ from collector_state import (
     build_location_state_payload,
     build_log_detail_response,
     build_logs_response,
+    build_ready_payload,
     build_service_payload,
     build_state_response,
     clear_log_file,
@@ -53,6 +55,8 @@ DASHBOARD_TOKEN_HEADER = 'X-Debug-Dashboard-Token'
 SENSITIVE_POST_PATHS = {
     '/api/clear',
     '/api/config',
+    '/api/dashboard-open-failed',
+    '/api/dashboard-opened',
     '/api/locations/sync',
     '/api/open-location',
     '/api/shutdown',
@@ -105,6 +109,11 @@ class CollectorServer(ThreadingHTTPServer):
         self.dashboard_open_attempted = False
         self.dashboard_open_succeeded: bool | None = None
         self.dashboard_open_error = ''
+        self.dashboard_frontend_opened_at: int | None = None
+        self.dashboard_frontend_open_failure_count = 0
+        self.dashboard_frontend_open_last_failure_at: int | None = None
+        self.dashboard_frontend_open_last_error = ''
+        self.dashboard_frontend_open_last_failed_url = ''
 
     @property
     def base_url(self) -> str:
@@ -137,6 +146,14 @@ class CollectorServer(ThreadingHTTPServer):
     @property
     def config_url(self) -> str:
         return f'{self.base_url}/api/config'
+
+    @property
+    def dashboard_frontend_opened_url(self) -> str:
+        return f'{self.base_url}/api/dashboard-opened'
+
+    @property
+    def dashboard_frontend_open_failed_url(self) -> str:
+        return f'{self.base_url}/api/dashboard-open-failed'
 
     @property
     def sync_locations_url(self) -> str:
@@ -190,6 +207,37 @@ class CollectorServer(ThreadingHTTPServer):
             },
         )
         return payload
+
+    def write_ready_file(self) -> None:
+        if not self.ready_file:
+            return
+
+        payload = build_ready_payload(self)
+        temp_path = self.ready_file.with_suffix(f'{self.ready_file.suffix}.tmp')
+        temp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding='utf-8')
+        os.replace(temp_path, self.ready_file)
+
+    def record_dashboard_frontend_opened(self) -> None:
+        if self.dashboard_frontend_opened_at is not None:
+            return
+
+        self.dashboard_frontend_opened_at = int(time.time() * 1000)
+        self.write_ready_file()
+
+    def record_dashboard_frontend_open_failed(
+        self,
+        *,
+        error: str,
+        attempted_url: str,
+    ) -> None:
+        if self.dashboard_frontend_opened_at is not None:
+            return
+
+        self.dashboard_frontend_open_failure_count += 1
+        self.dashboard_frontend_open_last_failure_at = int(time.time() * 1000)
+        self.dashboard_frontend_open_last_error = error
+        self.dashboard_frontend_open_last_failed_url = attempted_url
+        self.write_ready_file()
 
 
 class CollectorRequestHandler(BaseHTTPRequestHandler):
@@ -267,6 +315,12 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
         if path == '/api/config':
             self._handle_config_update()
+            return
+        if path == '/api/dashboard-open-failed':
+            self._handle_dashboard_open_failed()
+            return
+        if path == '/api/dashboard-opened':
+            self._handle_dashboard_opened()
             return
         if path == '/api/locations/sync':
             self._handle_locations_sync()
@@ -369,6 +423,34 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
                 return
 
         self._json_response(HTTPStatus.OK, self._build_config_payload(root_config=updated_config))
+
+    def _handle_dashboard_opened(self) -> None:
+        with self.server.write_lock:
+            self.server.record_dashboard_frontend_opened()
+
+        self._json_response(HTTPStatus.OK, self.server.build_state())
+
+    def _handle_dashboard_open_failed(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            self._json_response(HTTPStatus.BAD_REQUEST, {'ok': False, 'error': 'invalid_json'})
+            return
+        if not isinstance(payload, dict):
+            self._json_response(HTTPStatus.BAD_REQUEST, {'ok': False, 'error': 'payload_must_be_object'})
+            return
+
+        raw_error = payload.get('error')
+        raw_attempted_url = payload.get('attemptedUrl')
+        error = raw_error if isinstance(raw_error, str) and raw_error else 'dashboard_open_failed'
+        attempted_url = raw_attempted_url if isinstance(raw_attempted_url, str) else self.server.dashboard_url
+
+        with self.server.write_lock:
+            self.server.record_dashboard_frontend_open_failed(
+                error=error,
+                attempted_url=attempted_url,
+            )
+
+        self._json_response(HTTPStatus.OK, self.server.build_state())
 
     def _handle_open_location(self) -> None:
         payload = self._read_json_body()
