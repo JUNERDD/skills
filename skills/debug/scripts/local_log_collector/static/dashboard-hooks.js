@@ -6,6 +6,7 @@ export function useCollectorState() {
   const [actionStatus, setActionStatus] = useState(null)
   const [stopped, setStopped] = useState(false)
   const [shutdownComplete, setShutdownComplete] = useState(false)
+  const dashboardOpenRecordAttemptedRef = useRef(false)
   const { data, error, mutate } = useSWR(
     stopped ? null : API_ROUTES.state,
     (url) => fetchJson(url),
@@ -34,6 +35,23 @@ export function useCollectorState() {
     const timer = setTimeout(() => setShutdownComplete(true), 1200)
     return () => clearTimeout(timer)
   }, [stopped, shutdownComplete])
+
+  useEffect(() => {
+    if (stopped || dashboardOpenRecordAttemptedRef.current || !service?.dashboardToken) return
+    if (service.dashboardFrontendOpenRecorded) {
+      dashboardOpenRecordAttemptedRef.current = true
+      return
+    }
+
+    dashboardOpenRecordAttemptedRef.current = true
+    fetchJson(service.dashboardFrontendOpenedUrl || API_ROUTES.dashboardOpened, {
+      method: 'POST',
+      headers: { 'X-Debug-Dashboard-Token': service.dashboardToken },
+      body: '{}',
+    })
+      .then((nextState) => mutate(nextState, { revalidate: false }))
+      .catch(() => {})
+  }, [mutate, service, stopped])
 
   async function invoke(url, successMessage, stopAfter = false, dashboardToken = '') {
     setActionStatus({ kind: 'busy', text: 'Working...' })
