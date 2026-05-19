@@ -59,14 +59,13 @@ export const SKILLS: SkillDetail[] = [
     slug: "exhaustive-code-slimmer",
     title: "exhaustive-code-slimmer",
     category: "Code cleanup",
-    blurb: "Maximize AST-informed safe code deletion with DX-aware architecture gates.",
+    blurb: "Maximize safe code deletion with DX-aware architecture gates.",
     lead:
-      "An AST-first, deletion-first workflow for reducing maintained code while preserving externally observable behavior.",
+      "A deletion-first workflow for reducing maintained code while preserving externally observable behavior.",
     overview:
-      "Use this skill when a codebase needs aggressive but disciplined simplification. It builds a behavior-preservation oracle, prefers AST or language-server evidence for structural deletion claims, audits removable code, tests deletion and simplification candidates, and pauses for explicit approval before architecture-level refactors so code slimming improves developer experience instead of creating dense or risky code.",
+      "Use this skill when a codebase needs aggressive but disciplined simplification. It builds a behavior-preservation oracle, audits removable code, tests deletion and simplification candidates, and pauses for explicit approval before architecture-level refactors so code slimming improves developer experience instead of creating dense or risky code.",
     bestFor: [
       "Finding removable files, branches, exports, dependencies, wrappers, and duplicate logic.",
-      "Using AST, language-server, parser, or static-tool evidence before text search for structural deletion claims.",
       "Running code-reduction candidates against build, typecheck, test, lint, smoke, or contract oracles.",
       "Diagnosing architecture problems that block safe deletion and proposing DX-oriented options before refactoring.",
     ],
@@ -74,18 +73,17 @@ export const SKILLS: SkillDetail[] = [
       "Record baseline files, LOC, bytes, dependencies, large files, duplicate blocks, and generated or vendor directories.",
       "Run the audit and architecture DX scans when a repository is available.",
       "Design the strongest available behavior-preservation oracle before deleting code.",
-      "Enumerate deletion, simplification, dependency, config, test, and architecture candidates with AST-first evidence where available.",
+      "Enumerate deletion, simplification, dependency, config, test, and architecture candidates across every layer.",
       "Search exact or partitioned candidate sets until no untested candidate remains in the current frontier.",
     ],
     outputs: [
       "Before and after metrics, accepted candidates, rejected high-risk candidates, and shrink ratio.",
-      "Oracle commands, candidate evidence modes, and residual blind spots for the final code-reduction result.",
+      "Oracle commands and residual blind spots for the final code-reduction result.",
       "Approval-gated architecture options when structural cleanup is needed before safe slimming.",
     ],
     guardrails: [
       "Do not count minification, obfuscation, whitespace-only deletion, or comment deletion as code slimming.",
       "Do not delete public APIs, migrations, compatibility shims, security checks, operational logging, or config without evidence.",
-      "Do not use regex or search misses as final authority when AST or symbol-aware evidence can resolve the same structural claim.",
       "Do not perform architecture-level refactors until the user explicitly approves one option or scope.",
     ],
     entryPoints: [
@@ -93,11 +91,6 @@ export const SKILLS: SkillDetail[] = [
         label: "Workflow",
         path: "skills/exhaustive-code-slimmer/SKILL.md",
         description: "Exhaustive slimming workflow, oracle rules, and approval gates.",
-      },
-      {
-        label: "AST-first candidates",
-        path: "skills/exhaustive-code-slimmer/references/ast_first_candidate_generation.md",
-        description: "AST-first candidate generation, evidence labels, and fallback rules.",
       },
       {
         label: "Code-slim audit",
@@ -541,121 +534,6 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/receiving-regression-review/agents/openai.yaml",
-        description: "Optional agent runtime metadata for this skill.",
-      },
-    ],
-  },
-  {
-    slug: "react-wide-api-review",
-    title: "react-wide-api-review",
-    category: "Code review",
-    blurb: "Audit excessive React and TypeScript API field flow.",
-    lead:
-      "An AST-first review workflow for finding oversized React API surfaces and tracing field ownership through component, hook, and context boundaries.",
-    overview:
-      "Use this skill when React or TypeScript code needs a scoped wide-API architecture gate. It inventories broad props, hook parameters, hook returns, context values, form controllers, table configs, view models, and pass-through chains, then writes a coverage-led Markdown report with findings, intentional exceptions, field-flow ledgers, and recursive coverage.",
-    bestFor: [
-      "Finding leaf components, hooks, contexts, or controllers that receive more fields than they own.",
-      "Tracing pass-through, spread propagation, context fan-out, hook return bags, and selector opportunities.",
-      "Producing a Markdown gate report with a recommendation grounded in field-flow evidence.",
-    ],
-    workflow: [
-      "Set an explicit review scope and baseline before inspecting code.",
-      "Prefer type-aware or syntax AST for component, hook, context, and JSX field-flow claims.",
-      "Use the bundled inventory and trace scripts as candidate generators when AST coverage is unavailable or incomplete.",
-      "Build field-flow and recursive coverage ledgers that account for every relevant boundary in scope.",
-      "Classify each finding as Block, Discuss, Watch, or Intentional Exception and write the report from the template.",
-    ],
-    outputs: [
-      "A coverage-led React wide-API Markdown report.",
-      "A gate recommendation aligned to findings and uncovered implementation boundaries.",
-      "Field-flow and recursive coverage ledgers with evidence labels and blind spots.",
-    ],
-    guardrails: [
-      "Do not treat a large object as a problem unless too many fields cross the wrong boundary.",
-      "Do not silently widen a component-level request to a repository-wide review.",
-      "Do not recommend a field-boundary refactor that changes user-visible UI behavior without explicit approval.",
-      "Do not recommend memoization or deep equality as the primary fix for ownership problems.",
-    ],
-    entryPoints: [
-      {
-        label: "Workflow",
-        path: "skills/react-wide-api-review/SKILL.md",
-        description: "Scope, field-flow tracing, gate mapping, and report rules.",
-      },
-      {
-        label: "Report template",
-        path: "skills/react-wide-api-review/references/report-template.md",
-        description: "Canonical report sections and coverage ledger shape.",
-      },
-      {
-        label: "Inventory helper",
-        path: "skills/react-wide-api-review/scripts/react_wide_api_inventory.py",
-        description: "Heuristic candidate scanner for wide React API surfaces.",
-      },
-      {
-        label: "Trace helper",
-        path: "skills/react-wide-api-review/scripts/react_wide_api_trace.py",
-        description: "Heuristic symbol and field-flow trace helper.",
-      },
-      {
-        label: "Runtime metadata",
-        path: "skills/react-wide-api-review/agents/openai.yaml",
-        description: "Optional agent runtime metadata for this skill.",
-      },
-    ],
-  },
-  {
-    slug: "receiving-react-wide-api-review",
-    title: "receiving-react-wide-api-review",
-    category: "Code review follow-up",
-    blurb: "Consume a React wide API review and resolve every item with evidence.",
-    lead:
-      "A response workflow for verifying, fixing, challenging, or carrying forward React wide-API review findings without disturbing Git staging state.",
-    overview:
-      "Use this skill after a react-wide-api-review report or equivalent PR feedback. It builds a disposition ledger for every finding, intentional exception, field-flow row, and open coverage row before editing, then verifies current field ownership and applies only scoped fixes or evidence-backed challenges.",
-    bestFor: [
-      "Verifying whether each wide React API finding still applies to the current code.",
-      "Fixing pass-through, context fan-out, hook return, hook options, form controller, or table controller boundaries.",
-      "Reporting a complete disposition while leaving staged changes untouched unless explicitly asked.",
-    ],
-    workflow: [
-      "Read the full report and confirm scope, baseline, completion status, and item enumeration.",
-      "Build a disposition ledger from the index, action sections, intentional exceptions, field-flow ledger, and recursive coverage ledger.",
-      "Verify each item with AST or language-server evidence when available before editing code.",
-      "State the scoped change plan and no-staging intent before applying fixes.",
-      "Fix, disprove, narrow, confirm, or carry forward every item and refresh the gate when the API shape materially changes.",
-    ],
-    outputs: [
-      "A complete disposition ledger for the consumed report.",
-      "Scoped code changes for confirmed wide-API ownership problems.",
-      "Evidence for disproved, narrowed, intentional, or carried-forward items.",
-    ],
-    guardrails: [
-      "Do not execute a report mechanically without verifying current field flow.",
-      "Do not change rendered UI behavior unless the user explicitly approves the product-facing change.",
-      "Do not stage, commit, or mutate the Git index unless the current request explicitly asks.",
-      "Do not claim completion while any finding, exception, ledger row, or coverage gap lacks a disposition.",
-    ],
-    entryPoints: [
-      {
-        label: "Workflow",
-        path: "skills/receiving-react-wide-api-review/SKILL.md",
-        description: "Disposition ledger, verification, and no-staging rules.",
-      },
-      {
-        label: "Disposition template",
-        path: "skills/receiving-react-wide-api-review/references/disposition-template.md",
-        description: "Canonical final disposition report shape.",
-      },
-      {
-        label: "Report intake helper",
-        path: "skills/receiving-react-wide-api-review/scripts/extract_react_wide_api_report_items.py",
-        description: "Heuristic report item extractor for disposition ledgers.",
-      },
-      {
-        label: "Runtime metadata",
-        path: "skills/receiving-react-wide-api-review/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],

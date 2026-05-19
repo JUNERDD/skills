@@ -4,20 +4,12 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
-## [0.1.8] - 2026-05-19
+## [0.1.9] - 2026-05-19
 
 ### Changed
 
-- Improved react-wide-api-review inventory coverage for wide component props across file-local props types, inline object types, destructuring, direct property reads, React component annotations, and JSX call sites.
-- Hardened receiving-react-wide-api-review fix guidance with React best-practice guardrails for grouped prop identity, hook dependencies, context selector boundaries, and typed command actions.
-
-## [0.1.7] - 2026-05-19
-
-### Changed
-
-- Added react-wide-api-review and receiving-react-wide-api-review skills with AST-first inventory and trace tooling.
-- Extended exhaustive-code-slimmer with AST-first candidate generation guidance and audit script support.
-- Updated the root README and website skill catalog for the new skills.
+- Restored the collection behavior and public catalog to the `v0.1.6` state after the `v0.1.7` and `v0.1.8` releases performed poorly.
+- Reverted the React wide API review skill additions and the AST-first exhaustive-code-slimmer updates from those releases.
 
 ## [0.1.6] - 2026-05-19
 
