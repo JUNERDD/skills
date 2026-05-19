@@ -207,6 +207,14 @@ If only text search or heuristic scripts are available, keep confidence lower fo
 
 ## Verify Common Wide-API Leads Carefully
 
+### Flat component props, local destructuring, or direct reads
+
+- Treat a large destructuring block, inline props object type, broad file-local props type, or many `props.foo` reads as a candidate boundary, not proof of a defect by itself.
+- Verify which fields are rendered locally, which callbacks/actions belong together, and which fields are only passed through to children.
+- Prefer grouping by owned UI concern, section view model, status, permissions, and actions when that reflects actual consumption.
+- Avoid replacing one long prop list with an opaque `data` or `options` bag that hides the same field-flow problem.
+- When grouped props cross memoized children or dependency arrays, verify referential identity or split the group by change frequency.
+
 ### Leaf receives whole domain/form/table object
 
 - Identify what the leaf actually reads.
@@ -219,11 +227,13 @@ If only text search or heuristic scripts are available, keep confidence lower fo
 - Search consumers and classify which fields each consumer reads.
 - Split by domain or update frequency only when consumers are over-subscribed.
 - Keep stable actions separate from volatile state when appropriate.
+- For high-frequency or large state, prefer selector-capable stores, `useSyncExternalStore`, context selectors, or field hooks over plain broad context.
 
 ### Hook return bag
 
 - Inspect callers and downstream props.
 - Group return values by `value`, `meta`, `status`, `permissions`, and `actions` when that matches usage.
+- Pass only the groups each child owns rather than moving the original flat bag into several broad bags.
 - Stabilize actions only when identity matters.
 
 ### Hook options object
@@ -236,6 +246,7 @@ If only text search or heuristic scripts are available, keep confidence lower fo
 
 - Verify that callbacks share one command boundary.
 - Use typed `changeField` or reducer dispatch when the callbacks encode field updates.
+- Preserve field/value type correlation in action types.
 - Preserve type safety; do not collapse to `string, unknown` unless the field set is truly dynamic.
 
 ### Spread pass-through
