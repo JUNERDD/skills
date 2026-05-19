@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Wide API Review"
+  short_description: "Audit broad React API field flow"
+  default_prompt: "Use $react-wide-api-review to audit React/TypeScript API field flow in the current scope and write a coverage-led Markdown report."

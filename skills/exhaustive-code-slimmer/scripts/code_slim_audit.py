@@ -367,6 +367,9 @@ def candidate_records(audit: dict[str, Any], emit_duplicate_spans: bool) -> Iter
             "score": max(1, int(record["bytes"])),
             "group": "empty-files",
             "reason": "empty_or_blank_text_file",
+            "evidence_mode": "Inventory-verified",
+            "analysis_source": "code_slim_audit:file_metrics",
+            "blind_spots": ["package marker allowlist may be incomplete"],
         }
 
     for group in audit["exact_duplicate_files"]:
@@ -379,6 +382,9 @@ def candidate_records(audit: dict[str, Any], emit_duplicate_spans: bool) -> Iter
                 "score": int(group["bytes_each"]),
                 "group": "duplicate-files",
                 "reason": f"byte_identical_duplicate_of:{keep}",
+                "evidence_mode": "Inventory-verified",
+                "analysis_source": "code_slim_audit:sha256",
+                "blind_spots": ["runtime file discovery or public asset references may still require oracle coverage"],
             }
 
     if emit_duplicate_spans:
@@ -394,6 +400,9 @@ def candidate_records(audit: dict[str, Any], emit_duplicate_spans: bool) -> Iter
                     "score": int(occurrence["normalized_chars"]),
                     "group": f"duplicate-block:{group['hash'][:12]}",
                     "reason": "normalized_duplicate_code_window_keep_first_occurrence",
+                    "evidence_mode": "Text-fallback",
+                    "analysis_source": "code_slim_audit:normalized_line_window",
+                    "blind_spots": ["line-window duplication is not AST-verified and may cross syntax boundaries"],
                 }
 
 
