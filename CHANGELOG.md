@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.1.7] - 2026-05-19
+
+### Changed
+
+- Added react-wide-api-review and receiving-react-wide-api-review skills with AST-first inventory and trace tooling.
+- Extended exhaustive-code-slimmer with AST-first candidate generation guidance and audit script support.
+- Updated the root README and website skill catalog for the new skills.
+
 ## [0.1.6] - 2026-05-19
 
 ### Changed
