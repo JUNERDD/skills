@@ -1,6 +1,6 @@
 ---
 name: exhaustive-code-slimmer
-description: Exhaustive code slimming, AST-first code-pruning, and approval-gated architecture cleanup workflow for maximizing removable code while preserving behavior and improving developer experience. Use when the user asks for code cleanup, ruthless simplification, dead-code removal, dependency pruning, refactoring for less code, DX architecture review, exhaustive shrinking, maximal code reduction, redundancy removal, AST-informed unused-code discovery, or aggressive but behavior-preserving simplification.
+description: Exhaustive code slimming, code-pruning, and approval-gated architecture cleanup workflow for maximizing removable code while preserving behavior and improving developer experience. Use when the user asks for code cleanup, ruthless simplification, dead-code removal, dependency pruning, refactoring for less code, DX architecture review, exhaustive shrinking, maximal code reduction, redundancy removal, or aggressive but behavior-preserving simplification.
 ---
 
 # Exhaustive Code Slimmer
@@ -10,7 +10,6 @@ Goal: remove the maximum amount of maintained code that can be removed without c
 ## Non-negotiables
 
 - Establish a behavior-preservation oracle before changing code: build, typecheck, tests, lint if relevant, smoke commands, snapshots, API contracts, and migration checks.
-- For structural claims, use AST, language-server, parser, or repository-native static-analysis evidence before regex or text-search evidence when available. Use text search and bundled scripts as candidate generators, cross-checks, or fallback only; the oracle remains the final acceptance authority.
 - Apply the code-cleanliness guide in `references/code_cleanliness_guide.md`. Slim code must remain readable, explicit, locally understandable, and easy to change; do not create dense, clever, minified, or “golfed” code.
 - Never count minification, obfuscation, whitespace-only deletion, or comment deletion as code slimming unless the user explicitly asks for artifact-size minification.
 - Do not delete public API, migrations, generated files, feature-flag branches, compatibility shims, security checks, operational logging, or configuration without evidence that the oracle covers them or the user has declared them removable.
@@ -37,10 +36,7 @@ Goal: remove the maximum amount of maintained code that can be removed without c
 
 4. **Candidate enumeration**
    - Enumerate deletion and simplification candidates across every layer: files, directories, imports, exports, functions, classes, branches, duplicated blocks, dependencies, adapters, feature flags, config, tests, docs-only code paths.
-   - For symbol, import/export, call-site, dependency-edge, branch-reachability, wrapper, or duplicate-structure claims, prefer type-aware AST, then syntax AST or language-server references, then repository-native static tools, then heuristic scripts and text search.
-   - Label candidate evidence as `AST-verified`, `AST-inferred`, `Static-tool-verified`, `Inventory-verified`, `Text-fallback`, `Runtime/coverage-observed`, or `Unknown / not covered`. Record parser or language-server blind spots in candidate JSONL when they affect confidence.
    - Mark architecture-level transformations with `requires_user_approval: true` in candidate JSONL unless the user has already approved the scope.
-   - Read `references/ast_first_candidate_generation.md` when the task depends on unused symbols, call graph reachability, import/export pruning, branch folding, duplicate function bodies, or other structural code claims.
    - Read `references/transformation_catalog.md` before proposing transformations.
 
 5. **Exhaustive shrinking**
@@ -55,13 +51,12 @@ Goal: remove the maximum amount of maintained code that can be removed without c
    - For architecture refactors, first show the chosen design, affected boundaries, migration sequence, and rollback plan; then proceed only within the approved scope.
 
 7. **Report**
-   - Summarize before/after metrics, accepted candidates, rejected high-risk candidates, approval-gated candidates, oracle commands, evidence modes used, residual blind spots, and next search frontier.
+   - Summarize before/after metrics, accepted candidates, rejected high-risk candidates, approval-gated candidates, oracle commands, residual blind spots, and next search frontier.
    - Include the shrink ratio: `(baseline nonblank LOC - final nonblank LOC) / baseline nonblank LOC`.
    - If an architecture option was proposed but not approved, report it as pending and keep the actual change set deletion-only or local-refactor-only.
 
 ## Search discipline
 
-- Prefer structured candidates over raw text edits: AST nodes, symbols, import/export edges, dependency graph edges, module boundaries, branch bodies, and function/class spans.
 - First test high-yield removals: whole files, unused dependencies, obsolete feature flags, unreachable branches, unused exports, duplicate modules.
 - Then test local reductions: function/class deletion, parameter deletion, branch folding, wrapper inlining, loop/control-flow simplification, duplicate-block consolidation.
 - Finally test cross-cutting reductions: dependency graph cuts, package splits, schema/config pruning, and generated-artifact removal.
@@ -90,7 +85,6 @@ Do not start implementation until the user chooses an option or narrows the scop
 
 - `references/research_basis.md`: distilled community/research basis.
 - `references/oracle_design.md`: behavior-preservation oracle checklist.
-- `references/ast_first_candidate_generation.md`: AST-first candidate generation, evidence labels, and fallback rules.
 - `references/transformation_catalog.md`: deletion/simplification candidate catalog.
 - `references/language_tactics.md`: language-specific tools and tactics.
 - `references/code_cleanliness_guide.md`: mandatory code-cleanliness rules for slimming.

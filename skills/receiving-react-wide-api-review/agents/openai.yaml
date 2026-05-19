@@ -1,4 +1,0 @@
-interface:
-  display_name: "Receiving React Wide API Review"
-  short_description: "Resolve React wide API review gates"
-  default_prompt: "Use $receiving-react-wide-api-review to consume a React wide API review report, verify every item, and fix or challenge findings with evidence while leaving Git staging untouched."
