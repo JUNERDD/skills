@@ -76,6 +76,46 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
+    "reduce-reinvention": {
+      category: "复用策略",
+      blurb: "发现重复劳动，并引导复用优先的整合。",
+      lead:
+        "一个复用优先工作流，用于发现已有资产、判断是否采纳或整合，并记录有证据的差异化选择。",
+      overview:
+        "当团队在代码、库、服务、模板、文档、平台流程或架构决策上重复造轮子时使用此 skill。它结合先搜索再构建、重复类型分类、build-vs-reuse 评分、迁移规划和轻量 catalog 脚本，让复用决策基于证据，而不是抽象口号。",
+      bestFor: [
+        "审计重复实现、重叠服务、重复模板或废弃 fork。",
+        "判断应该采纳、适配、包装、抽取、整合、下线，还是记录合理分歧。",
+        "创建可复用资产 catalog、ADR/RFC 记录、迁移计划、golden path 和治理说明。",
+      ],
+      workflow: [
+        "框定被重复的能力、受影响 owner、目标结果、约束和所需深度。",
+        "在提出新工作前搜索本地代码、文档、manifest、设计系统、服务 catalog、ADR、ticket 和团队约定。",
+        "按完全复制、近似克隆、共享业务规则、重叠服务、模板重复、废弃 fork 或合理分歧分类候选项。",
+        "从适配度、所有权、维护、安全、兼容性、迁移成本和未来演进角度评分复用价值。",
+        "推荐干预方式，并通过示例、owner、生命周期、反馈渠道和指标让复用路径清晰可见。",
+      ],
+      outputs: [
+        "包含路径、符号、包或服务名、文档、搜索词、owner、consumer 和置信度的证据。",
+        "带成本、风险、迁移工作量、安全或 license 顾虑以及兼容性说明的建议。",
+        "下一步行动、owner、验收标准，以及证明重复劳动减少的指标。",
+      ],
+      guardrails: [
+        "不要只因为代码长得像就消除重复；先验证领域知识、变更节奏和未来演进。",
+        "没有负责 owner、示例、版本/弃用策略和支持预期时，不要创建共享库、平台服务或 golden path。",
+        "不要只依赖自动 clone detection；结合脚本输出、代码审查、领域上下文、所有权数据和使用证据。",
+      ],
+      entryPoints: [
+        { description: "复用优先审计工作流、建议和 guardrails。", label: "工作流" },
+        { description: "让复用可发现、可维护的端到端模型。", label: "复用 playbook" },
+        { description: "重复造轮子审计的搜索策略和证据收集提示。", label: "审计清单" },
+        { description: "Build-vs-reuse 评分和建议规则。", label: "决策矩阵" },
+        { description: "可填写的审计、ADR/RFC、catalog、迁移和例外模板。", label: "模板" },
+        { description: "扫描仓库中的重复代码和重复造轮子信号。", label: "重复造轮子审计" },
+        { description: "生成轻量可复用资产清单。", label: "复用 catalog" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
     "git-commit": {
       category: "Git 工作流",
       blurb: "根据 staged diff 起草 Conventional Commit 消息。",
@@ -175,6 +215,41 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       ],
       entryPoints: [
         { description: "委派决策、worker prompt 契约、综合和验证规则。", label: "工作流" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
+    "plan-mode": {
+      category: "规划",
+      blurb: "在编辑前规划复杂或高风险工作。",
+      lead:
+        "一个无修改规划工作流，用于收集证据、消除歧义，并产出需要批准的实施计划。",
+      overview:
+        "当任务复杂、模糊、高风险或范围较广，过早编辑会造成返工或偏离用户意图时使用此 skill。它让 agent 留在只读探索中，提出聚焦的澄清问题，明确可能涉及的文件和验证路径，并在执行前等待明确批准。",
+      bestFor: [
+        "在编辑前规划多文件实现、架构、路由、数据流或权衡较多的工作。",
+        "为 dirty worktree、迁移、设置、部署、生成代码或其他高影响面保持严格边界。",
+        "创建包含受影响区域、顺序步骤、验证、非目标和关键风险的具体计划。",
+      ],
+      workflow: [
+        "重述目标，并定义无修改规划边界。",
+        "只用只读的文件、代码、文档、诊断或 subagent 探索来研究必要信息。",
+        "当缺失决策会实质改变实现时，尽早提问。",
+        "给出简洁计划，包含范围、文件或模块、实施顺序、验证、非目标和风险。",
+        "在编辑、stage、启动写入型工具或改变系统前等待批准。",
+      ],
+      outputs: [
+        "针对当前任务的具体批准门控计划。",
+        "当歧义会改变计划时，提出聚焦澄清问题。",
+        "批准后清晰交接到执行，并包含承诺的验证步骤。",
+      ],
+      guardrails: [
+        "规划时不要编辑文件、创建文件、stage commits、安装包、启动服务或运行写入型脚本。",
+        "不要把未解决的产品、数据、安全或架构假设藏在最终计划里。",
+        "不要把用户批准研究误当成批准实现无关清理。",
+      ],
+      entryPoints: [
+        { description: "规划边界、工作流、澄清规则和交接要求。", label: "工作流" },
+        { description: "生命周期、模式边界、研究策略、图示和常见失败模式。", label: "架构参考" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },

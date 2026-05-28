@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reduce Reinvention"
+  short_description: "Audit duplicate work and guide reuse"
+  default_prompt: "Use $reduce-reinvention to audit this repository for duplicated implementations and propose a reuse-first consolidation plan."

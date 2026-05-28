@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Mode"
+  short_description: "Plan before editing or executing"
+  default_prompt: "Use $plan-mode to investigate a task read-only, ask focused clarifying questions, and produce an approval-gated implementation plan."
