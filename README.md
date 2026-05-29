@@ -246,7 +246,7 @@ Key entry points:
 
 ### `plan-mode`
 
-[`skills/plan-mode/`](./skills/plan-mode/) keeps agents inside an approval-gated planning boundary for complex, ambiguous, risky, or multi-file work. It separates read-only research, focused clarification, concrete planning, and explicit handoff before any mutation.
+[`skills/plan-mode/`](./skills/plan-mode/) mirrors Cursor's Plan Mode loop for complex, ambiguous, risky, or multi-file work: create a disk-backed editable Markdown plan, research the codebase into file/code references, ask focused clarification questions, maintain buildable todos, pressure-test non-trivial plans with `$grill-me`, and build only after the plan is approved.
 
 Install:
 
@@ -258,11 +258,14 @@ Best for:
 
 - planning implementation for broad or multi-file tasks before editing
 - tracing routes, data flow, architecture constraints, tradeoffs, or risky operations
-- enforcing no-mutation discovery until the user approves a concrete plan
+- maintaining an editable plan document with file references and checkbox todos
+- invoking `$grill-me` to pressure-test meaningful assumptions, risks, and rollout edges
+- building all or selected todos only after the user approves the plan
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/plan-mode/SKILL.md`](./skills/plan-mode/SKILL.md)
+- Plan artifact helper: [`skills/plan-mode/scripts/plan_artifact.py`](./skills/plan-mode/scripts/plan_artifact.py)
 - Architecture reference: [`skills/plan-mode/references/architecture.md`](./skills/plan-mode/references/architecture.md)
 - Optional runtime metadata: [`skills/plan-mode/agents/openai.yaml`](./skills/plan-mode/agents/openai.yaml)
 

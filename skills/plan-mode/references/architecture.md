@@ -16,7 +16,7 @@
 
 ## Purpose
 
-Plan mode is an approval-gated operating mode for work where premature execution can cause churn, data loss, unclear product behavior, or edits outside the user's intent. It separates thinking from mutation: the agent may inspect, reason, and ask, but must not change the system until the user approves a concrete plan.
+Plan mode is a Cursor-style planning workflow for work where premature execution can cause churn, data loss, unclear product behavior, or edits outside the user's intent. It separates planning from building: the agent creates a disk-backed editable Markdown plan, researches the codebase into that plan, asks clarifying questions, keeps file references and todos current, and builds only from the approved plan.
 
 ## Lifecycle
 
@@ -26,14 +26,18 @@ flowchart TD
   classify --> clearSmall["Clear small task"]
   classify --> needsPlan["Ambiguous, risky, broad, or multi-file"]
   clearSmall --> answerOrSwitch["Answer directly or request execution mode"]
-  needsPlan --> readOnlyResearch["Read-only research"]
-  readOnlyResearch --> ambiguityCheck["Blocking ambiguity?"]
+  needsPlan --> createArtifact["Create or reuse plan file"]
+  createArtifact --> readOnlyResearch["Read-only research"]
+  readOnlyResearch --> updatePlan["Update file refs and todos"]
+  updatePlan --> ambiguityCheck["Blocking ambiguity?"]
   ambiguityCheck -->|Yes| askQuestion["Ask focused question"]
-  askQuestion --> readOnlyResearch
-  ambiguityCheck -->|No| createPlan["Create approval-gated plan"]
-  createPlan --> userDecision["User approves, rejects, or revises"]
-  userDecision -->|Approve| execute["Switch to execution"]
-  userDecision -->|Revise| readOnlyResearch
+  askQuestion --> updateAfterAnswer["Update plan with answer"]
+  updateAfterAnswer --> readOnlyResearch
+  ambiguityCheck -->|No| pressureTest["Invoke $grill-me when non-trivial"]
+  pressureTest --> readyPlan["Mark plan ready for approval"]
+  readyPlan --> userDecision["User approves, edits, rejects, or selects todos"]
+  userDecision -->|Approve all or selected| execute["Build from plan"]
+  userDecision -->|Edit or revise| readOnlyResearch
   userDecision -->|Reject| stopNode["Stop or ask next step"]
 ```
 
@@ -50,18 +54,21 @@ Allowed in plan mode:
 - Use semantic search, web/docs lookup, and read-only MCP/resource tools.
 - Use read-only subagents for exploration when delegation is available.
 - Ask structured questions.
-- Produce or update the approval plan through the platform plan tool.
+- Invoke `$grill-me` for pressure-testing when the plan is non-trivial.
+- Produce or update a chat or platform-plan summary only after the Markdown plan file exists.
+- Create or update the required Markdown plan artifact as an allowed planning write.
+- Create or update `$grill-me` transcript and planning-ready outcome files when `$grill-me` is invoked.
 
 Not allowed in plan mode:
 
-- Edit, create, delete, move, format, or generate project files.
+- Edit, create, delete, move, format, or generate project files, except for allowed planning artifacts: the required Markdown plan artifact and `$grill-me` transcript/outcome files.
 - Run package managers, migrations, generators, formatters, autofixers, install commands, or scripts that write output.
 - Start services, browser automation, deployments, or long-running workflows unless the plan itself is about how to do that later and the action is strictly read-only.
 - Stage, commit, amend, push, reset, checkout, or otherwise mutate Git state.
 - Modify settings, environment files, credentials, or project configuration.
 - Treat a user's approval of research as approval to implement.
 
-If a tool can be used either read-only or mutating, choose only the read-only invocation in plan mode. If the side effects are unclear, do not run it; ask or inspect documentation first.
+If a tool can be used either read-only or mutating, choose only the read-only invocation in plan mode unless it is writing an allowed planning artifact. If the side effects are unclear, do not run it; ask or inspect documentation first.
 
 ## Entry Conditions
 
@@ -122,15 +129,48 @@ Use structured multiple choice when possible. Keep choices few, include the reco
 
 ## Plan Creation
 
-The plan is the approval artifact. It should be concise enough to review and specific enough to execute.
+The Markdown plan file is the approval artifact and the build input. It should be concise enough to review, editable enough for the user to change directly, and specific enough that an execution pass can build from selected todos.
+
+Create or update a project-local Markdown plan file for every plan-mode run unless the user explicitly forbids file output or the environment cannot write files. Do not use the platform plan or chat message as the only approval artifact. They may summarize the plan after the file exists.
+
+Use `scripts/plan_artifact.py` to create and validate the artifact:
+
+1. Resolve the helper from the workspace copy first, then installed skill locations.
+2. Run `python3 "$helper" init --workspace "$workspace_root" --title "<plan title>"`.
+3. Use `--path "<path>" --reuse-existing` when the user provides a plan path.
+4. Fill the plan file with file/code references, clarifying questions, editable todos, build notes, validation, and risks.
+5. Run `python3 "$helper" check "$plan_file"` before asking for approval.
+6. Fix missing headings or placeholders and rerun the check. If the check cannot pass, report why before requesting any implementation approval.
+
+Before asking for approval on a non-trivial plan, invoke `$grill-me` as the pressure-test step. Use it for architecture plans, broad implementation plans, migration plans, risky operational changes, product behavior decisions, and any plan where hidden assumptions could materially change execution. Skip it only when the task is narrow, already decided, or purely mechanical.
+
+When invoking `$grill-me`:
+
+- Let `$grill-me` ask one logged question at a time and follow its own logging/finalization rules.
+- Treat its transcript and planning-ready outcome as allowed planning artifacts.
+- Do not duplicate its role with informal pressure-test questions that are not logged.
+- Add transcript and outcome links to the plan. Include only a terse status or one-line summary; do not inline the full outcome content because it may be large.
+
+For plan file placement:
+
+- Use the user-provided path when one is given.
+- Otherwise reuse an existing repository plan directory or template.
+- If no convention exists, use `docs/plans/<YYYY-MM-DD>-<short-topic>.md`.
+- Keep planning artifacts as the only planning-mode writes. Do not edit implementation files, generated files, settings, or Git state.
+- Mark the file `Draft - awaiting approval` until the user accepts it.
+- Update the same file when the plan changes after feedback.
+- Cite the path in the chat response and summarize only the highest-signal points.
 
 Include:
 
-- Goal and scope.
-- Affected files, directories, modules, or systems.
-- Ordered implementation steps.
+- Plan status and output path, when a plan file exists.
+- Summary of the user goal and scope.
+- Clarifying questions and answers, or explicit blockers.
+- File paths, symbols, routes, schemas, docs, diagnostics, and other code references gathered during research.
+- Editable todo checklist with dependencies or selected todos when relevant.
+- `$grill-me` transcript and outcome paths when a pressure-test was run.
+- Build-from-plan notes that state how execution should start after approval.
 - Validation steps.
-- Non-goals or exclusions when they prevent scope creep.
 - Risks, tradeoffs, or assumptions that matter to approval.
 
 Avoid:
@@ -141,7 +181,7 @@ Avoid:
 - Overly detailed line-by-line instructions unless the task requires precision.
 - Promises to run validations that are not available or appropriate.
 
-When the platform provides a plan approval tool, use it. Tool names vary by environment; use the available plan, approval, or task-planning mechanism instead of assuming a specific tool name. Otherwise, present the plan in chat and ask for explicit approval before executing.
+When the platform provides a plan approval tool, use it only as a concise mirror of the plan file. Tool names vary by environment; use the available plan, approval, or task-planning mechanism instead of assuming a specific tool name. Treat the file as the durable source of truth.
 
 ## Mermaid Guidance
 
@@ -157,19 +197,21 @@ Follow these constraints:
 
 ## Execution Handoff
 
-Approval changes the operating mode; it does not remove engineering judgment.
+Approval changes the operating mode from planning to building; it does not remove engineering judgment.
 
 Before executing:
 
 1. Re-read the newest user message and any plan edits.
-2. Confirm the requested scope still matches the current repository state.
-3. Preserve unrelated user changes.
-4. Start with the first approved task.
+2. Re-read the plan file from disk.
+3. Confirm whether approval covers all todos or only selected todos.
+4. Confirm the requested scope still matches the current repository state.
+5. Preserve unrelated user changes.
+6. Start with the first approved todo.
 
 During execution:
 
 - Keep edits scoped to the plan.
-- If new evidence invalidates the plan, pause and ask or produce a revised plan.
+- If new evidence invalidates the plan, pause, update the plan file, and ask again.
 - Do not silently expand scope.
 - Validate according to the plan and repository rules.
 
@@ -182,6 +224,11 @@ After execution:
 ## Common Failure Modes
 
 - Planning after already mutating files. Fix by stopping, reporting the accidental mutation, and asking how to proceed.
+- Presenting only a chat or platform-plan artifact. Fix by creating or updating the Markdown plan file, validating it with `plan_artifact.py check`, and citing the path.
+- Treating the plan file as a one-time export instead of a live editable document. Fix by updating the same file after research, answers, user edits, and plan revisions.
+- Building without rereading user edits to the plan file. Fix by rereading the plan from disk before execution.
+- Failing to invoke `$grill-me` for a plan with meaningful assumptions, tradeoffs, or failure modes. Fix by running the pressure-test before asking for implementation approval.
+- Failing to create a plan file for a plan-mode run. Fix by writing or updating only the Markdown plan artifact, validating it, then citing the path.
 - Asking too many questions before reading obvious context. Fix by doing a small read-only pass first.
 - Creating a plan with unresolved decisions. Fix by asking the blocking question before the approval artifact.
 - Delegating the entire decision to a subagent. Fix by keeping the parent responsible for synthesis and approval.
@@ -193,30 +240,54 @@ After execution:
 Use this structure for simple plans:
 
 ```markdown
-## Plan
+Status: Draft - awaiting approval
 
-1. Inspect `[path]` to confirm `[contract]`.
-2. Update `[file]` to `[behavior]`.
-3. Verify with `[command or manual check]`.
+## Summary
+
+[One paragraph]
+
+## File And Code References
+
+- `[path]` - [why it matters]
+
+## Plan Todos
+
+- [ ] Inspect `[path]` to confirm `[contract]`.
+- [ ] Update `[file]` to `[behavior]`.
+- [ ] Verify with `[command or manual check]`.
 ```
 
 Use this structure for larger plans:
 
 ```markdown
-## Goal
+Status: Draft - awaiting approval
+
+## Summary
 
 [One paragraph]
 
-## Scope
+## Clarifying Questions
 
-- Change: `[paths]`
-- Do not change: `[paths or behaviors]`
+- [x] [Question] -> [Answer]
 
-## Steps
+## File And Code References
 
-1. [Concrete implementation step]
-2. [Concrete implementation step]
-3. [Validation]
+- `[path]` - [symbol, route, schema, or contract]
+
+## Plan Todos
+
+- [ ] [Todo with dependency or affected area]
+- [ ] [Todo with dependency or affected area]
+
+## Build From Plan
+
+- Ready to build: No
+- Selected todos: All after approval
+- Execution notes: [handoff constraints]
+
+## Validation
+
+- [command or manual check]
 
 ## Risks
 
