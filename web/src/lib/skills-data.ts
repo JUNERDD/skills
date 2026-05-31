@@ -583,17 +583,19 @@ export const SKILLS: SkillDetail[] = [
     category: "Code review",
     blurb: "Review code changes for user-visible behavioral regressions.",
     lead:
-      "A coverage-led audit for broken or degraded user journeys, changed defaults, stale data, and visible behavior changes.",
+      "A coverage-led audit for broken or degraded user journeys, changed defaults, stale data, and behavior-path changes.",
     overview:
-      "Use this skill when a change set needs a user-visible behavior gate. It reviews a declared scope, separates intended visible changes from regressions, and writes a report that maps every touched surface to reviewed, intentional, not covered, or not relevant.",
+      "Use this skill when a change set needs a user-visible behavior gate. It reviews a declared scope, separates intended visible changes from regressions, builds scoped behavior-graph deltas when they clarify affected paths, and writes a report that maps every touched surface to reviewed, intentional, not covered, or not relevant.",
     bestFor: [
       "Checking whether refactors or feature work broke user-facing flows.",
       "Auditing loading, error, permission, retry, ordering, export, email, or CLI-output changes.",
+      "Tracing changed inputs, guards, transforms, and outputs without building a whole-repo call graph.",
       "Producing a review artifact with severity tied to the strongest unresolved finding.",
     ],
     workflow: [
       "Set or infer the review scope and read requirements when available.",
       "Map touched user-visible surfaces before judging behavior.",
+      "Build scoped behavior graph baselines for graphable user-visible or unknown-impact surfaces.",
       "Compare current behavior against baseline, intent, and user expectations.",
       "Write all distinct findings, not only the top few.",
       "Record intentional visible changes and uncovered surfaces in the coverage ledger.",
@@ -601,7 +603,7 @@ export const SKILLS: SkillDetail[] = [
     outputs: [
       "A Markdown regression-review report.",
       "A gate recommendation aligned to findings and coverage.",
-      "A complete findings index and coverage ledger.",
+      "A complete findings index, behavior graph deltas, and coverage ledger.",
     ],
     guardrails: [
       "Do not silently sample a large review scope.",
@@ -634,14 +636,16 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A response workflow for resolving regression-review findings with current evidence and scoped fixes.",
     overview:
-      "Use this skill after a regression-review report or related PR feedback. It verifies every finding, intentional visible change, and coverage gap against the current code before editing, then fixes proven regressions and challenges stale or intentional findings with evidence.",
+      "Use this skill after a regression-review report or related PR feedback. It verifies every finding, behavior graph delta, intentional visible change, and coverage gap against the current code before editing, then fixes proven regressions and challenges stale or intentional findings with evidence.",
     bestFor: [
       "Re-checking a regression gate against the current diff and baseline.",
+      "Reconciling behavior graph deltas with findings and coverage rows.",
       "Fixing only proven user-visible regressions.",
       "Separating real regressions from intentional product changes.",
     ],
     workflow: [
       "Read the report and list every finding, intentional change, and uncovered surface.",
+      "Reconcile behavior graph deltas with the current code path and coverage ledger.",
       "Verify each item against the current code, baseline, and visible behavior.",
       "Create a disposition ledger before editing.",
       "Fix confirmed regressions with narrowly scoped changes.",

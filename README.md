@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.1.9`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.0`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -414,7 +414,7 @@ Key entry points:
 
 ### `regression-review`
 
-[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, and marks uncovered surfaces explicitly.
+[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, builds scoped behavior-graph deltas for affected surfaces when useful, and marks uncovered surfaces explicitly.
 
 Install:
 
@@ -426,6 +426,7 @@ Best for:
 
 - checking whether a refactor or feature work breaks user-facing flows
 - auditing changed defaults, loading states, retries, ordering, or exported output
+- tracing changed inputs, guards, transforms, and outputs through scoped behavior graphs
 - writing a review artifact that keeps severity aligned with the strongest unresolved finding while showing full reviewed coverage
 
 Key entry points:
@@ -436,7 +437,7 @@ Key entry points:
 
 ### `receiving-regression-review`
 
-[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
+[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, behavior-graph delta, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
 
 Install:
 
@@ -447,6 +448,7 @@ npx skills@latest add JUNERDD/skills --skill receiving-regression-review
 Best for:
 
 - re-checking a regression gate against the current diff and baseline
+- reconciling behavior-graph deltas with findings and coverage rows
 - fixing only proven user-visible regressions instead of blindly following review comments
 - separating real regressions from intentional product deltas with stronger evidence
 - closing or explicitly carrying forward `Not covered` user-visible surfaces from the coverage ledger

@@ -392,17 +392,19 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
     "regression-review": {
       category: "代码审查",
       blurb: "审查代码变更是否引入用户可见行为回归。",
-      lead: "一个 coverage-led 审计，用于发现破坏或退化的用户路径、默认值变化、陈旧数据和可见行为变化。",
+      lead: "一个 coverage-led 审计，用于发现破坏或退化的用户路径、默认值变化、陈旧数据和行为路径变化。",
       overview:
-        "当一个变更集需要用户可见行为门禁时使用此 skill。它审查声明范围，把有意可见变化与回归分开，并写出报告，将每个触及 surface 标记为 reviewed、intentional、not covered 或 not relevant。",
+        "当一个变更集需要用户可见行为门禁时使用此 skill。它审查声明范围，把有意可见变化与回归分开，在能澄清受影响路径时构建 scoped behavior-graph deltas，并写出报告，将每个触及 surface 标记为 reviewed、intentional、not covered 或 not relevant。",
       bestFor: [
         "检查重构或功能工作是否破坏了用户可见流程。",
         "审计 loading、error、permission、retry、ordering、export、email 或 CLI-output 变化。",
+        "追踪发生变化的 input、guard、transform 和 output，而不是构建全仓调用图。",
         "产出 severity 与最强未解决 finding 对齐的审查 artifact。",
       ],
       workflow: [
         "设定或推断审查范围，并在可用时阅读需求。",
         "在判断行为前映射触及的用户可见 surfaces。",
+        "为可建图的用户可见或未知影响 surface 构建 scoped behavior graph baseline。",
         "把当前行为与基线、意图和用户期望对比。",
         "写出所有不同 findings，而不是只写前几个。",
         "在 coverage ledger 中记录有意可见变化和未覆盖 surfaces。",
@@ -410,7 +412,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       outputs: [
         "一份 Markdown regression-review report。",
         "与 findings 和 coverage 对齐的 gate recommendation。",
-        "完整 findings index 和 coverage ledger。",
+        "完整 findings index、behavior graph deltas 和 coverage ledger。",
       ],
       guardrails: [
         "不要静默抽样大范围。",
@@ -428,14 +430,16 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "消费 regression-review 报告，并在改代码前验证每个 finding。",
       lead: "一个响应工作流，用当前证据和有范围修复解决 regression-review findings。",
       overview:
-        "在收到 regression-review 报告或相关 PR feedback 后使用此 skill。它会在编辑前用当前代码验证每个 finding、有意可见变化和 coverage gap，然后修复已证明的回归，并用证据挑战过时或有意的 findings。",
+        "在收到 regression-review 报告或相关 PR feedback 后使用此 skill。它会在编辑前用当前代码验证每个 finding、behavior graph delta、有意可见变化和 coverage gap，然后修复已证明的回归，并用证据挑战过时或有意的 findings。",
       bestFor: [
         "用当前 diff 和基线重新检查 regression gate。",
+        "把 behavior graph deltas 与 findings 和 coverage rows 对齐。",
         "只修复已证明的用户可见回归。",
         "把真实回归与有意产品变化分开。",
       ],
       workflow: [
         "阅读报告并列出每个 finding、有意变化和未覆盖 surface。",
+        "把 behavior graph deltas 与当前代码路径和 coverage ledger 对齐。",
         "用当前代码、基线和可见行为验证每个条目。",
         "编辑前建立 disposition ledger。",
         "用窄范围修改修复已确认回归。",
