@@ -1,4 +1,4 @@
 interface:
   display_name: "Receiving Regression Review"
-  short_description: "Close regression review findings"
-  default_prompt: "Use $receiving-regression-review to consume a coverage-led regression-review report, build a disposition ledger for every finding, intentional change, and coverage gap, then verify, fix, challenge, or carry items forward with evidence without staging changes unless explicitly requested."
+  short_description: "Resolve regression gate reports"
+  default_prompt: "Use $receiving-regression-review to consume a regression-review report, reconcile findings, behavior graph deltas, intentional changes, and coverage gaps, then verify or fix each item without staging changes unless explicitly requested."

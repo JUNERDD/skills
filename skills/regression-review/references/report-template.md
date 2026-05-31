@@ -19,6 +19,7 @@
   3. `F#` `[short title]`
 - Findings count: `Block [n] | Discuss [n] | Watch [n] | Intentional [n]`
 - Coverage confidence: `[high | medium | low]`
+- Behavior graph coverage: `[built for n surfaces | partial - reason | skipped - reason]`
 - Biggest blind spot: `[short phrase, or None identified]`
 
 ## Complete Findings Index
@@ -123,6 +124,14 @@ Every touched user-visible or unknown-impact surface must appear here, including
 
 ## Evidence Appendix
 
+### Behavior Graph Deltas
+
+Include one row for each touched user-visible or unknown-impact surface where a scoped behavior graph was built. If no behavior graph was useful, write `None built - [reason]`.
+
+| ID | Surface | Baseline path | After-change path | Delta | Ledger / finding link |
+| --- | --- | --- | --- | --- | --- |
+| `B1` | `[surface]` | `[Entry -> Input -> Guards -> Transform -> Output/effect]` | `[Entry -> Input -> Guards -> Transform -> Output/effect]` | `[changed input, moved/removed guard, changed transform, changed output, or none]` | `[Finding F# | Intentional I# | Reviewed | Not covered]` |
+
 ### Diff Inventory
 
 | File or area | Classification | User-visible path considered |
@@ -162,4 +171,5 @@ Use this section for meaningful candidates that were investigated and dismissed,
 - `[yes | no]` Every finding in an action section appears in `Complete Findings Index`.
 - `[yes | no]` Every `Finding F#` ledger row has a matching card.
 - `[yes | no]` Every `Not covered` row has a reason and next verification step.
+- `[yes | no]` Every graphable user-visible or unknown-impact surface has a behavior graph delta row or a ledger reason for skipping it.
 - `[yes | no]` Recommendation follows the mapping rules from the skill.

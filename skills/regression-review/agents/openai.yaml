@@ -1,4 +1,4 @@
 interface:
   display_name: "Regression Review"
-  short_description: "Complete user-visible regression audit"
-  default_prompt: "Use $regression-review to perform a scoped, coverage-led audit of the current changes and write a Markdown report with all distinct user-visible regression findings, intentional visible changes, coverage gaps, and a gate recommendation."
+  short_description: "Behavior-path regression audit"
+  default_prompt: "Use $regression-review to perform a scoped, behavior-graph-led audit of the current changes and write a Markdown report with findings, intentional changes, coverage gaps, and a gate recommendation."

@@ -115,6 +115,80 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "reduce-reinvention",
+    title: "reduce-reinvention",
+    category: "Reuse strategy",
+    blurb: "Find duplicated effort and guide reuse-first consolidation.",
+    lead:
+      "A reuse-first workflow for discovering existing assets, deciding whether to adopt or consolidate, and documenting justified divergence.",
+    overview:
+      "Use this skill when teams are duplicating code, libraries, services, templates, docs, platform workflows, or architecture decisions. It combines search-before-building habits, duplicate classification, build-vs-reuse scoring, migration planning, and lightweight catalog scripts so reuse decisions are evidence-backed instead of abstract mandates.",
+    bestFor: [
+      "Auditing duplicated implementations, overlapping services, repeated templates, or abandoned forks.",
+      "Deciding whether to adopt, adapt, wrap, extract, consolidate, sunset, or justify divergence.",
+      "Creating reusable-asset catalogs, ADR/RFC records, migration plans, golden paths, and governance notes.",
+    ],
+    workflow: [
+      "Frame the duplicated capability, affected owners, target outcome, constraints, and requested depth.",
+      "Search local code, docs, manifests, design systems, service catalogs, ADRs, tickets, and conventions before proposing new work.",
+      "Classify duplicate candidates by exact copy, near clone, shared business rule, overlapping service, template duplication, abandoned fork, or justified divergence.",
+      "Score reuse against fitness, ownership, maintenance, security, compatibility, migration cost, and future evolution.",
+      "Recommend an intervention and make the reusable path obvious with examples, owners, lifecycle, feedback channels, and metrics.",
+    ],
+    outputs: [
+      "Evidence with file paths, symbols, package or service names, docs, search terms, owners, consumers, and confidence.",
+      "A recommendation with cost, risk, migration effort, security or license concerns, and compatibility notes.",
+      "Next actions, owners, acceptance criteria, and a metric that proves duplicated effort decreased.",
+    ],
+    guardrails: [
+      "Do not eliminate duplication solely because code looks alike; verify domain knowledge, change cadence, and future evolution.",
+      "Do not create shared libraries, platform services, or golden paths without accountable ownership, examples, versioning, and support expectations.",
+      "Do not rely only on automated clone detection; combine script output with code review, domain context, ownership data, and usage evidence.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/reduce-reinvention/SKILL.md",
+        description: "Reuse-first audit workflow, recommendations, and guardrails.",
+      },
+      {
+        label: "Reuse playbook",
+        path: "skills/reduce-reinvention/references/reuse-playbook.md",
+        description: "End-to-end model for making reuse discoverable and maintainable.",
+      },
+      {
+        label: "Audit checklist",
+        path: "skills/reduce-reinvention/references/audit-checklist.md",
+        description: "Search tactics and evidence-gathering prompts for reinvention audits.",
+      },
+      {
+        label: "Decision matrix",
+        path: "skills/reduce-reinvention/references/decision-matrix.md",
+        description: "Build-vs-reuse scoring and recommendation rules.",
+      },
+      {
+        label: "Templates",
+        path: "skills/reduce-reinvention/references/templates.md",
+        description: "Ready-to-fill audit, ADR/RFC, catalog, migration, and exception templates.",
+      },
+      {
+        label: "Reinvention audit",
+        path: "skills/reduce-reinvention/scripts/reinvention_audit.py",
+        description: "Repository scanner for duplicate-code and reinvention signals.",
+      },
+      {
+        label: "Reuse catalog",
+        path: "skills/reduce-reinvention/scripts/reuse_catalog.py",
+        description: "Lightweight reusable-asset inventory generator.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/reduce-reinvention/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "git-commit",
     title: "git-commit",
     category: "Git workflow",
@@ -245,6 +319,64 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/multitask-coordinator/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "plan-mode",
+    title: "plan-mode",
+    category: "Planning",
+    blurb: "Create Cursor-style editable plan files before building.",
+    lead:
+      "A Cursor-style planning workflow that creates an editable Markdown plan file with code references and todos, then builds only after approval.",
+    overview:
+      "Use this skill when work is complex, ambiguous, risky, or broad enough that premature edits would create churn or damage user intent. It mirrors Cursor's Plan Mode loop: create or update a disk-backed editable plan file, research the codebase into file and code references, ask focused clarification questions, maintain buildable todos, invoke `grill-me` for non-trivial pressure-testing, validate the plan artifact, and build only from the approved plan.",
+    bestFor: [
+      "Planning multi-file implementation, architecture, routing, data-flow, or tradeoff-heavy work.",
+      "Maintaining a live Markdown plan document with file references, code references, and checkbox todos.",
+      "Invoking `grill-me` to pressure-test meaningful assumptions, risks, failure modes, and rollout or rollback edges.",
+      "Holding a strict boundary around dirty worktrees, migrations, settings, deployment, generated code, or other high-blast-radius surfaces.",
+      "Building all or selected todos only after the user approves the plan.",
+    ],
+    workflow: [
+      "Create or reuse the Markdown plan file immediately and cite its path.",
+      "Research only what is needed, then update the plan with concrete file paths, code references, constraints, and open questions.",
+      "Ask clarifying questions when decisions would change the plan, and update the file after each answer.",
+      "Maintain editable checkbox todos that can be selected and built from later.",
+      "Invoke `grill-me` before approval when the plan has meaningful assumptions, tradeoffs, failure modes, or scope edges.",
+      "Validate the plan artifact, summarize it in chat, and wait for approval before building from all or selected todos.",
+    ],
+    outputs: [
+      "A concrete approval-gated Markdown plan file with file/code references and editable todos.",
+      "`grill-me` transcript and planning-ready outcome paths when a pressure-test was needed.",
+      "Focused clarification questions when ambiguity would change the plan.",
+      "A clean build-from-plan handoff after approval, including promised validation steps.",
+    ],
+    guardrails: [
+      "Do not edit implementation files, stage commits, install packages, start services, or run write-oriented scripts while planning; plan files and `grill-me` logs/outcomes are the only allowed writes.",
+      "Do not hide unresolved product, data, safety, or architecture assumptions inside the final plan.",
+      "Do not build without rereading the plan file and confirming whether approval covers all todos or only selected todos.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/plan-mode/SKILL.md",
+        description: "Planning boundary, workflow, clarification rules, and handoff requirements.",
+      },
+      {
+        label: "Plan artifact helper",
+        path: "skills/plan-mode/scripts/plan_artifact.py",
+        description: "Creates and validates required Markdown plan artifacts.",
+      },
+      {
+        label: "Architecture reference",
+        path: "skills/plan-mode/references/architecture.md",
+        description: "Lifecycle, mode boundary, research strategy, diagrams, and common failure modes.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/plan-mode/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],
@@ -451,17 +583,19 @@ export const SKILLS: SkillDetail[] = [
     category: "Code review",
     blurb: "Review code changes for user-visible behavioral regressions.",
     lead:
-      "A coverage-led audit for broken or degraded user journeys, changed defaults, stale data, and visible behavior changes.",
+      "A coverage-led audit for broken or degraded user journeys, changed defaults, stale data, and behavior-path changes.",
     overview:
-      "Use this skill when a change set needs a user-visible behavior gate. It reviews a declared scope, separates intended visible changes from regressions, and writes a report that maps every touched surface to reviewed, intentional, not covered, or not relevant.",
+      "Use this skill when a change set needs a user-visible behavior gate. It reviews a declared scope, separates intended visible changes from regressions, builds scoped behavior-graph deltas when they clarify affected paths, and writes a report that maps every touched surface to reviewed, intentional, not covered, or not relevant.",
     bestFor: [
       "Checking whether refactors or feature work broke user-facing flows.",
       "Auditing loading, error, permission, retry, ordering, export, email, or CLI-output changes.",
+      "Tracing changed inputs, guards, transforms, and outputs without building a whole-repo call graph.",
       "Producing a review artifact with severity tied to the strongest unresolved finding.",
     ],
     workflow: [
       "Set or infer the review scope and read requirements when available.",
       "Map touched user-visible surfaces before judging behavior.",
+      "Build scoped behavior graph baselines for graphable user-visible or unknown-impact surfaces.",
       "Compare current behavior against baseline, intent, and user expectations.",
       "Write all distinct findings, not only the top few.",
       "Record intentional visible changes and uncovered surfaces in the coverage ledger.",
@@ -469,7 +603,7 @@ export const SKILLS: SkillDetail[] = [
     outputs: [
       "A Markdown regression-review report.",
       "A gate recommendation aligned to findings and coverage.",
-      "A complete findings index and coverage ledger.",
+      "A complete findings index, behavior graph deltas, and coverage ledger.",
     ],
     guardrails: [
       "Do not silently sample a large review scope.",
@@ -502,14 +636,16 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A response workflow for resolving regression-review findings with current evidence and scoped fixes.",
     overview:
-      "Use this skill after a regression-review report or related PR feedback. It verifies every finding, intentional visible change, and coverage gap against the current code before editing, then fixes proven regressions and challenges stale or intentional findings with evidence.",
+      "Use this skill after a regression-review report or related PR feedback. It verifies every finding, behavior graph delta, intentional visible change, and coverage gap against the current code before editing, then fixes proven regressions and challenges stale or intentional findings with evidence.",
     bestFor: [
       "Re-checking a regression gate against the current diff and baseline.",
+      "Reconciling behavior graph deltas with findings and coverage rows.",
       "Fixing only proven user-visible regressions.",
       "Separating real regressions from intentional product changes.",
     ],
     workflow: [
       "Read the report and list every finding, intentional change, and uncovered surface.",
+      "Reconcile behavior graph deltas with the current code path and coverage ledger.",
       "Verify each item against the current code, baseline, and visible behavior.",
       "Create a disposition ledger before editing.",
       "Fix confirmed regressions with narrowly scoped changes.",

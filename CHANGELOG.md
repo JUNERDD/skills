@@ -4,6 +4,16 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.0] - 2026-05-31
+
+### Changed
+
+- Added plan-mode and reduce-reinvention skills to the collection.
+- Expanded plan-mode with Cursor-style planning workflow guidance.
+- Refined git-commit commit drafting rules.
+- Added scoped behavior-graph guidance to regression-review and receiving-regression-review.
+- Fixed debug collector dashboard detail scrolling for large payloads.
+
 ## [0.1.9] - 2026-05-19
 
 ### Changed

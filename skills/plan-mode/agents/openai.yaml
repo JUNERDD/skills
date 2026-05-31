@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Mode"
+  short_description: "Plan before editing or executing"
+  default_prompt: "Use $plan-mode to create or update a Cursor-style editable Markdown plan file with file references and todos, invoke $grill-me for non-trivial pressure-testing, validate the plan artifact, and build only after approval."

@@ -1,6 +1,6 @@
 ---
 name: receiving-regression-review
-description: Consume a coverage-led `regression-review` Markdown report or related PR feedback and turn it into evidence-backed next actions. Use when Codex is given `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Complete Findings Index`, `Coverage Ledger`, `Not covered`, or coverage-gap items from a regression-review report and must verify whether each user-visible finding still applies, fix proven regressions, disprove or challenge stale findings, confirm intentional product changes, close coverage gaps, and report a disposition for every item before changing or claiming completion while leaving Git staging untouched unless the user explicitly asks for staging, committing, or PR publication in the current request.
+description: Consume a coverage-led `regression-review` Markdown report or related PR feedback and turn it into evidence-backed next actions. Use when Codex is given `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Complete Findings Index`, `Coverage Ledger`, `Behavior Graph Deltas`, `Not covered`, or coverage-gap items from a regression-review report and must verify whether each user-visible finding still applies, fix proven regressions, disprove or challenge stale findings, confirm intentional product changes, close coverage gaps, and report a disposition for every item before changing or claiming completion while leaving Git staging untouched unless the user explicitly asks for staging, committing, or PR publication in the current request.
 ---
 
 # Receiving Regression Review
@@ -10,6 +10,8 @@ description: Consume a coverage-led `regression-review` Markdown report or relat
 Use this skill after `regression-review` has produced a coverage-led report. Treat the report as an evidence-backed audit artifact, not as an instruction list to execute blindly.
 
 The primary job is to account for every `F#` finding, every `I#` intentional visible change, and every uncovered user-visible or unknown-impact surface before claiming the gate is resolved.
+
+If the report includes behavior graph deltas, treat them as path evidence that helps verify entry, input, guards, transforms, and output/effect parity. Do not treat them as code-edit instructions.
 
 ## Skill Boundary
 
@@ -40,6 +42,7 @@ Keep gate integrity aligned with evidence:
 
 - Treat `Complete Findings Index` as the enumeration source for findings.
 - Treat `Coverage Ledger` as the enumeration source for reviewed, intentional, non-user-visible, and uncovered surfaces.
+- Treat `Behavior Graph Deltas` as supporting evidence for the coverage ledger and finding cards, not as a replacement for either.
 - Treat `Not covered` rows on user-visible or unknown-impact surfaces as unresolved gate items until they are covered, regenerated, or explicitly accepted as out of scope.
 - Verify the current user-visible behavior before implementing a fix.
 - Do not dismiss a `Block` item without stronger counter-evidence.
@@ -51,17 +54,18 @@ Keep gate integrity aligned with evidence:
 
 WHEN receiving a regression review report:
 
-1. Read the full report, including `Scope`, `Gate Snapshot`, `Complete Findings Index`, `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Coverage Ledger`, `Evidence Appendix`, and `Report Self-Check` when present.
+1. Read the full report, including `Scope`, `Gate Snapshot`, `Complete Findings Index`, `Block`, `Discuss`, `Watch`, `Intentional Changes`, `Coverage Ledger`, `Behavior Graph Deltas`, `Evidence Appendix`, and `Report Self-Check` when present.
 2. Confirm the report still applies to the current diff, branch, baseline, and user-requested scope.
 3. Build a disposition ledger before changing code:
    - Add every `F#` from `Complete Findings Index`.
    - Add every finding card from `Block`, `Discuss`, and `Watch`.
    - Add every `I#` from `Intentional Changes`.
    - Add every `Coverage Ledger` row whose status is `Not covered`, `Finding F#`, `Intentional I#`, or unknown.
+   - Add any `Behavior Graph Deltas` row that shows a changed input, guard, transform, output/effect, or a mismatch with the ledger.
    - Add any mismatch between the index, action sections, and coverage ledger as an intake problem.
 4. Stop and regenerate or clarify the report before implementing when scope, baseline, report completion, or finding enumeration is stale or inconsistent.
 5. Restate each `F#` as a user-visible outcome, not as a code edit.
-6. Verify each item against current code, outputs, tests, fixtures, logs, or runtime behavior.
+6. Verify each item against current code, outputs, tests, fixtures, logs, runtime behavior, and behavior graph paths when present.
 7. Decide each disposition: fix, disprove, narrow, downgrade, confirm intentional, close coverage gap, keep coverage gap open, or ask for clarification.
 8. Before editing code, state the intended change plan, a regression-risk self-assessment, and that Git staging will remain untouched.
 9. Address items in gate order and verify each affected user surface before moving on.
@@ -79,6 +83,7 @@ Before changing code, confirm:
 - Whether every `F#` in `Complete Findings Index` has a matching card in `Block`, `Discuss`, or `Watch`.
 - Whether every `Finding F#` in `Coverage Ledger` maps to a known finding.
 - Whether every `Intentional I#` in `Coverage Ledger` maps to an intentional change entry.
+- Whether every behavior graph delta maps to a coverage row, finding, intentional change, or explicit reviewed/no-change result.
 - Which `Not covered` rows affect user-visible or unknown-impact surfaces.
 - Which blind spots limit confidence.
 
@@ -129,6 +134,15 @@ Treat `Intentional Changes` as protected product deltas unless evidence says oth
 - Move it back into `Discuss` only when intent is unclear or contradictory.
 - Do not make user-visible behavior match the old baseline merely to silence the report.
 
+### `Behavior Graph Deltas`
+
+Treat behavior graph rows as route evidence.
+
+- Verify the current entry, input, guard, transform, and output/effect path before fixing or dismissing the linked item.
+- If a graph delta shows a changed guard, input, transform, or output/effect that is not represented by a finding, intentional change, or coverage row, treat that as an intake inconsistency and refresh or challenge the report before editing.
+- If the report skipped a graph for a user-visible or unknown-impact surface, handle that skip through the coverage ledger or blind spots.
+- Do not preserve the old behavior merely because the graph changed; first decide whether the delta is a regression, an intentional product change, or a harmless implementation detail.
+
 ### `Coverage Ledger`
 
 Treat coverage rows as gate evidence, not background notes.
@@ -146,6 +160,7 @@ Push back when:
 - The report was generated for a different scope or stale branch.
 - The report is incomplete but presents the gate as resolved.
 - The `Complete Findings Index`, action sections, and `Coverage Ledger` disagree.
+- `Behavior Graph Deltas` contradict or bypass the report's findings and coverage ledger.
 - The finding describes an intended product change, not a regression.
 - Current runtime or output evidence contradicts the report.
 - The user-visible path is no longer reachable.
@@ -164,15 +179,16 @@ For multi-item reports:
 
 1. Clarify stale or unclear scope first.
 2. Build the disposition ledger from `Complete Findings Index`, action sections, `Intentional Changes`, and `Coverage Ledger`.
-3. Resolve report inconsistencies or stale coverage before code changes.
-4. Present the code-change plan, regression-risk self-assessment, and no-staging intent before editing.
-5. Fix or disprove every unresolved `Block` item.
-6. Resolve `Discuss` items with proof or intent clarification.
-7. Decide whether `Watch` items need mitigation now.
-8. Confirm or challenge `Intentional Changes`.
-9. Close or explicitly carry forward `Not covered` user-visible or unknown-impact surfaces.
-10. Re-run targeted verification for every touched user surface.
-11. Refresh the regression gate if your changes materially altered user-visible behavior or coverage.
+3. Reconcile behavior graph deltas with findings, intentional changes, and coverage rows.
+4. Resolve report inconsistencies or stale coverage before code changes.
+5. Present the code-change plan, regression-risk self-assessment, and no-staging intent before editing.
+6. Fix or disprove every unresolved `Block` item.
+7. Resolve `Discuss` items with proof or intent clarification.
+8. Decide whether `Watch` items need mitigation now.
+9. Confirm or challenge `Intentional Changes`.
+10. Close or explicitly carry forward `Not covered` user-visible or unknown-impact surfaces.
+11. Re-run targeted verification for every touched user surface.
+12. Refresh the regression gate if your changes materially altered user-visible behavior or coverage.
 
 ## Disposition Ledger Format
 
@@ -212,6 +228,7 @@ Bad:
 - Process only the top items in `Gate Snapshot` and ignore `Complete Findings Index`.
 - Fix `Intentional Changes` back to the old behavior.
 - Treat `Not covered` rows as harmless notes.
+- Ignore behavior graph deltas instead of reconciling them with the current code path.
 - Downgrade a `Block` item without stronger evidence.
 - Stage fixes after editing code without a current explicit staging, commit, or PR request.
 - Fold new fixes into an already staged diff while consuming the review report.
@@ -222,4 +239,4 @@ Bad:
 
 ## Bottom Line
 
-A regression review report is a coverage-led gate artifact. Consume it the same way a strong reviewer would: verify the current behavior, preserve the severity semantics, account for every finding and coverage row, then fix, challenge, confirm, or carry forward each item with evidence.
+A regression review report is a coverage-led gate artifact. Consume it the same way a strong reviewer would: verify the current behavior, preserve the severity semantics, account for every finding, behavior graph delta, and coverage row, then fix, challenge, confirm, or carry forward each item with evidence.

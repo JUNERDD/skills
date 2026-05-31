@@ -1,6 +1,6 @@
 ---
 name: regression-review
-description: Perform a scoped, coverage-led review of working tree, staged, commit-range, branch, or PR changes to find user-visible behavioral regressions. Use when Codex must audit code changes for broken or degraded user journeys, changed defaults, loading/error/permission/session behavior, stale data, ordering, retries, duplicate/destructive actions, exported output, emails, CLI output, or other visible behavior, and must write a Markdown report that enumerates all distinct findings discovered within the reviewed scope plus coverage gaps and intentional visible changes.
+description: Perform a scoped, coverage-led review of working tree, staged, commit-range, branch, or PR changes to find user-visible behavioral regressions. Use when Codex must audit code changes for broken or degraded user journeys, changed defaults, loading/error/permission/session behavior, stale data, ordering, retries, duplicate/destructive actions, exported output, emails, CLI output, or other visible behavior, and must write a Markdown report that enumerates all distinct findings discovered within the reviewed scope plus coverage gaps, intentional visible changes, and scoped behavior-graph deltas when they clarify the affected path.
 ---
 
 # Regression Review
@@ -12,6 +12,8 @@ Treat the change set as a scoped user-visible regression audit with a gate recom
 Always produce a Markdown report file and a short terminal summary.
 
 Keep the overall recommendation mechanically aligned with the highest-severity unresolved finding and the coverage state. Do not let prose tone drift the gate up or down.
+
+Use behavior graphs as lightweight review artifacts for touched user-visible or unknown-impact surfaces, not as whole-repo call graphs.
 
 ## Set Scope First
 
@@ -118,6 +120,20 @@ Additional rules:
 - Do not treat `eslint`, `typecheck`, or passing unrelated tests as proof that a user-visible regression is disproven. They are hygiene evidence only.
 - When a spec, issue, or design doc exists, use it to judge intent, but do not treat it as proof that the runtime or output behavior is still correct.
 
+## Scoped Behavior Graphs
+
+Build a scoped behavior graph after the diff inventory, before classifying findings, when a touched file can affect a user-visible or unknown-impact surface.
+
+Keep each graph focused on one surface and these node types:
+
+- Entry: route, component boundary, command, API handler, job, export, or email path.
+- Input: props, request payload, state/store slice, persisted data, env/config, feature flag, or fixture.
+- Guards: auth, permission, validation, debounce, duplicate-submit, confirmation, retry, ordering, empty-state, or error handling.
+- Transform: mapping, filtering, sorting, serialization, formatting, cache key, adapter, or wrapper.
+- Output/effect: rendered UI, API response, CLI text, generated file, email body, persisted write, external request, or scheduled side effect.
+
+For each graph, compare the baseline path from the chosen baseline with the after-change path from the current scope. Record changed nodes, removed or moved guards, changed inputs, and changed final outputs/effects. If a graph cannot be built without runtime data, credentials, or a broader scope, record the gap in the coverage ledger or blind spots instead of inventing precision.
+
 ## Workflow
 
 1. Define the comparison baseline.
@@ -127,27 +143,35 @@ Additional rules:
 2. Build a diff inventory.
    - List touched files and classify each as user-visible surface, user-visible dependency, test-only, docs-only, generated, config, or unknown.
    - Use repository structure, route maps, exports, commands, schedules, feature flags, and call sites to avoid missing indirect user-visible paths.
-3. Build the coverage ledger before writing findings.
+3. Build scoped behavior graphs for user-visible and unknown-impact surfaces.
+   - Do not graph docs-only, generated-only, or test-only paths unless they feed visible output.
+   - Include entry, input, guards, transform, and output/effect nodes where applicable.
+   - Keep the graph shallow enough to support review; do not attempt a complete static call graph.
+4. Build the coverage ledger before writing findings.
    - Identify every route, page, component, API consumer, command, job, config default, flag path, email/export/output, and persisted side effect touched by the diff.
    - Add each surface to the ledger even if it later has no finding.
-4. Trace behavior deltas for every ledger surface.
+   - Use graph coverage to catch missing surfaces, but keep the ledger as the authoritative coverage index.
+5. Trace behavior deltas for every ledger surface.
    - Compare before and after behavior for each surface.
    - Look for removed guards, changed branching, altered ordering, serialization changes, loading changes, empty states, error paths, retries, cache keys, stale data, session/auth checks, and output formatting.
    - For refactors, wrappers, adapters, shared utilities, or "just telemetry" changes, explicitly trace what now supplies the user-visible input, what still enforces guards, and what produces the final output.
-5. Gather proof and code pointers.
+   - Use behavior graph deltas to tie code-path changes to user-visible outputs or side effects.
+6. Gather proof and code pointers.
    - Collect the strongest runtime, output, test, log, fixture, screenshot, or code-path evidence available.
    - Trace each finding back to concrete code lines.
-6. De-duplicate and classify.
+7. De-duplicate and classify.
    - Merge candidates with the same user-facing outcome.
    - Rank within each section by user impact first, confidence second.
-7. Write the report from `references/report-template.md`.
+8. Write the report from `references/report-template.md`.
    - Include all findings in `Complete Findings Index` and the matching action sections.
    - Put priority highlights in `Must-review now`, but never use that list as the full result.
-8. Run the report self-check.
+   - Include behavior graph deltas in the evidence appendix when they materially support coverage or findings.
+9. Run the report self-check.
    - Every touched user-visible surface is present in `Coverage Ledger`.
    - Every finding in the action sections appears in `Complete Findings Index`.
    - Every `Finding F#` in `Coverage Ledger` has a matching card.
    - Every `Not covered` row has a reason and a concrete next step.
+   - Every graphable user-visible or unknown-impact surface has either a behavior graph delta row or a ledger reason for skipping it.
    - The recommendation matches the mapping rules.
 
 ## Card Format
@@ -191,6 +215,7 @@ Block until the guard is restored or equivalent idempotency is proven elsewhere.
   - `Must-review now`
   - `Findings count`
   - `Coverage confidence`
+  - `Behavior graph coverage`
   - `Biggest blind spot`
 - Limit `Must-review now` to the top 3 items, and explicitly point to `Complete Findings Index` for the full list.
 - In each review card, keep the first sentence about user impact, not code mechanics.
@@ -205,7 +230,7 @@ Block until the guard is restored or equivalent idempotency is proven elsewhere.
   - Include an empty `Complete Findings Index`
   - Include the full `Coverage Ledger`
   - State the strongest blind spot
-  - Document what was verified
+  - Document what was verified, including behavior graphs that were built or skipped
 - If the report is based mainly on static reasoning, say that plainly in both `Gate Snapshot` and `Coverage Ledger`.
 - When evidence is mixed, write the verified code-path facts first, then the inferred user impact second.
 

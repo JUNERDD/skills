@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.1.9`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.0`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -29,9 +29,11 @@ If you are deciding what to install, start here:
 
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
+- [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
+- [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
@@ -75,8 +77,10 @@ npx skills@latest add JUNERDD/skills --skill debug
 npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
+npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
+npx skills@latest add JUNERDD/skills --skill reduce-reinvention
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
@@ -148,6 +152,33 @@ Key entry points:
 - Exhaustive shrink script: [`skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py`](./skills/exhaustive-code-slimmer/scripts/exhaustive_shrink.py)
 - Optional runtime metadata: [`skills/exhaustive-code-slimmer/agents/openai.yaml`](./skills/exhaustive-code-slimmer/agents/openai.yaml)
 
+### `reduce-reinvention`
+
+[`skills/reduce-reinvention/`](./skills/reduce-reinvention/) identifies and reduces duplicated effort across code, libraries, services, templates, docs, platform workflows, and architecture decisions. It combines a reuse-first workflow with audit scripts and decision templates so teams can adopt, adapt, consolidate, or justify divergence with evidence.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill reduce-reinvention
+```
+
+Best for:
+
+- auditing duplicated implementations and overlapping reusable assets
+- deciding build-vs-reuse/buy with ownership, maintenance, security, and migration tradeoffs
+- creating reuse catalogs, ADR/RFC records, migration plans, or golden-path guidance
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/reduce-reinvention/SKILL.md`](./skills/reduce-reinvention/SKILL.md)
+- Reuse playbook: [`skills/reduce-reinvention/references/reuse-playbook.md`](./skills/reduce-reinvention/references/reuse-playbook.md)
+- Audit checklist: [`skills/reduce-reinvention/references/audit-checklist.md`](./skills/reduce-reinvention/references/audit-checklist.md)
+- Decision matrix: [`skills/reduce-reinvention/references/decision-matrix.md`](./skills/reduce-reinvention/references/decision-matrix.md)
+- Output templates: [`skills/reduce-reinvention/references/templates.md`](./skills/reduce-reinvention/references/templates.md)
+- Reinvention audit script: [`skills/reduce-reinvention/scripts/reinvention_audit.py`](./skills/reduce-reinvention/scripts/reinvention_audit.py)
+- Reuse catalog script: [`skills/reduce-reinvention/scripts/reuse_catalog.py`](./skills/reduce-reinvention/scripts/reuse_catalog.py)
+- Optional runtime metadata: [`skills/reduce-reinvention/agents/openai.yaml`](./skills/reduce-reinvention/agents/openai.yaml)
+
 ### `git-commit`
 
 [`skills/git-commit/`](./skills/git-commit/) drafts a Conventional Commit message from the staged diff only. It is intentionally narrow: it reads what is already staged, proposes one accurate message, and does not mutate Git state.
@@ -212,6 +243,31 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/multitask-coordinator/SKILL.md`](./skills/multitask-coordinator/SKILL.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
+
+### `plan-mode`
+
+[`skills/plan-mode/`](./skills/plan-mode/) mirrors Cursor's Plan Mode loop for complex, ambiguous, risky, or multi-file work: create a disk-backed editable Markdown plan, research the codebase into file/code references, ask focused clarification questions, maintain buildable todos, pressure-test non-trivial plans with `$grill-me`, and build only after the plan is approved.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill plan-mode
+```
+
+Best for:
+
+- planning implementation for broad or multi-file tasks before editing
+- tracing routes, data flow, architecture constraints, tradeoffs, or risky operations
+- maintaining an editable plan document with file references and checkbox todos
+- invoking `$grill-me` to pressure-test meaningful assumptions, risks, and rollout edges
+- building all or selected todos only after the user approves the plan
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/plan-mode/SKILL.md`](./skills/plan-mode/SKILL.md)
+- Plan artifact helper: [`skills/plan-mode/scripts/plan_artifact.py`](./skills/plan-mode/scripts/plan_artifact.py)
+- Architecture reference: [`skills/plan-mode/references/architecture.md`](./skills/plan-mode/references/architecture.md)
+- Optional runtime metadata: [`skills/plan-mode/agents/openai.yaml`](./skills/plan-mode/agents/openai.yaml)
 
 ### `debug`
 
@@ -358,7 +414,7 @@ Key entry points:
 
 ### `regression-review`
 
-[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, and marks uncovered surfaces explicitly.
+[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, builds scoped behavior-graph deltas for affected surfaces when useful, and marks uncovered surfaces explicitly.
 
 Install:
 
@@ -370,6 +426,7 @@ Best for:
 
 - checking whether a refactor or feature work breaks user-facing flows
 - auditing changed defaults, loading states, retries, ordering, or exported output
+- tracing changed inputs, guards, transforms, and outputs through scoped behavior graphs
 - writing a review artifact that keeps severity aligned with the strongest unresolved finding while showing full reviewed coverage
 
 Key entry points:
@@ -380,7 +437,7 @@ Key entry points:
 
 ### `receiving-regression-review`
 
-[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
+[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, behavior-graph delta, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
 
 Install:
 
@@ -391,6 +448,7 @@ npx skills@latest add JUNERDD/skills --skill receiving-regression-review
 Best for:
 
 - re-checking a regression gate against the current diff and baseline
+- reconciling behavior-graph deltas with findings and coverage rows
 - fixing only proven user-visible regressions instead of blindly following review comments
 - separating real regressions from intentional product deltas with stronger evidence
 - closing or explicitly carrying forward `Not covered` user-visible surfaces from the coverage ledger

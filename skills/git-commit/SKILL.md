@@ -19,7 +19,13 @@ git diff --cached
 
 If nothing is staged, stop and tell the user to stage the intended files first. Do not fall back to `git diff`.
 
-2. Infer the commit type from the staged diff.
+2. Build a deep, recursive understanding of the staged code changes before classifying them.
+
+- Trace each staged hunk through the surrounding code, tests, configuration, docs, API contracts, and generated artifacts when that context is necessary to understand the actual change.
+- Keep the analysis grounded in `git diff --cached`; do not inspect unstaged work to fill gaps.
+- If the staged diff cannot support a confident message, say what is unclear instead of guessing.
+
+3. Infer the commit type from the staged diff.
 
 - `feat`: new user-facing capability
 - `fix`: bug fix or regression fix
@@ -32,17 +38,18 @@ If nothing is staged, stop and tell the user to stage the intended files first. 
 - `ci`: CI workflow or automation change
 - `chore`: maintenance work that does not fit the types above
 
-3. Infer the scope only when it is obvious from the staged paths or module names.
+4. Infer the scope only when it is obvious from the staged paths or module names.
 
 - Good scopes are short and specific, such as `auth`, `search`, `web`, or `extension`.
 - Omit the scope when it is ambiguous.
 
-4. Draft the message.
+5. Draft the message.
 
 - Use the Conventional Commit subject format: `<type>[optional scope]: <description>`
 - Keep the subject in imperative mood and present tense.
 - Keep the subject under 72 characters.
 - Keep the description factual and grounded in the staged diff.
+- Add a concise body description when it is necessary to clarify the staged change beyond the subject.
 - Do not invent motivations, side effects, or files that are not visible in the staged changes.
 - Add `!` or a `BREAKING CHANGE:` footer only when the staged diff clearly shows a breaking change.
 - Do not add an emoji prefix unless the user explicitly asks for one.
@@ -53,7 +60,7 @@ If nothing is staged, stop and tell the user to stage the intended files first. 
 - Output only the final commit message text.
 - Do not prefix the answer with explanations, bullets, labels, or `git commit -m`.
 - Do not wrap the message in quotes or code fences unless the user asks.
-- Add a body or footer only when it materially helps explain a breaking change, migration step, or issue reference.
+- Add a body description or footer only when it materially helps explain the change, breaking impact, migration step, or issue reference.
 
 Example single-line output:
 
