@@ -335,7 +335,7 @@ export function DetailPanel({ detail, isLoading }) {
     : []
 
   return html`
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <!-- Tabs -->
       <div className="flex items-center gap-0 border-b border-border bg-surface-1 shrink-0">
         <button
@@ -351,7 +351,7 @@ export function DetailPanel({ detail, isLoading }) {
       </div>
 
       <!-- Content -->
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
         ${!detail
           ? html`
               <div className="flex h-full items-center justify-center text-xs text-ghost font-mono py-8">
@@ -360,7 +360,7 @@ export function DetailPanel({ detail, isLoading }) {
             `
           : activeTab === 'meta'
             ? html`
-                <div className="scroll-thin h-full overflow-auto p-2">
+                <div className="scroll-thin h-full min-h-0 overflow-auto p-2">
                   ${facts.map(({ label, value }) => html`
                     <div key=${label} className="flex items-start gap-2 rounded px-2 py-1.5 hover:bg-surface-2/40">
                       <span className="font-mono text-2xs text-ghost uppercase tracking-wider w-20 shrink-0 pt-px">${label}</span>
@@ -370,7 +370,7 @@ export function DetailPanel({ detail, isLoading }) {
                 </div>
               `
             : html`
-                <pre className="scroll-thin h-full overflow-auto bg-surface-0 p-3 font-mono text-[11px] leading-5 text-pale whitespace-pre-wrap break-all">${detail.payloadText || 'No payload available.'}</pre>
+                <pre className="scroll-thin h-full min-h-0 overflow-auto bg-surface-0 p-3 font-mono text-[11px] leading-5 text-pale whitespace-pre-wrap break-all">${detail.payloadText || 'No payload available.'}</pre>
               `
         }
       </div>
@@ -558,7 +558,7 @@ export function InspectorPanel({
         >Locations</button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         ${activeTab === 'locations'
           ? html`
               <${LocationsPanel}
