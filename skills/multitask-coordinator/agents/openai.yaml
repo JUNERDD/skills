@@ -1,4 +1,4 @@
 interface:
   display_name: "Multitask Coordinator"
-  short_description: "Coordinate complex subagent work"
-  default_prompt: "Use $multitask-coordinator to coordinate a complex multi-step task, define worker ownership boundaries, synthesize results, and verify final acceptance."
+  short_description: "Coordinate scoped subagent work"
+  default_prompt: "Use $multitask-coordinator to coordinate a complex multi-step task, define safe worker scopes and isolation, synthesize results, and verify final acceptance."

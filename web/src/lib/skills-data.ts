@@ -280,23 +280,23 @@ export const SKILLS: SkillDetail[] = [
     slug: "multitask-coordinator",
     title: "multitask-coordinator",
     category: "Agent coordination",
-    blurb: "Coordinate complex subagent work with clear ownership boundaries.",
+    blurb: "Coordinate scoped subagent work with safe ownership boundaries.",
     lead:
-      "A parent-agent workflow for deciding when to delegate, assigning worker scopes, synthesizing results, and verifying the final outcome.",
+      "A parent-agent workflow for deciding when to delegate, assigning worker scopes, choosing isolation, synthesizing results, and verifying the final outcome.",
     overview:
-      "Use this skill for non-trivial multi-step work where background subagents may help but the parent agent must keep ownership of framing, shared contracts, delegation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, choosing explorer or worker shapes, defining disjoint scopes, protecting atomic migrations, and turning worker outputs into reviewed evidence.",
+      "Use this skill for non-trivial multi-step work where async/background subagents or local decomposition may help but the parent agent must keep ownership of framing, shared contracts, delegation, isolation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, ordering queued requests, choosing explorer or worker shapes, defining disjoint scopes, protecting atomic migrations, and turning worker outputs into reviewed evidence.",
     bestFor: [
-      "Deciding whether a complex repo task should be handled directly or delegated.",
-      "Assigning clear worker ownership boundaries in large repositories, monorepos, or dirty worktrees.",
+      "Deciding whether a complex repo task should stay local, be decomposed, or be delegated.",
+      "Assigning clear worker ownership boundaries in large repositories, monorepos, multi-root workspaces, dirty worktrees, or isolated worktrees and branches.",
       "Keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership.",
-      "Coordinating independent exploration, implementation, review, or verification slices.",
+      "Coordinating queued independent requests, async exploration, implementation, review, or verification slices.",
       "Synthesizing worker outputs while preserving parent-agent accountability for the final result.",
     ],
     workflow: [
       "Read applicable repository rules and check the dirty worktree before assigning ownership.",
       "Map success criteria, affected systems, likely owner files, shared contracts, and verification commands.",
       "Keep shared files and contracts parent-owned unless one worker is explicitly assigned as the sole owner.",
-      "Choose zero, one, or a small set of workers based on independence, scope clarity, and synthesis cost.",
+      "Choose zero, one, or a small set of workers and pick shared workspace or isolated worktree/branch execution based on risk.",
       "Give each worker a concrete objective, allowed scope, forbidden actions, validation expectation, and output contract.",
       "Review worker evidence, resolve conflicts or gaps, integrate only adopted work, and run the narrowest credible verification.",
     ],
@@ -307,14 +307,14 @@ export const SKILLS: SkillDetail[] = [
     ],
     guardrails: [
       "Do not delegate trivial requests or immediate blocking work that the parent must handle now.",
-      "Do not assign sibling workers overlapping write ownership for shared files, schemas, generated artifacts, or global config.",
+      "Do not assign sibling workers overlapping write ownership unless isolated branches or worktrees make the planned merge explicit.",
       "Do not accept worker output as fact without reviewing changed files, artifacts, command output, or other concrete evidence.",
     ],
     entryPoints: [
       {
         label: "Workflow",
         path: "skills/multitask-coordinator/SKILL.md",
-        description: "Delegation decisions, worker prompt contracts, synthesis, and verification rules.",
+        description: "Delegation decisions, isolation choices, worker prompt contracts, synthesis, and verification rules.",
       },
       {
         label: "Runtime metadata",

@@ -32,7 +32,7 @@ If you are deciding what to install, start here:
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
-- [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
+- [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
@@ -223,7 +223,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents. It keeps the parent agent responsible for framing, shared contracts, delegation decisions, worker ownership boundaries, synthesis, verification, and user communication.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents or local task decomposition. It keeps the parent agent responsible for framing, decomposition, shared contracts, delegation decisions, worker ownership boundaries, isolation choices, synthesis, verification, and user communication.
 
 Install:
 
@@ -233,10 +233,10 @@ npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 
 Best for:
 
-- deciding whether complex repo work should be handled locally or delegated
-- assigning disjoint worker scopes in large repositories, monorepos, or dirty worktrees
+- deciding whether complex repo work should stay local, be decomposed, or be delegated
+- assigning disjoint worker scopes in large repositories, monorepos, multi-root workspaces, dirty worktrees, or isolated worktrees and branches
 - keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership
-- synthesizing explorer, implementation, review, or verification results without duplicating work
+- coordinating queued independent requests, async exploration, implementation, review, or verification without duplicating work
 - preserving parent-agent ownership of final integration, validation, and user-facing status
 
 Key entry points:

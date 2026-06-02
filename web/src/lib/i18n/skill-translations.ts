@@ -184,22 +184,22 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
     },
     "multitask-coordinator": {
       category: "Agent 协作",
-      blurb: "用清晰的所有权边界协调复杂 subagent 工作。",
-      lead: "一个 parent-agent 工作流，用于判断何时委派、分配 worker 范围、综合结果并验证最终产出。",
+      blurb: "用安全所有权边界协调有范围的 subagent 工作。",
+      lead: "一个 parent-agent 工作流，用于判断何时委派、分配 worker 范围、选择隔离方式、综合结果并验证最终产出。",
       overview:
-        "用于非平凡多步骤任务，其中后台 subagents 可能有帮助，但 parent agent 必须负责问题框定、共享契约、委派决策、worker 所有权边界、综合、验证和用户沟通。它提供决策检查清单，帮助判断何时直接处理、选择 explorer 或 worker 形态、定义不重叠范围、保护原子迁移，并把 worker 输出转化为经过审查的证据。",
+        "用于非平凡多步骤任务，其中异步/后台 subagents 或本地任务分解可能有帮助，但 parent agent 必须负责问题框定、共享契约、委派决策、隔离方式、worker 所有权边界、综合、验证和用户沟通。它提供决策检查清单，帮助判断何时直接处理、为排队请求排序、选择 explorer 或 worker 形态、定义不重叠范围、保护原子迁移，并把 worker 输出转化为经过审查的证据。",
       bestFor: [
-        "判断复杂仓库任务应由 parent 直接处理还是委派。",
-        "在大型仓库、monorepo 或 dirty worktree 中分配明确的 worker 所有权边界。",
+        "判断复杂仓库任务应留在本地、拆解处理还是委派。",
+        "在大型仓库、monorepo、多根工作区、dirty worktree 或隔离 worktree/branch 中分配明确的 worker 所有权边界。",
         "让共享契约、package exports、排序和破坏性迁移边界保持在 parent-agent 所有权下。",
-        "协调独立的探索、实现、审查或验证切片。",
+        "协调排队的独立请求、异步探索、实现、审查或验证切片。",
         "在不重复工作的情况下综合 worker 输出，并保持 parent 对最终结果负责。",
       ],
       workflow: [
         "阅读适用仓库规则，并在分配所有权前检查 dirty worktree。",
         "映射成功标准、受影响系统、可能 owner 文件、共享契约和验证命令。",
         "保持共享文件和契约由 parent 拥有，除非一个 worker 被明确指定为唯一 owner。",
-        "基于独立性、范围清晰度和综合成本选择零个、一个或少量 workers。",
+        "基于风险选择零个、一个或少量 workers，并决定使用共享 workspace 还是隔离 worktree/branch。",
         "给每个 worker 明确目标、允许范围、禁止动作、验证期望和输出契约。",
         "审查 worker 证据，解决冲突或缺口，只整合被采纳的工作，并运行最窄可信验证。",
       ],
@@ -210,11 +210,11 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       ],
       guardrails: [
         "不要委派琐碎请求或 parent 下一步必须亲自处理的阻塞工作。",
-        "不要给 sibling workers 分配会重叠写入的共享文件、schema、生成物或全局配置。",
+        "不要给 sibling workers 分配重叠写入，除非隔离 branch 或 worktree 让计划中的合并边界明确。",
         "没有审查改动文件、产物、命令输出或其他具体证据前，不要把 worker 输出当作事实。",
       ],
       entryPoints: [
-        { description: "委派决策、worker prompt 契约、综合和验证规则。", label: "工作流" },
+        { description: "委派决策、隔离选择、worker prompt 契约、综合和验证规则。", label: "工作流" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
