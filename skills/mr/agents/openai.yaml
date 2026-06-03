@@ -1,0 +1,4 @@
+interface:
+  display_name: "MR CNB Merge Request"
+  short_description: "Operate CNB merge-request CLI safely"
+  default_prompt: "Use $mr to create or troubleshoot a CNB merge request with the mr CLI, including detached mode and conflict resume."
