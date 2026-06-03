@@ -233,6 +233,57 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "mr",
+    title: "mr",
+    category: "Git workflow",
+    blurb: "Use and maintain the CNB merge-request CLI.",
+    lead:
+      "A CNB merge-request workflow for running the mr CLI safely across branch strategies, detached mode, config, conflict resume, and tool maintenance.",
+    overview:
+      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining CNB merge requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
+    bestFor: [
+      "Creating or previewing CNB merge requests from a current branch to master, test, prerelease, or an arbitrary target.",
+      "Choosing between merge, rebase, merge-target, direct PR, and detached-mode workflows.",
+      "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
+      "Maintaining the `/Users/zen/Documents/mr` TypeScript/Pastel/Ink/Zod CLI implementation.",
+    ],
+    workflow: [
+      "Inspect repository state with `git status --short --branch` before mutating MR branches.",
+      "Resolve target aliases and clarify source, target, and MR-branch keep/delete intent before acting on ambiguous MR requests.",
+      "Use `--dry-run` when strategy, detached mode, or repository state is unclear.",
+      "Run exactly one strategy and respect config precedence for `MR_STRATEGY`, `mr.strategy`, `MR_DETACHED`, and `mr.detached`.",
+      "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
+      "When editing the CLI project, keep README behavior, command examples, and diagrams aligned with implementation changes.",
+    ],
+    outputs: [
+      "Safe command choices for `mr`, `mrm`, `mrt`, and `mrp` workflows.",
+      "Conflict handoff and resume instructions that match the current CLI implementation.",
+      "Scoped maintenance guidance and verification commands for the mr project.",
+    ],
+    guardrails: [
+      "Do not combine strategy flags or use `--rm-mr` with `--pr`.",
+      "Do not replace CLI conflict resume with hand-written git commits, manual pushes, or a shortcut `--pr` flow.",
+      "Do not mutate stopped merge/rebase states unless the user explicitly asks for that exact action.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/mr/SKILL.md",
+        description: "MR command selection, strategy rules, and conflict-resume guardrails.",
+      },
+      {
+        label: "CLI reference",
+        path: "skills/mr/references/mr-cli-reference.md",
+        description: "Detailed command surface, detached mode, config, install, and maintenance notes.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/mr/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "split-commits",
     title: "split-commits",
     category: "Git workflow",

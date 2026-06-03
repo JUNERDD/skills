@@ -31,6 +31,7 @@ If you are deciding what to install, start here:
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
+- [`mr`](#mr) - use and maintain the CNB merge-request CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
@@ -75,6 +76,7 @@ Examples:
 ```bash
 npx skills@latest add JUNERDD/skills --skill debug
 npx skills@latest add JUNERDD/skills --skill git-commit
+npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 npx skills@latest add JUNERDD/skills --skill plan-mode
@@ -199,6 +201,29 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/git-commit/SKILL.md`](./skills/git-commit/SKILL.md)
 - Optional runtime metadata: [`skills/git-commit/agents/openai.yaml`](./skills/git-commit/agents/openai.yaml)
+
+### `mr`
+
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for CNB merge requests. It covers target aliases, MR branch strategies, detached mode, configuration, conflict resume, install/update/uninstall behavior, and maintenance of the `/Users/zen/Documents/mr` TypeScript CLI project.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill mr
+```
+
+Best for:
+
+- creating or previewing CNB merge requests with `mr`, `mrm`, `mrt`, or `mrp`
+- choosing between `merge`, `rebase`, `merge-target`, `pr`, and detached-mode flows
+- handling stopped merge/rebase states by preserving CLI-owned resume paths
+- maintaining the local TypeScript/Pastel/Ink/Zod implementation of the CLI
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/mr/SKILL.md`](./skills/mr/SKILL.md)
+- CLI reference: [`skills/mr/references/mr-cli-reference.md`](./skills/mr/references/mr-cli-reference.md)
+- Optional runtime metadata: [`skills/mr/agents/openai.yaml`](./skills/mr/agents/openai.yaml)
 
 ### `split-commits`
 
@@ -520,6 +545,12 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       └── report-template.md
+    ├── mr/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── mr-cli-reference.md
     ├── multitask-coordinator/
     │   ├── SKILL.md
     │   └── agents/

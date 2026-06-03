@@ -149,6 +149,42 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
+    mr: {
+      category: "Git 工作流",
+      blurb: "使用并维护 CNB 合并请求 CLI。",
+      lead: "一个 CNB 合并请求工作流，用于安全运行 mr CLI，覆盖分支策略、无感模式、配置、冲突恢复和工具维护。",
+      overview:
+        "当需要通过 `mr`、`mrm`、`mrt` 或 `mrp` 创建、预览、配置、排查、安装、更新、卸载或维护 CNB 合并请求时使用此 skill。它让 agent 遵循 CLI 真实的 inline 和 detached 冲突恢复路径，而不是自造手写 git 恢复步骤。",
+      bestFor: [
+        "从当前分支创建或预览到 master、test、prerelease 或任意目标分支的 CNB 合并请求。",
+        "在 merge、rebase、merge-target、direct PR 和 detached 无感模式之间做选择。",
+        "处理停住的 merge 或 rebase 状态，并保留 CLI 拥有的 resume 路径。",
+        "维护 `/Users/zen/Documents/mr` 的 TypeScript/Pastel/Ink/Zod CLI 实现。",
+      ],
+      workflow: [
+        "执行会修改 MR 分支的命令前，先用 `git status --short --branch` 检查仓库状态。",
+        "解析目标别名；对含糊的 MR 请求，先澄清 source、target，以及保留还是删除重建 MR 分支。",
+        "当策略、无感模式或仓库状态不清楚时，先用 `--dry-run`。",
+        "一次只运行一种策略，并尊重 `MR_STRATEGY`、`mr.strategy`、`MR_DETACHED` 和 `mr.detached` 的配置优先级。",
+        "发生冲突时，把解决动作交给用户；只有在冲突已 staged 后，才重跑匹配的 `mr` resume 命令。",
+        "编辑 CLI 项目时，让 README 行为说明、命令示例和图示与实现保持一致。",
+      ],
+      outputs: [
+        "`mr`、`mrm`、`mrt` 和 `mrp` 工作流的安全命令选择。",
+        "与当前 CLI 实现一致的冲突 handoff 和 resume 指令。",
+        "针对 mr 项目的有范围维护建议和验证命令。",
+      ],
+      guardrails: [
+        "不要组合多个策略 flag，也不要把 `--rm-mr` 和 `--pr` 一起用。",
+        "不要用手写 git commit、手动 push 或 shortcut `--pr` 流程替代 CLI 冲突恢复。",
+        "除非用户明确要求该具体操作，否则不要修改已停住的 merge/rebase 状态。",
+      ],
+      entryPoints: [
+        { description: "MR 命令选择、策略规则和冲突恢复 guardrails。", label: "工作流" },
+        { description: "详细命令面、无感模式、配置、安装和维护说明。", label: "CLI 参考" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
     "split-commits": {
       category: "Git 工作流",
       blurb: "把混杂 working tree 拆成聚焦的本地 commits。",
