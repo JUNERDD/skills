@@ -285,7 +285,7 @@ curl -X POST "<SYNC_LOCATIONS_URL>" \
   }'
 ```
 
-Use replace semantics: send the entire current set of active temporary log locations each time so removed log points disappear from the sidecar state as soon as the code changes. Each synced location must stay relative to `workspaceRoot`, include a line number, and resolve to an existing source file inside the workspace; the collector rejects invalid, absolute, missing-file, or out-of-root records at sync time.
+Use replace semantics: send the entire current set of active temporary log locations each time so removed log points disappear from the sidecar state as soon as the code changes. Do not trim a valid active set just because it is larger than the usual instrumentation budget; the collector state should reflect the temporary log points that actually exist in source. Each synced location must stay relative to `workspaceRoot`, include a line number, and resolve to an existing source file inside the workspace; the collector rejects invalid, absolute, missing-file, or out-of-root records at sync time.
 
 If the current session does not expose `syncLocationsUrl` or another writable location-state mechanism, keep `location` populated in the log payloads and continue without collector-managed active-location state for that session.
 

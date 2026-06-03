@@ -538,6 +538,36 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertTrue(locations['src/app.ts:1']['tracked'])
         self.assertNotIn('src/other.ts:1', locations)
 
+    def test_sync_locations_accepts_more_than_ten_active_sources(self) -> None:
+        source_file = self.workspace_root / 'src' / 'app.ts'
+        source_file.parent.mkdir(parents=True, exist_ok=True)
+        source_file.write_text(
+            '\n'.join(f'console.log({index});' for index in range(1, 12)),
+            encoding='utf-8',
+        )
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        dashboard_token = state_payload['service']['dashboardToken']
+
+        locations = [
+            {'location': f'src/app.ts:{index}', 'hypothesisIds': [f'H{index}']}
+            for index in range(1, 12)
+        ]
+        status, payload = self._request_json(
+            'POST',
+            '/api/locations/sync',
+            payload={'locations': locations},
+            headers={collector_server.DASHBOARD_TOKEN_HEADER: dashboard_token},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload['trackedLocationCount'], 11)
+        self.assertEqual(len(payload['locations']), 11)
+
+        persisted = json.loads(self.location_state_file.read_text(encoding='utf-8'))
+        self.assertEqual(persisted['trackedLocationCount'], 11)
+
     def test_hydrate_log_cache_restores_tracked_locations_from_state_file(self) -> None:
         source_file = self.workspace_root / 'src' / 'app.ts'
         source_file.parent.mkdir(parents=True, exist_ok=True)
