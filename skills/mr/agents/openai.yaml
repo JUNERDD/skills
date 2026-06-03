@@ -1,4 +1,4 @@
 interface:
-  display_name: "MR CNB Merge Request"
-  short_description: "Operate CNB merge-request CLI safely"
-  default_prompt: "Use $mr to create or troubleshoot a CNB merge request with the mr CLI, including detached mode and conflict resume."
+  display_name: "MR Git Workflow"
+  short_description: "Operate Git MR/PR CLI workflows safely"
+  default_prompt: "Use $mr to create or troubleshoot a Git merge request with the mr CLI, including detached mode, request providers, and conflict resume."

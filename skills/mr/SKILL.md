@@ -1,18 +1,22 @@
 ---
 name: mr
-description: Use and maintain the `mr` Node CLI for CNB merge requests. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain CNB merge requests with `mr`, `mrm`, `mrt`, or `mrp`; when handling MR branches named like `mr/target/current`, `git cnb pull create`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the `/Users/zen/Documents/mr` project that implements this CLI.
+description: Use and maintain the `mr` Node CLI for generic Git merge-request and pull-request branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the `/Users/zen/Documents/mr` project that implements this CLI.
 ---
 
-# MR CNB Merge Request
+# MR Git Merge Request
 
 ## Core Model
 
-Use this skill to operate the `mr` CLI safely and to maintain its TypeScript implementation. The CLI prepares CNB merge requests for a current branch and target branch by either:
+Use this skill to operate the `mr` CLI safely and to maintain its TypeScript implementation. The CLI prepares a merge-request or pull-request source for the current branch and a target branch by either:
 
-- Creating or updating `mr/<target>/<current>` and then running `git cnb pull create -H mr/<target>/<current> -B <target>`.
-- Using `--pr` to push the current branch and run `git cnb pull create -H <current> -B <target>` directly.
+- Creating or updating `mr/<target>/<current>`, pushing that branch, and then running the configured request command/provider when available.
+- Using `--pr` to push the current branch directly as the request source.
 
-Read `references/mr-cli-reference.md` when the user asks beyond a simple command lookup, including detached mode, conflict resume, install/update behavior, or implementation changes.
+If no request command/provider is available, the CLI still pushes the source branch and tells the user to create the request manually in the Git platform.
+
+Detached mode is the built-in default. It keeps the main worktree on the current branch and usually does not require a clean tracked working tree. Traditional inline branch-switching mode is opt-in with `--no-detached`, `MR_DETACHED=false`, or `git config mr.detached false`.
+
+Read `references/mr-cli-reference.md` when the user asks beyond a simple command lookup, including provider setup, detached mode, conflict resume, install/update behavior, or implementation changes.
 
 ## Command Map
 
@@ -26,7 +30,7 @@ mrp                # target prerelease
 mr <target>        # arbitrary target branch
 ```
 
-Common flags:
+Common workflow flags:
 
 ```sh
 mr test --dry-run
@@ -49,10 +53,15 @@ Maintenance and configuration:
 mr --config
 mr --config --show
 mr --config --strategy rebase
+mr --config --request-provider github
+mr --config --request-provider none
+mr --config --request-command 'gh pr create --fill --head "$MR_SOURCE_BRANCH" --base "$MR_TARGET_BRANCH"'
 mr --config --global --strategy pr
 mr --config --detached
 mr --config --no-detached
 mr --config --unset
+mr --config --unset-request-command
+mr --config --unset-request-provider
 mr --update
 mr --uninstall
 mr --version
@@ -60,32 +69,42 @@ mr --version
 
 ## Operating Workflow
 
-1. Confirm the repository context with `git status --short --branch` before running mutating MR commands.
-2. Resolve the target branch from the command or user intent:
+1. Before any task that requires executing `mr`, `mrm`, `mrt`, or `mrp`, check whether the CLI is installed with `command -v mr`.
+   - If the command exists, continue.
+   - If the user explicitly asked to install or update the CLI, run the official install/update flow directly.
+   - If the command is missing for a create, preview, config, troubleshoot, or resume task, do not invent a manual Git replacement. Tell the user `mr` is not installed, show the install command, and ask whether to install it now.
+   - If the user answers yes, install automatically with `curl -fsSL https://raw.githubusercontent.com/JUNERDD/mr/main/install.sh | bash`, verify with `mr --version`, then continue the original task if the repository state is still appropriate.
+   - If the user declines, provide the manual install command and stop before running MR workflow commands.
+2. Confirm the repository context with `git status --short --branch` before running mutating MR commands.
+3. Resolve the target branch from the command or user intent:
    - `mrm` or `mr master` targets `master`.
    - `mrt` or `mr test` targets `test`.
    - `mrp` or `mr prerelease` targets `prerelease`.
    - `mr <target>` supports arbitrary target branches.
-3. If the user gives only an MR identifier, MR URL, or generic MR task and no source/current branch is clear from local or remote refs, clarify before mutating:
+4. If the user gives only an MR identifier, MR URL, or generic MR task and no source/current branch is clear from local or remote refs, clarify before mutating:
    - Which source/current branch to use or check out.
    - Which target branch to use, if not clear.
    - Whether to keep the existing `mr/<target>/<current>` branch or delete and rebuild it with `--rm-mr`.
    Ask the keep/delete question as its own yes/no decision. `--rm-mr` is opt-in only.
-4. Prefer `mr <target> --dry-run` when the target, strategy, detached mode, or repository state is ambiguous. It prints the git/CNB plan without changing local branches, remote branches, or merge requests.
-5. Run the real command only when the user requested creation/update or the task clearly requires it.
+5. Prefer `mr <target> --dry-run` when the target, strategy, detached mode, provider, or repository state is ambiguous. Dry-run prints the Git/request plan without mutating local branches, remote branches, or merge requests.
+6. Run the real command only when the user requested creation/update or the task clearly requires it.
 
-## Strategy And Config Rules
+## Strategy, Detached, And Request Rules
 
 Use exactly one strategy:
 
-- `merge` is the built-in default: start from the target branch and merge the current branch into `mr/<target>/<current>`.
+- `merge` is the built-in strategy default: start from the target/MR branch and merge the current branch into `mr/<target>/<current>`.
 - `rebase`: start from the current branch and rebase it onto the target branch.
 - `merge-target`: start from the current branch and merge the target branch into it.
-- `pr`: push the current branch and create the CNB PR directly, without an `mr/*` branch.
+- `pr`: push the current branch and handle the request directly, without an `mr/*` branch.
 
 Strategy precedence is: command flag, `MR_STRATEGY`, local `git config mr.strategy`, global `git config --global mr.strategy`, legacy `mr.rebase`, built-in `merge`. Underscore input such as `merge_target` normalizes to `merge-target`.
 
-Detached mode is orthogonal to strategy. Precedence is: `--detached` / `--no-detached`, `MR_DETACHED`, local `git config mr.detached`, global `git config --global mr.detached`, built-in `false`.
+Detached mode is orthogonal to strategy. Precedence is: `--detached` / `--no-detached`, `MR_DETACHED`, local `git config mr.detached`, global `git config --global mr.detached`, built-in `true`.
+
+Request command/provider precedence is: `MR_REQUEST_COMMAND`, local `mr.requestCommand`, global `mr.requestCommand`, `MR_REQUEST_PROVIDER`, local `mr.requestProvider`, global `mr.requestProvider`, built-in `auto`. Custom request commands run through `sh -c` with `MR_SOURCE_BRANCH`, `MR_HEAD_BRANCH`, `MR_TARGET_BRANCH`, and `MR_BASE_BRANCH`.
+
+Provider values are `auto`, `none`, `cnb`, `github`, and `gitlab`. `auto` detects CNB/GitHub/GitLab from `origin` only when the matching CLI is available (`git cnb`, `gh`, or `glab`). `none` disables request creation and leaves only pushed branches plus manual instructions.
 
 Do not combine strategy flags. Do not combine `--rm-mr` with `--pr`.
 
@@ -96,17 +115,19 @@ Let the CLI own resume. Do not replace CLI resume with a manual `--pr` flow.
 When `mr` stops for a merge or rebase conflict:
 
 - Preserve the branch or worktree state where the CLI stopped.
-- Run only read-only inspection unless the user explicitly asks you to resolve conflicts: `git status --short --branch`, `git branch --show-current`, and checks for `MERGE_HEAD` / `REBASE_HEAD`.
+- Run only read-only inspection unless the user explicitly asks you to resolve conflicts: `git status --short --branch`, `git branch --show-current`, `git rev-parse -q --verify MERGE_HEAD`, `git rev-parse -q --verify REBASE_HEAD`, and `git worktree list --porcelain`.
 - Tell the user to resolve conflicts, run `git add <files>`, and then either ask you to continue or rerun the command shown by the CLI.
-- Do not run `git add`, `git commit`, `git rebase --continue`, `git merge --continue`, aborts, resets, branch switches, pushes, or `git cnb pull create` unless the user explicitly asks for that exact operation.
+- Do not run `git add`, `git commit`, `git rebase --continue`, `git merge --continue`, aborts, resets, branch switches, pushes, or request commands unless the user explicitly asks for that exact operation.
 
-After the user says conflict resolution is staged and asks you to continue, inspect status first. If the state matches the stopped operation, rerun the CLI resume command instead of inventing git steps:
+After the user says conflict resolution is staged and asks you to continue, inspect status first. If the state matches the stopped operation, rerun the CLI resume command instead of inventing Git steps:
 
-- Inline default merge or rebase resume: `mr <target>` or the matching alias (`mrm`, `mrt`, `mrp`).
-- Inline merge-target resume: `mr <target> --merge-target` or the matching alias plus `--merge-target`.
-- Detached resume: run `mr <target> --detached` from the main repo, preserving the original strategy flag when it was `--rebase` or `--merge-target`.
+- Detached default merge resume: `mr <target> --detached` from the main repo.
+- Detached rebase resume: `mr <target> --detached --rebase` from the main repo.
+- Detached merge-target resume: `mr <target> --detached --merge-target` from the main repo.
+- Inline default merge or rebase resume: `mr <target> --no-detached` or the matching alias plus `--no-detached`, unless `mr.detached=false` was the original source of inline mode.
+- Inline merge-target resume: `mr <target> --no-detached --merge-target` or the matching alias plus both flags.
 
-Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`. The main repo stays on the business branch. The user should resolve conflicts inside the reported worktree, run `git add <files>` there, then rerun `mr <target> --detached` from the main repo. The CLI resumes, pushes, creates/confirms the PR, and removes the worktree.
+Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`. The main repo stays on the business branch. The user should resolve conflicts inside the reported worktree, run `git add <files>` there, then rerun the matching detached command from the main repo. The CLI resumes, pushes, handles the request, and removes the worktree.
 
 ## Maintaining The Project
 

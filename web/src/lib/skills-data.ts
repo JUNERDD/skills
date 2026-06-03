@@ -236,22 +236,25 @@ export const SKILLS: SkillDetail[] = [
     slug: "mr",
     title: "mr",
     category: "Git workflow",
-    blurb: "Use and maintain the CNB merge-request CLI.",
+    blurb: "Use and maintain the Git MR/PR helper CLI.",
     lead:
-      "A CNB merge-request workflow for running the mr CLI safely across branch strategies, detached mode, config, conflict resume, and tool maintenance.",
+      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume, and tool maintenance.",
     overview:
-      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining CNB merge requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
+      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
     bestFor: [
-      "Creating or previewing CNB merge requests from a current branch to master, test, prerelease, or an arbitrary target.",
-      "Choosing between merge, rebase, merge-target, direct PR, and detached-mode workflows.",
+      "Creating or previewing Git merge requests or pull requests from a current branch to master, test, prerelease, or an arbitrary target.",
+      "Checking for a missing local mr install and installing it after user confirmation.",
+      "Choosing between merge, rebase, merge-target, direct PR, and default detached-mode workflows.",
+      "Configuring CNB, GitHub, GitLab, or custom request commands for pushed source branches.",
       "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
       "Maintaining the `/Users/zen/Documents/mr` TypeScript/Pastel/Ink/Zod CLI implementation.",
     ],
     workflow: [
       "Inspect repository state with `git status --short --branch` before mutating MR branches.",
+      "Check `command -v mr` before running CLI-dependent workflows; if missing, ask before installing unless the user explicitly requested install.",
       "Resolve target aliases and clarify source, target, and MR-branch keep/delete intent before acting on ambiguous MR requests.",
       "Use `--dry-run` when strategy, detached mode, or repository state is unclear.",
-      "Run exactly one strategy and respect config precedence for `MR_STRATEGY`, `mr.strategy`, `MR_DETACHED`, and `mr.detached`.",
+      "Run exactly one strategy and respect config precedence for strategy, detached mode, request provider, and custom request command settings.",
       "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
       "When editing the CLI project, keep README behavior, command examples, and diagrams aligned with implementation changes.",
     ],
@@ -274,7 +277,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "CLI reference",
         path: "skills/mr/references/mr-cli-reference.md",
-        description: "Detailed command surface, detached mode, config, install, and maintenance notes.",
+        description: "Detailed command surface, detached mode, request providers, config, install, and maintenance notes.",
       },
       {
         label: "Runtime metadata",

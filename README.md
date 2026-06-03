@@ -31,7 +31,7 @@ If you are deciding what to install, start here:
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
-- [`mr`](#mr) - use and maintain the CNB merge-request CLI
+- [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
@@ -204,7 +204,7 @@ Key entry points:
 
 ### `mr`
 
-[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for CNB merge requests. It covers target aliases, MR branch strategies, detached mode, configuration, conflict resume, install/update/uninstall behavior, and maintenance of the `/Users/zen/Documents/mr` TypeScript CLI project.
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git merge-request and pull-request workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, and maintenance of the `/Users/zen/Documents/mr` TypeScript CLI project.
 
 Install:
 
@@ -214,8 +214,10 @@ npx skills@latest add JUNERDD/skills --skill mr
 
 Best for:
 
-- creating or previewing CNB merge requests with `mr`, `mrm`, `mrt`, or `mrp`
-- choosing between `merge`, `rebase`, `merge-target`, `pr`, and detached-mode flows
+- creating or previewing Git merge requests or pull requests with `mr`, `mrm`, `mrt`, or `mrp`
+- checking for a missing local `mr` install and installing it after user confirmation
+- choosing between `merge`, `rebase`, `merge-target`, `pr`, and default detached-mode flows
+- configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
 - handling stopped merge/rebase states by preserving CLI-owned resume paths
 - maintaining the local TypeScript/Pastel/Ink/Zod implementation of the CLI
 
