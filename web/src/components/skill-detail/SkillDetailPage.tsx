@@ -83,22 +83,16 @@ function DetailSection({
   );
 }
 
-function TextList({
-  items,
-  signalLabel,
-}: {
-  items: string[];
-  signalLabel: string;
-}) {
+function TextList({ items }: { items: string[] }) {
   return (
     <ul className="divide-y divide-white/10 border-y border-white/10">
-      {items.map((text) => (
+      {items.map((text, index) => (
         <li
           key={text}
           className="grid gap-3 py-5 font-mono text-sm leading-relaxed text-[color:var(--crt-dim)] md:grid-cols-[9rem_1fr] md:text-[0.95rem]"
         >
           <span className="font-sans text-xs font-bold uppercase tracking-[0.16em] text-white/40">
-            {signalLabel}
+            {String(index + 1).padStart(2, '0')}
           </span>
           <span>{text}</span>
         </li>
@@ -304,7 +298,7 @@ export function SkillDetailPage({
           </DetailSection>
 
           <DetailSection eyebrow="02" id="best-for" title={labels.useCase}>
-            <TextList items={skill.bestFor} signalLabel={labels.signal} />
+            <TextList items={skill.bestFor} />
           </DetailSection>
 
           <DetailSection eyebrow="03" id="workflow" title={labels.workflow}>
@@ -312,11 +306,11 @@ export function SkillDetailPage({
           </DetailSection>
 
           <DetailSection eyebrow="04" id="outputs" title={labels.outputs}>
-            <TextList items={skill.outputs} signalLabel={labels.signal} />
+            <TextList items={skill.outputs} />
           </DetailSection>
 
           <DetailSection eyebrow="05" id="guardrails" title={labels.guardrails}>
-            <TextList items={skill.guardrails} signalLabel={labels.signal} />
+            <TextList items={skill.guardrails} />
           </DetailSection>
 
           <DetailSection eyebrow="06" id="entry-points" title={labels.entryPoints}>

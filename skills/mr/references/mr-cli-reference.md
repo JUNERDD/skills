@@ -466,11 +466,14 @@ npm run install:local
 
 ## Project Maintenance
 
-Project root:
+Canonical project:
 
 ```text
-/Users/zen/Documents/mr
+JUNERDD/mr
+https://github.com/JUNERDD/mr
 ```
+
+Use repository identity or a user-provided workspace to locate it; do not assume or record machine-specific absolute paths.
 
 Source map:
 
@@ -484,4 +487,4 @@ Source map:
 - `src/ui/`: terminal rendering, color/spinner behavior, target/config pickers.
 - `test/`: Vitest coverage for command parsing, strategy/config/request precedence, branch flows, conflicts, detached mode, install scripts, lifecycle behavior, and update checks.
 
-Preserve the TypeScript/Pastel/Ink/Zod structure when editing. For behavior changes, run the narrowest relevant tests first, then `npm run check` when feasible. Keep `/Users/zen/Documents/mr/README.md` aligned with behavior, command examples, Mermaid diagrams, provider behavior, automatic update notices, and install/update/uninstall notes.
+Preserve the TypeScript/Pastel/Ink/Zod structure when editing. For behavior changes, run the narrowest relevant tests first, then `npm run check` when feasible. Keep the `JUNERDD/mr` README aligned with behavior, command examples, Mermaid diagrams, provider behavior, automatic update notices, and install/update/uninstall notes.

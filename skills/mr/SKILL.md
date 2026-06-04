@@ -1,13 +1,13 @@
 ---
 name: mr
-description: Use and maintain the `mr` Node CLI for generic Git merge-request and pull-request branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), automatic update notices (`MR_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the `/Users/zen/Documents/mr` project that implements this CLI.
+description: Use and maintain the `mr` Node CLI for generic Git MR/PR branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), automatic update notices (`MR_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the upstream `JUNERDD/mr` implementation behind this CLI.
 ---
 
 # MR Git Merge Request
 
 ## Core Model
 
-Use this skill to operate the `mr` CLI safely and to maintain its TypeScript implementation. The CLI prepares a merge-request or pull-request source for the current branch and a target branch by either:
+Use this skill to operate the `mr` CLI safely. For implementation work, treat `JUNERDD/mr` as the upstream TypeScript project behind the CLI. The CLI prepares a merge-request or pull-request source for the current branch and a target branch by either:
 
 - Creating or updating `mr/<target>/<current>`, pushing that branch, and then running the configured request command/provider when available.
 - Using `--pr` to push the current branch directly as the request source.
@@ -149,8 +149,8 @@ Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`.
 
 ## Maintaining The Project
 
-When editing `/Users/zen/Documents/mr`, preserve the existing TypeScript/Pastel/Ink/Zod structure. Run the narrowest relevant Vitest tests plus `npm run check` for behavior changes when feasible.
+When editing the CLI implementation, verify that the workspace is the `JUNERDD/mr` repository or a user-provided workspace for that repository; do not assume or record machine-specific absolute paths. Preserve the existing TypeScript/Pastel/Ink/Zod structure. Run the narrowest relevant Vitest tests plus `npm run check` for behavior changes when feasible.
 
-Before changing behavior, command semantics, workflow logic, branch strategy, user-facing output, or configuration, decide whether `/Users/zen/Documents/mr/README.md` must be updated. After any logic change, either update that README in the same change or explicitly state that it is unchanged because the change is internal-only.
+Before changing behavior, command semantics, workflow logic, branch strategy, user-facing output, or configuration, decide whether `JUNERDD/mr`'s README must be updated. After any logic change, either update that README in the same change or explicitly state that it is unchanged because the change is internal-only.
 
 Do not add skill-local README, changelog, or install guide files. Keep skill details in `SKILL.md` and `references/`.

@@ -162,7 +162,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "配置 CNB、GitHub、GitLab 或自定义请求命令。",
         "理解自动更新提示，以及禁用提示的环境变量。",
         "处理停住的 merge 或 rebase 状态，并保留 CLI 拥有的 resume 路径。",
-        "维护 `/Users/zen/Documents/mr` 的 TypeScript/Pastel/Ink/Zod CLI 实现。",
+        "维护 CLI 背后的 TypeScript/Pastel/Ink/Zod 实现。",
       ],
       workflow: [
         "执行会修改 MR 分支的命令前，先用 `git status --short --branch` 检查仓库状态。",
@@ -171,7 +171,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "一次只运行一种策略，并尊重 `MR_STRATEGY`、`mr.strategy`、`MR_DETACHED` 和 `mr.detached` 的配置优先级。",
         "把交互式更新提示当作信息性 stderr，不当成工作流输出或命令失败。",
         "发生冲突时，把解决动作交给用户；只有在冲突已 staged 后，才重跑匹配的 `mr` resume 命令。",
-        "编辑 CLI 项目时，让 README 行为说明、命令示例、图示和自动更新提示说明与实现保持一致。",
+        "编辑 CLI 项目时，先确认实现仓库身份，不假设本机路径，并让 README 行为说明、命令示例、图示和自动更新提示说明与实现保持一致。",
       ],
       outputs: [
         "`mr`、`mrm`、`mrt` 和 `mrp` 工作流的安全命令选择。",
