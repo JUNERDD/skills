@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.0`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.1`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -31,8 +31,9 @@ If you are deciding what to install, start here:
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
+- [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
-- [`multitask-coordinator`](#multitask-coordinator) - coordinate complex subagent work with clear ownership boundaries
+- [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
@@ -75,6 +76,7 @@ Examples:
 ```bash
 npx skills@latest add JUNERDD/skills --skill debug
 npx skills@latest add JUNERDD/skills --skill git-commit
+npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 npx skills@latest add JUNERDD/skills --skill plan-mode
@@ -200,6 +202,32 @@ Key entry points:
 - Workflow and guardrails: [`skills/git-commit/SKILL.md`](./skills/git-commit/SKILL.md)
 - Optional runtime metadata: [`skills/git-commit/agents/openai.yaml`](./skills/git-commit/agents/openai.yaml)
 
+### `mr`
+
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git merge-request and pull-request workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, automatic update notices, and maintenance of the `/Users/zen/Documents/mr` TypeScript CLI project.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill mr
+```
+
+Best for:
+
+- creating or previewing Git merge requests or pull requests with `mr`, `mrm`, `mrt`, or `mrp`
+- checking for a missing local `mr` install and installing it after user confirmation
+- choosing between `merge`, `rebase`, `merge-target`, `pr`, and default detached-mode flows
+- configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
+- understanding non-blocking update notices and the environment variables that disable them
+- handling stopped merge/rebase states by preserving CLI-owned resume paths
+- maintaining the local TypeScript/Pastel/Ink/Zod implementation of the CLI
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/mr/SKILL.md`](./skills/mr/SKILL.md)
+- CLI reference: [`skills/mr/references/mr-cli-reference.md`](./skills/mr/references/mr-cli-reference.md)
+- Optional runtime metadata: [`skills/mr/agents/openai.yaml`](./skills/mr/agents/openai.yaml)
+
 ### `split-commits`
 
 [`skills/split-commits/`](./skills/split-commits/) helps break a mixed working tree into a sequence of focused local commits. It stages one logical batch at a time, asks `$git-commit` for a message, and requires explicit confirmation before each `git commit`.
@@ -223,7 +251,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents. It keeps the parent agent responsible for framing, shared contracts, delegation decisions, worker ownership boundaries, synthesis, verification, and user communication.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents or local task decomposition. It keeps the parent agent responsible for framing, decomposition, shared contracts, delegation decisions, worker ownership boundaries, isolation choices, synthesis, verification, and user communication.
 
 Install:
 
@@ -233,10 +261,10 @@ npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 
 Best for:
 
-- deciding whether complex repo work should be handled locally or delegated
-- assigning disjoint worker scopes in large repositories, monorepos, or dirty worktrees
+- deciding whether complex repo work should stay local, be decomposed, or be delegated
+- assigning disjoint worker scopes in large repositories, monorepos, multi-root workspaces, dirty worktrees, or isolated worktrees and branches
 - keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership
-- synthesizing explorer, implementation, review, or verification results without duplicating work
+- coordinating queued independent requests, async exploration, implementation, review, or verification without duplicating work
 - preserving parent-agent ownership of final integration, validation, and user-facing status
 
 Key entry points:
@@ -520,6 +548,12 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       └── report-template.md
+    ├── mr/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── mr-cli-reference.md
     ├── multitask-coordinator/
     │   ├── SKILL.md
     │   └── agents/

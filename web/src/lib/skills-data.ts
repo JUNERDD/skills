@@ -233,6 +233,63 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "mr",
+    title: "mr",
+    category: "Git workflow",
+    blurb: "Use and maintain the Git MR/PR helper CLI.",
+    lead:
+      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume, automatic update notices, and tool maintenance.",
+    overview:
+      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior, non-blocking update notices, and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
+    bestFor: [
+      "Creating or previewing Git merge requests or pull requests from a current branch to master, test, prerelease, or an arbitrary target.",
+      "Checking for a missing local mr install and installing it after user confirmation.",
+      "Choosing between merge, rebase, merge-target, direct PR, and default detached-mode workflows.",
+      "Configuring CNB, GitHub, GitLab, or custom request commands for pushed source branches.",
+      "Understanding automatic update notices and the environment variables that disable them.",
+      "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
+      "Maintaining the `/Users/zen/Documents/mr` TypeScript/Pastel/Ink/Zod CLI implementation.",
+    ],
+    workflow: [
+      "Inspect repository state with `git status --short --branch` before mutating MR branches.",
+      "Check `command -v mr` before running CLI-dependent workflows; if missing, ask before installing unless the user explicitly requested install.",
+      "Resolve target aliases and clarify source, target, and MR-branch keep/delete intent before acting on ambiguous MR requests.",
+      "Use `--dry-run` when strategy, detached mode, or repository state is unclear.",
+      "Run exactly one strategy and respect config precedence for strategy, detached mode, request provider, and custom request command settings.",
+      "Treat interactive update notices as informational stderr, not workflow output or command failures.",
+      "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
+      "When editing the CLI project, keep README behavior, command examples, and diagrams aligned with implementation changes.",
+    ],
+    outputs: [
+      "Safe command choices for `mr`, `mrm`, `mrt`, and `mrp` workflows.",
+      "Update-notice interpretation and disablement guidance.",
+      "Conflict handoff and resume instructions that match the current CLI implementation.",
+      "Scoped maintenance guidance and verification commands for the mr project.",
+    ],
+    guardrails: [
+      "Do not combine strategy flags or use `--rm-mr` with `--pr`.",
+      "Do not replace CLI conflict resume with hand-written git commits, manual pushes, or a shortcut `--pr` flow.",
+      "Do not mutate stopped merge/rebase states unless the user explicitly asks for that exact action.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/mr/SKILL.md",
+        description: "MR command selection, strategy rules, and conflict-resume guardrails.",
+      },
+      {
+        label: "CLI reference",
+        path: "skills/mr/references/mr-cli-reference.md",
+        description: "Detailed command surface, detached mode, request providers, config, install, and maintenance notes.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/mr/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "split-commits",
     title: "split-commits",
     category: "Git workflow",
@@ -280,23 +337,23 @@ export const SKILLS: SkillDetail[] = [
     slug: "multitask-coordinator",
     title: "multitask-coordinator",
     category: "Agent coordination",
-    blurb: "Coordinate complex subagent work with clear ownership boundaries.",
+    blurb: "Coordinate scoped subagent work with safe ownership boundaries.",
     lead:
-      "A parent-agent workflow for deciding when to delegate, assigning worker scopes, synthesizing results, and verifying the final outcome.",
+      "A parent-agent workflow for deciding when to delegate, assigning worker scopes, choosing isolation, synthesizing results, and verifying the final outcome.",
     overview:
-      "Use this skill for non-trivial multi-step work where background subagents may help but the parent agent must keep ownership of framing, shared contracts, delegation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, choosing explorer or worker shapes, defining disjoint scopes, protecting atomic migrations, and turning worker outputs into reviewed evidence.",
+      "Use this skill for non-trivial multi-step work where async/background subagents or local decomposition may help but the parent agent must keep ownership of framing, shared contracts, delegation, isolation, integration, verification, and user communication. It gives the coordinator a decision checklist for handling simple work directly, ordering queued requests, choosing explorer or worker shapes, defining disjoint scopes, protecting atomic migrations, and turning worker outputs into reviewed evidence.",
     bestFor: [
-      "Deciding whether a complex repo task should be handled directly or delegated.",
-      "Assigning clear worker ownership boundaries in large repositories, monorepos, or dirty worktrees.",
+      "Deciding whether a complex repo task should stay local, be decomposed, or be delegated.",
+      "Assigning clear worker ownership boundaries in large repositories, monorepos, multi-root workspaces, dirty worktrees, or isolated worktrees and branches.",
       "Keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership.",
-      "Coordinating independent exploration, implementation, review, or verification slices.",
+      "Coordinating queued independent requests, async exploration, implementation, review, or verification slices.",
       "Synthesizing worker outputs while preserving parent-agent accountability for the final result.",
     ],
     workflow: [
       "Read applicable repository rules and check the dirty worktree before assigning ownership.",
       "Map success criteria, affected systems, likely owner files, shared contracts, and verification commands.",
       "Keep shared files and contracts parent-owned unless one worker is explicitly assigned as the sole owner.",
-      "Choose zero, one, or a small set of workers based on independence, scope clarity, and synthesis cost.",
+      "Choose zero, one, or a small set of workers and pick shared workspace or isolated worktree/branch execution based on risk.",
       "Give each worker a concrete objective, allowed scope, forbidden actions, validation expectation, and output contract.",
       "Review worker evidence, resolve conflicts or gaps, integrate only adopted work, and run the narrowest credible verification.",
     ],
@@ -307,14 +364,14 @@ export const SKILLS: SkillDetail[] = [
     ],
     guardrails: [
       "Do not delegate trivial requests or immediate blocking work that the parent must handle now.",
-      "Do not assign sibling workers overlapping write ownership for shared files, schemas, generated artifacts, or global config.",
+      "Do not assign sibling workers overlapping write ownership unless isolated branches or worktrees make the planned merge explicit.",
       "Do not accept worker output as fact without reviewing changed files, artifacts, command output, or other concrete evidence.",
     ],
     entryPoints: [
       {
         label: "Workflow",
         path: "skills/multitask-coordinator/SKILL.md",
-        description: "Delegation decisions, worker prompt contracts, synthesis, and verification rules.",
+        description: "Delegation decisions, isolation choices, worker prompt contracts, synthesis, and verification rules.",
       },
       {
         label: "Runtime metadata",

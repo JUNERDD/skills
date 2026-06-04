@@ -4,6 +4,16 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.1] - 2026-06-04
+
+### Changed
+
+- Added the mr skill for generic Git merge-request and pull-request workflows.
+- Registered mr in the README and website catalog.
+- Added automatic update-notice guidance for mr workflows.
+- Added isolation guidance to multitask-coordinator.
+- Clarified debug instrumentation budgets as guidance.
+
 ## [0.2.0] - 2026-05-31
 
 ### Changed
