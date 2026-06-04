@@ -248,7 +248,7 @@ export const SKILLS: SkillDetail[] = [
       "Configuring CNB, GitHub, GitLab, or custom request commands for pushed source branches.",
       "Understanding automatic update notices and the environment variables that disable them.",
       "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
-      "Maintaining the `/Users/zen/Documents/mr` TypeScript/Pastel/Ink/Zod CLI implementation.",
+      "Maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI.",
     ],
     workflow: [
       "Inspect repository state with `git status --short --branch` before mutating MR branches.",
@@ -258,7 +258,7 @@ export const SKILLS: SkillDetail[] = [
       "Run exactly one strategy and respect config precedence for strategy, detached mode, request provider, and custom request command settings.",
       "Treat interactive update notices as informational stderr, not workflow output or command failures.",
       "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
-      "When editing the CLI project, keep README behavior, command examples, and diagrams aligned with implementation changes.",
+      "When editing the CLI project, verify the implementation repository instead of assuming a local path, and keep README behavior, command examples, and diagrams aligned with implementation changes.",
     ],
     outputs: [
       "Safe command choices for `mr`, `mrm`, `mrt`, and `mrp` workflows.",

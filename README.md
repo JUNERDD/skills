@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.1`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.2`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -204,7 +204,7 @@ Key entry points:
 
 ### `mr`
 
-[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git merge-request and pull-request workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, automatic update notices, and maintenance of the `/Users/zen/Documents/mr` TypeScript CLI project.
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
 
 Install:
 
@@ -220,7 +220,7 @@ Best for:
 - configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
 - understanding non-blocking update notices and the environment variables that disable them
 - handling stopped merge/rebase states by preserving CLI-owned resume paths
-- maintaining the local TypeScript/Pastel/Ink/Zod implementation of the CLI
+- maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI
 
 Key entry points:
 

@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.2] - 2026-06-04
+
+### Changed
+
+- Reframed mr skill and catalog copy to keep the Git MR/PR CLI positioning while treating JUNERDD/mr as the underlying implementation repository.
+- Removed hard-coded local mr checkout paths from mr skill maintenance guidance.
+- Replaced fixed Signal labels on website skill detail lists with numeric markers.
+
 ## [0.2.1] - 2026-06-04
 
 ### Changed

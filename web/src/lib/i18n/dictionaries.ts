@@ -76,7 +76,6 @@ export type SiteDictionary = {
     overview: string;
     previous: string;
     relatedSkills: string;
-    signal: string;
     useCase: string;
     workflow: string;
   };
@@ -170,7 +169,6 @@ const dictionaries: Record<Locale, SiteDictionary> = {
       overview: "What this skill does",
       previous: "Previous skill",
       relatedSkills: "Related skills",
-      signal: "Signal",
       useCase: "When to use it",
       workflow: "How it works",
     },
@@ -261,7 +259,6 @@ const dictionaries: Record<Locale, SiteDictionary> = {
       overview: "这个 skill 做什么",
       previous: "上一个 skill",
       relatedSkills: "相关 skills",
-      signal: "信号",
       useCase: "什么时候使用",
       workflow: "如何工作",
     },
