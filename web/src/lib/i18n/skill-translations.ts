@@ -116,6 +116,47 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
+    "find-local-skill": {
+      category: "Agent 工作流",
+      blurb: "先拆解请求，再寻找相关本地 skills。",
+      lead:
+        "一个 skill 选择工作流，用于先拆解请求、盘点本地 skills、选择适用项，再进入正常分析。",
+      overview:
+        "当 agent 需要在规划、路由或实现请求前检查可用本地 skills 时使用此 skill。它会把请求拆成交付物、工作流阶段、工具、领域和隐含前置条件，再结合会话内 skill 元数据和本地扫描器，覆盖普通项目 skills 文件夹、Cursor、Claude Code、OpenCode、Codex、共享 Agent Skills roots 和插件 skill 缓存，只加载真正影响任务做法的 skill 内容。",
+      bestFor: [
+        "在需求分析、规划或实现前寻找相关本地 skills。",
+        "把模糊或多阶段请求通过显式 skill 选择来路由，而不是依赖记忆。",
+        "发现由交付物、工具或工作流阶段隐含出来的前置 skills。",
+        "审计普通项目 skills 文件夹、Cursor、Claude Code、OpenCode、Codex 和共享 Agent Skills roots 的可用 skill 覆盖。",
+        "区分 `product-design:index` 这类带命名空间的插件 skills。",
+      ],
+      workflow: [
+        "把请求拆成显式动作、交付物、工件、工具、工作流阶段和隐含前置条件。",
+        "在读取额外 skill 内容前，先盘点会话上下文中已有的 skills。",
+        "文件系统可用时运行本地扫描器，覆盖支持的用户、项目和插件 roots。",
+        "在 broad inventory 之后，针对单个 facet 或紧密同义词组做聚焦补充搜索。",
+        "用 skill 名、带命名空间的插件名、描述、显式提及、工具、文件类型、产品、领域、工作流线索和拆解出的前置条件做匹配。",
+        "只选择会实质改变工作方式的 skills。",
+        "按依赖顺序应用选中的 skill 工作流，再继续用户要求的分析或实现。",
+      ],
+      outputs: [
+        "一段简短 skill 选择摘要，为每个选中 skill 给出一个理由。",
+        "使用所选工作流产出的分析、计划、实现指导或实际工作成果。",
+        "没有找到合适本地 skill 时的明确说明。",
+      ],
+      guardrails: [
+        "拆解、盘点和选择完成前，不要开始解法分析。",
+        "不要加载无关 skill 内容。",
+        "第一次 broad inventory 前，不要用 query 缩小范围。",
+        "不要把不相关的拆解 facet 塞进一个长 scanner query，因为 scanner 会要求所有词都匹配。",
+        "当命名空间插件条目和泛用名称都可能匹配时，优先选择命名空间插件条目。",
+      ],
+      entryPoints: [
+        { description: "Skill 盘点、选择和分析顺序规则。", label: "工作流" },
+        { description: "扫描常见本地 skill roots 的文件系统工具。", label: "本地 skill 扫描器" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
     "git-commit": {
       category: "Git 工作流",
       blurb: "根据 staged diff 起草 Conventional Commit 消息。",

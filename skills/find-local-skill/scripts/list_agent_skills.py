@@ -9,6 +9,9 @@ import os
 from pathlib import Path
 
 
+PLUGIN_MANIFEST_DIRS = (".codex-plugin", ".claude-plugin")
+
+
 def expand_path(value: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(value))).resolve()
 
@@ -78,6 +81,20 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     return result
 
 
+def parse_json_file(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def immediate_child_paths(root: Path, pattern: str) -> list[Path]:
+    try:
+        return [path for path in root.glob(pattern) if path.exists()]
+    except OSError:
+        return []
+
+
 def candidate_roots(extra_roots: list[str]) -> list[Path]:
     home = Path.home()
     roots: list[Path] = []
@@ -97,13 +114,19 @@ def candidate_roots(extra_roots: list[str]) -> list[Path]:
             home / ".codex" / "skills",
             home / ".agents" / "skills",
             home / ".claude" / "skills",
+            home / ".cursor" / "skills",
+            home / ".config" / "opencode" / "skills",
             home / ".codex" / "plugins" / "cache",
+            home / ".claude" / "plugins" / "cache",
+            home / ".config" / "opencode" / "plugins",
         ]
     )
+    roots.extend(immediate_child_paths(home / ".cursor", "skills-*"))
 
     cwd = Path.cwd().resolve()
     for directory in [cwd, *cwd.parents]:
-        for name in (".codex", ".agents", ".claude"):
+        roots.append(directory / "skills")
+        for name in (".codex", ".agents", ".claude", ".cursor", ".opencode"):
             roots.append(directory / name / "skills")
 
     roots.extend(expand_path(root) for root in extra_roots)
@@ -132,21 +155,70 @@ def scope_for(path: Path) -> str:
         return "skill-collection"
 
     scope_markers = [
-        (home / ".codex" / "plugins" / "cache", "plugin-cache"),
+        (home / ".codex" / "plugins" / "cache", "codex-plugin"),
+        (home / ".claude" / "plugins" / "cache", "claude-plugin"),
+        (home / ".config" / "opencode" / "plugins", "opencode-plugin"),
         (home / ".codex" / "skills", "codex-user"),
         (home / ".agents" / "skills", "agent-user"),
         (home / ".claude" / "skills", "claude-user"),
+        (home / ".cursor" / "skills", "cursor-user"),
+        (home / ".config" / "opencode" / "skills", "opencode-user"),
     ]
     for root, scope in scope_markers:
         if path == root or root in path.parents:
             return scope
 
+    cursor_root = home / ".cursor"
+    if cursor_root.exists():
+        for root in immediate_child_paths(cursor_root, "skills-*"):
+            if path == root or root in path.parents:
+                return "cursor-user"
+
     for directory in [cwd, *cwd.parents]:
-        for name in (".codex", ".agents", ".claude"):
+        root = directory / "skills"
+        if path == root or root in path.parents:
+            return "project"
+        for name in (".codex", ".agents", ".claude", ".cursor", ".opencode"):
             root = directory / name / "skills"
             if path == root or root in path.parents:
                 return "project"
     return "extra"
+
+
+def plugin_context(path: Path) -> tuple[str, Path] | None:
+    current = path if path.is_dir() else path.parent
+    for directory in [current, *current.parents]:
+        for manifest_dir in PLUGIN_MANIFEST_DIRS:
+            manifest = directory / manifest_dir / "plugin.json"
+            if manifest.exists():
+                data = parse_json_file(manifest)
+                return str(data.get("name") or directory.name), directory
+
+        if is_opencode_plugin_root(directory):
+            data = parse_json_file(directory / "plugin.json")
+            return str(data.get("name") or directory.name), directory
+    return None
+
+
+def is_opencode_plugin_root(path: Path) -> bool:
+    home = Path.home().resolve()
+    root = home / ".config" / "opencode" / "plugins"
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return (resolved == root or root in resolved.parents) and (resolved / "plugin.json").exists()
+
+
+def display_name_for(path: Path, raw_name: str) -> tuple[str, str]:
+    context = plugin_context(path)
+    if not context:
+        return raw_name, ""
+
+    plugin_name, _plugin_root = context
+    if raw_name.startswith(f"{plugin_name}:"):
+        return raw_name, plugin_name
+    return f"{plugin_name}:{raw_name}", plugin_name
 
 
 def list_skills(roots: list[Path]) -> list[dict[str, str]]:
@@ -164,9 +236,12 @@ def list_skills(roots: list[Path]) -> list[dict[str, str]]:
             seen.add(resolved)
 
             metadata = parse_frontmatter(resolved)
+            name, plugin = display_name_for(resolved, metadata["name"])
             skills.append(
                 {
-                    "name": metadata["name"],
+                    "name": name,
+                    "raw_name": metadata["name"],
+                    "plugin": plugin,
                     "description": metadata["description"],
                     "scope": scope_for(resolved.parent),
                     "path": str(resolved),
