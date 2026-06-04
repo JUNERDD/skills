@@ -192,20 +192,24 @@ export const SKILLS: SkillDetail[] = [
     slug: "find-local-skill",
     title: "find-local-skill",
     category: "Agent workflow",
-    blurb: "Find relevant local skills before analysis.",
+    blurb: "Decompose requests, then find relevant local skills.",
     lead:
-      "A skill-selection workflow for inventorying local skills, choosing applicable ones, and applying those workflows before normal analysis.",
+      "A skill-selection workflow for decomposing requests, inventorying local skills, choosing applicable ones, and applying those workflows before normal analysis.",
     overview:
-      "Use this skill when an agent needs to inspect available local skills before planning, routing, or implementing a request. It combines session skill metadata with a bundled local scanner so Codex can compare skill names, descriptions, scopes, and paths before loading only the skill bodies that materially affect the task.",
+      "Use this skill when an agent needs to inspect available local skills before planning, routing, or implementing a request. It decomposes the ask into deliverables, workflow phases, tools, domains, and implicit prerequisites, then combines session skill metadata with a bundled local scanner for plain project skills folders, Cursor, Claude Code, OpenCode, Codex, shared Agent Skills roots, and plugin skill caches before loading only the skill bodies that materially affect the task.",
     bestFor: [
       "Finding relevant local skills before requirement analysis, planning, or implementation.",
-      "Routing ambiguous requests through explicit skill selection instead of relying on memory.",
-      "Auditing available skill coverage across Codex, project, user, Claude, and plugin-cache roots.",
+      "Routing ambiguous or multi-phase requests through explicit skill selection instead of relying on memory.",
+      "Surfacing prerequisite skills that are implied by a deliverable, tool, or workflow phase.",
+      "Auditing available skill coverage across plain project skills folders, Cursor, Claude Code, OpenCode, Codex, and shared Agent Skills roots.",
+      "Distinguishing plugin skills with names such as product-design:index.",
     ],
     workflow: [
+      "Decompose the request into explicit asks, deliverables, artifacts, tools, workflow phases, and implicit prerequisites.",
       "Inventory skills already present in session context before reading any additional skill bodies.",
-      "Run the bundled local scanner when filesystem access is available.",
-      "Compare the request against skill names, descriptions, explicit mentions, tools, file types, products, domains, and workflow cues.",
+      "Run the bundled local scanner when filesystem access is available, including supported user, project, and plugin roots.",
+      "Run focused supplemental searches for individual facets or tight synonym groups after the broad inventory.",
+      "Compare the request against skill names, namespaced plugin names, descriptions, explicit mentions, tools, file types, products, domains, workflow cues, and decomposed prerequisites.",
       "Select only skills that materially change how the work should be done.",
       "Apply the selected skill workflows in dependency order, then continue with the requested analysis or implementation.",
     ],
@@ -215,9 +219,11 @@ export const SKILLS: SkillDetail[] = [
       "A clear note when no suitable local skill was found.",
     ],
     guardrails: [
-      "Do not start requirement analysis before the inventory and selection pass is complete.",
+      "Do not start solution analysis before the decomposition, inventory, and selection pass is complete.",
       "Do not load unrelated skill bodies.",
       "Do not narrow with a query until after the first broad inventory pass.",
+      "Do not put unrelated decomposition facets into one long scanner query because the scanner matches all query terms.",
+      "Prefer namespaced plugin entries over generic names when both could match the request.",
     ],
     entryPoints: [
       {

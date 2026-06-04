@@ -30,7 +30,7 @@ If you are deciding what to install, start here:
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
-- [`find-local-skill`](#find-local-skill) - find relevant local skills before analysis
+- [`find-local-skill`](#find-local-skill) - decompose requests, then find relevant local skills
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
@@ -185,7 +185,7 @@ Key entry points:
 
 ### `find-local-skill`
 
-[`skills/find-local-skill/`](./skills/find-local-skill/) helps agents inspect available local skills, select the ones that match a request, and apply those workflows before normal analysis. It includes a local scanner for Codex, project, user, Claude, and plugin-cache skill roots.
+[`skills/find-local-skill/`](./skills/find-local-skill/) helps agents decompose a request into deliverables, workflow phases, tools, domains, and implicit prerequisites before inspecting available local skills, selecting the ones that match, and applying those workflows before normal analysis. It includes a local scanner for plain project `skills/` folders, Cursor, Claude Code, OpenCode, Codex, shared Agent Skills roots, and plugin skill caches.
 
 Install:
 
@@ -196,8 +196,10 @@ npx skills@latest add JUNERDD/skills --skill find-local-skill
 Best for:
 
 - finding relevant local skills before planning or implementation
-- routing ambiguous requests through explicit skill selection
-- auditing available skill coverage across common local roots
+- routing ambiguous or multi-phase requests through explicit skill selection
+- surfacing implicit prerequisite skills before deeper requirement analysis
+- auditing available skill coverage across plain project `skills/`, Cursor, Claude Code, OpenCode, Codex, and shared Agent Skills roots
+- distinguishing plugin skills with names such as `product-design:index`
 
 Key entry points:
 
