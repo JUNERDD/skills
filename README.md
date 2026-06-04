@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.2`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.3`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -30,6 +30,7 @@ If you are deciding what to install, start here:
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
+- [`find-local-skill`](#find-local-skill) - find relevant local skills before analysis
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
@@ -83,6 +84,7 @@ npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill reduce-reinvention
+npx skills@latest add JUNERDD/skills --skill find-local-skill
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
@@ -180,6 +182,28 @@ Key entry points:
 - Reinvention audit script: [`skills/reduce-reinvention/scripts/reinvention_audit.py`](./skills/reduce-reinvention/scripts/reinvention_audit.py)
 - Reuse catalog script: [`skills/reduce-reinvention/scripts/reuse_catalog.py`](./skills/reduce-reinvention/scripts/reuse_catalog.py)
 - Optional runtime metadata: [`skills/reduce-reinvention/agents/openai.yaml`](./skills/reduce-reinvention/agents/openai.yaml)
+
+### `find-local-skill`
+
+[`skills/find-local-skill/`](./skills/find-local-skill/) helps agents inspect available local skills, select the ones that match a request, and apply those workflows before normal analysis. It includes a local scanner for Codex, project, user, Claude, and plugin-cache skill roots.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill find-local-skill
+```
+
+Best for:
+
+- finding relevant local skills before planning or implementation
+- routing ambiguous requests through explicit skill selection
+- auditing available skill coverage across common local roots
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/find-local-skill/SKILL.md`](./skills/find-local-skill/SKILL.md)
+- Local skill scanner: [`skills/find-local-skill/scripts/list_agent_skills.py`](./skills/find-local-skill/scripts/list_agent_skills.py)
+- Optional runtime metadata: [`skills/find-local-skill/agents/openai.yaml`](./skills/find-local-skill/agents/openai.yaml)
 
 ### `git-commit`
 
@@ -538,6 +562,12 @@ When you add more skills later:
     │       ├── architecture_dx_scan.py
     │       ├── code_slim_audit.py
     │       └── exhaustive_shrink.py
+    ├── find-local-skill/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── scripts/
+    │       └── list_agent_skills.py
     ├── git-commit/
     │   ├── SKILL.md
     │   └── agents/
