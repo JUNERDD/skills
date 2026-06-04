@@ -73,6 +73,14 @@ mr -help
 mr --help
 ```
 
+Update-notice environment controls:
+
+```sh
+MR_NO_UPDATE_CHECK=1 mr test
+NO_UPDATE_NOTIFIER=1 mr test
+MR_UPDATE_CHECK_CACHE=/tmp/mr-update-check.json mr test
+```
+
 `mr config`, `mr update`, and `mr uninstall` remain valid target-branch invocations. Use the `--config`, `--update`, and `--uninstall` flags for maintenance.
 
 `--detached` and `--no-detached` are orthogonal modifiers. They work on MR workflows and also work with `mr --config` to write the default.
@@ -400,6 +408,17 @@ Help is available through `mr -h`, `mr -help`, and `mr --help`.
 
 Progress, diagnostics, and errors write to stderr so command output does not pollute stdout pipelines.
 
+Interactive TTY runs perform a non-blocking update check before the command runs. Behavior:
+
+- The check calls GitHub latest release for `JUNERDD/mr`, times out quickly, and silently ignores network/cache failures.
+- Results are cached for 24 hours at `$MR_UPDATE_CHECK_CACHE` when set, otherwise `$XDG_CACHE_HOME/mr/update-check.json`, otherwise `~/.cache/mr/update-check.json`.
+- A newer SemVer release prints a warning panel to stderr with `mr <current> -> <latest>` and tells the user to run `mr --update`.
+- The same latest version is not repeatedly announced inside the notify interval.
+- The check is skipped for non-TTY stderr, CI, `NODE_ENV=test`, Vitest, dev versions, `--quiet`, help, version, `mr --update`, and `mr --uninstall`.
+- Disable it with `MR_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1`.
+
+Do not treat an update notice as workflow output or command failure. It is informational and appears before the real command output.
+
 ## Install, Update, Uninstall
 
 Install from GitHub release:
@@ -461,8 +480,8 @@ Source map:
 - `src/core/`: context, settings, request provider/command resolution, target parsing, dry-run rendering, errors, formatting.
 - `src/workflow/`: MR workflow orchestration, strategy flows, detached mode, config command, request handling, conflict resume.
 - `src/git/`: Git command wrappers, exact branch/ref checks, worktree helpers, conflict marker rewriting, working-tree guards, plumbing helpers.
-- `src/runtime/`: command runner and lifecycle script dispatch.
+- `src/runtime/`: command runner, lifecycle script dispatch, and automatic update checks.
 - `src/ui/`: terminal rendering, color/spinner behavior, target/config pickers.
-- `test/`: Vitest coverage for command parsing, strategy/config/request precedence, branch flows, conflicts, detached mode, install scripts, and lifecycle behavior.
+- `test/`: Vitest coverage for command parsing, strategy/config/request precedence, branch flows, conflicts, detached mode, install scripts, lifecycle behavior, and update checks.
 
-Preserve the TypeScript/Pastel/Ink/Zod structure when editing. For behavior changes, run the narrowest relevant tests first, then `npm run check` when feasible. Keep `/Users/zen/Documents/mr/README.md` aligned with behavior, command examples, Mermaid diagrams, provider behavior, and install/update/uninstall notes.
+Preserve the TypeScript/Pastel/Ink/Zod structure when editing. For behavior changes, run the narrowest relevant tests first, then `npm run check` when feasible. Keep `/Users/zen/Documents/mr/README.md` aligned with behavior, command examples, Mermaid diagrams, provider behavior, automatic update notices, and install/update/uninstall notes.

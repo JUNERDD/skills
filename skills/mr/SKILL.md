@@ -1,6 +1,6 @@
 ---
 name: mr
-description: Use and maintain the `mr` Node CLI for generic Git merge-request and pull-request branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the `/Users/zen/Documents/mr` project that implements this CLI.
+description: Use and maintain the `mr` Node CLI for generic Git merge-request and pull-request branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), automatic update notices (`MR_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the `/Users/zen/Documents/mr` project that implements this CLI.
 ---
 
 # MR Git Merge Request
@@ -67,6 +67,13 @@ mr --uninstall
 mr --version
 ```
 
+Update-notice controls:
+
+```sh
+MR_NO_UPDATE_CHECK=1 mr test
+NO_UPDATE_NOTIFIER=1 mr test
+```
+
 ## Operating Workflow
 
 1. Before any task that requires executing `mr`, `mrm`, `mrt`, or `mrp`, check whether the CLI is installed with `command -v mr`.
@@ -107,6 +114,17 @@ Request command/provider precedence is: `MR_REQUEST_COMMAND`, local `mr.requestC
 Provider values are `auto`, `none`, `cnb`, `github`, and `gitlab`. `auto` detects CNB/GitHub/GitLab from `origin` only when the matching CLI is available (`git cnb`, `gh`, or `glab`). `none` disables request creation and leaves only pushed branches plus manual instructions.
 
 Do not combine strategy flags. Do not combine `--rm-mr` with `--pr`.
+
+## Update Notice Rules
+
+Interactive TTY runs may print a non-blocking "new version available" panel to stderr before the command runs. Treat it as informational, not as command failure.
+
+The update check:
+
+- Uses the GitHub latest release API and a 24-hour cache under the user cache directory.
+- Skips `--quiet`, CI, non-TTY output, help, version, `mr --update`, and `mr --uninstall`.
+- Silently ignores network failures.
+- Can be disabled with `MR_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER=1`.
 
 ## Conflict And Resume Rules
 
