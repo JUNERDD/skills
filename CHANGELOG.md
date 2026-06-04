@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.3] - 2026-06-04
+
+### Changed
+
+- Added the find-local-skill workflow for selecting applicable local skills before analysis.
+- Added a local skill scanner for Codex, project, user, Claude, and plugin-cache skill roots.
+- Registered find-local-skill in the README and website catalog.
+
 ## [0.2.2] - 2026-06-04
 
 ### Changed

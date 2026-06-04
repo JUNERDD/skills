@@ -1,0 +1,4 @@
+interface:
+  display_name: "Find Local Skill"
+  short_description: "Find relevant local skills before analysis"
+  default_prompt: "Use $find-local-skill to inspect available skills, choose applicable ones, then analyze my request."

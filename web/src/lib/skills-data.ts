@@ -189,6 +189,55 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "find-local-skill",
+    title: "find-local-skill",
+    category: "Agent workflow",
+    blurb: "Find relevant local skills before analysis.",
+    lead:
+      "A skill-selection workflow for inventorying local skills, choosing applicable ones, and applying those workflows before normal analysis.",
+    overview:
+      "Use this skill when an agent needs to inspect available local skills before planning, routing, or implementing a request. It combines session skill metadata with a bundled local scanner so Codex can compare skill names, descriptions, scopes, and paths before loading only the skill bodies that materially affect the task.",
+    bestFor: [
+      "Finding relevant local skills before requirement analysis, planning, or implementation.",
+      "Routing ambiguous requests through explicit skill selection instead of relying on memory.",
+      "Auditing available skill coverage across Codex, project, user, Claude, and plugin-cache roots.",
+    ],
+    workflow: [
+      "Inventory skills already present in session context before reading any additional skill bodies.",
+      "Run the bundled local scanner when filesystem access is available.",
+      "Compare the request against skill names, descriptions, explicit mentions, tools, file types, products, domains, and workflow cues.",
+      "Select only skills that materially change how the work should be done.",
+      "Apply the selected skill workflows in dependency order, then continue with the requested analysis or implementation.",
+    ],
+    outputs: [
+      "A brief skill-selection summary with one reason for each selected skill.",
+      "The requested analysis, plan, implementation guidance, or work product using the selected workflows.",
+      "A clear note when no suitable local skill was found.",
+    ],
+    guardrails: [
+      "Do not start requirement analysis before the inventory and selection pass is complete.",
+      "Do not load unrelated skill bodies.",
+      "Do not narrow with a query until after the first broad inventory pass.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/find-local-skill/SKILL.md",
+        description: "Skill inventory, selection, and analysis-order rules.",
+      },
+      {
+        label: "Local skill scanner",
+        path: "skills/find-local-skill/scripts/list_agent_skills.py",
+        description: "Filesystem scanner for common local skill roots.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/find-local-skill/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "git-commit",
     title: "git-commit",
     category: "Git workflow",
