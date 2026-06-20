@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Review"
+  short_description: "Findings-first review report"
+  default_prompt: "Use $code-review to perform a scoped code review and write a Markdown report with severity-ordered findings, test gaps, coverage notes, and a merge recommendation."

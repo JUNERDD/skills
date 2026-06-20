@@ -37,6 +37,8 @@ If you are deciding what to install, start here:
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
+- [`code-review`](#code-review) - write findings-first code review reports
+- [`receiving-code-review`](#receiving-code-review) - consume a code-review report and verify each item before changing code
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -85,6 +87,8 @@ npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill reduce-reinvention
 npx skills@latest add JUNERDD/skills --skill find-local-skill
+npx skills@latest add JUNERDD/skills --skill code-review
+npx skills@latest add JUNERDD/skills --skill receiving-code-review
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
@@ -421,6 +425,50 @@ python3 skills/debug/scripts/local_log_collector/main.py \
   --session-id "demo-session"
 ```
 
+### `code-review`
+
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a findings-first reviewer workflow. It writes a scoped Markdown report with severity-ordered findings, test gaps, coverage notes, and a merge recommendation while keeping the agent in review mode and avoiding code changes unless the user explicitly asks for fixes.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill code-review
+```
+
+Best for:
+
+- reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
+- surfacing bugs, user-visible regressions, security issues, and missing tests before merge
+- producing a reusable review artifact with findings, coverage gaps, and residual risk
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/code-review/SKILL.md`](./skills/code-review/SKILL.md)
+- Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
+- Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
+
+### `receiving-code-review`
+
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and builds a disposition ledger for every finding, question, test gap, and open coverage row before deciding whether to fix, challenge, answer, or carry it forward.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill receiving-code-review
+```
+
+Best for:
+
+- re-checking that a code-review report still matches the current diff and baseline
+- fixing confirmed correctness, security, contract, or test issues without blindly applying comments
+- answering approval-affecting questions with current evidence
+- closing or explicitly carrying forward `Not covered` review areas
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/receiving-code-review/SKILL.md`](./skills/receiving-code-review/SKILL.md)
+- Optional runtime metadata: [`skills/receiving-code-review/agents/openai.yaml`](./skills/receiving-code-review/agents/openai.yaml)
+
 ### `hack-review`
 
 [`skills/hack-review/`](./skills/hack-review/) reviews whether an implementation is relying on hack-like tactics instead of sound ownership and abstraction boundaries. It produces a coverage-led reviewer report that enumerates all distinct hack-risk findings discovered within scope, records intentional exceptions, and marks uncovered ownership boundaries explicitly.
@@ -536,6 +584,12 @@ When you add more skills later:
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml
+    ├── code-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── report-template.md
     ├── debug/
     │   ├── SKILL.md
     │   ├── agents/
@@ -587,6 +641,10 @@ When you add more skills later:
     │   └── references/
     │       └── mr-cli-reference.md
     ├── multitask-coordinator/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
+    ├── receiving-code-review/
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml

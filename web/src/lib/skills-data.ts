@@ -597,6 +597,102 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "code-review",
+    title: "code-review",
+    category: "Code review",
+    blurb: "Write findings-first code review reports.",
+    lead:
+      "A general code review report workflow that keeps findings first and avoids implementation changes unless explicitly requested.",
+    overview:
+      "Use this skill when a user asks for `/code-review`, a PR review, diff review, branch review, staged-change review, or safety check before merge. It reviews the relevant scope as a reviewer, prioritizes correctness, behavioral regressions, security, contracts, and missing tests, then writes a Markdown report with severity-ordered findings, test gaps, coverage notes, and a recommendation.",
+    bestFor: [
+      "Reviewing PRs, branch diffs, staged changes, working trees, focused files, or pasted code.",
+      "Surfacing correctness bugs, release-blocking regressions, security issues, and missing tests.",
+      "Producing a reusable review artifact with findings, coverage gaps, and residual risk.",
+    ],
+    workflow: [
+      "Identify the review scope and baseline, preferring the smallest reasonable scope when the user does not name one.",
+      "Read the diff plus relevant tests, fixtures, schemas, config, docs, and call sites needed to understand impact.",
+      "Trace changed data and control flow far enough to verify user-visible, persisted, security, or integration effects.",
+      "Build a review coverage ledger for changed review-relevant areas.",
+      "Check whether tests cover the risky changed behavior.",
+      "Write a Markdown report with recommendation, findings, test gaps, coverage ledger, and evidence appendix.",
+    ],
+    outputs: [
+      "A Markdown code-review report.",
+      "A short terminal summary.",
+      "A complete findings index, test gaps, and review coverage ledger.",
+    ],
+    guardrails: [
+      "Do not make code changes during review unless the user explicitly asks for fixes.",
+      "Do not stage, commit, push, or mutate Git state.",
+      "Do not lead with style or broad refactor preferences unless they create concrete review risk.",
+      "Use `regression-review` or `hack-review` instead when the user asks for those specialized gates.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/code-review/SKILL.md",
+        description: "Scope, findings, recommendation, report-writing rules, and guardrails.",
+      },
+      {
+        label: "Report template",
+        path: "skills/code-review/references/report-template.md",
+        description: "Canonical report sections and review coverage ledger shape.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/code-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "receiving-code-review",
+    title: "receiving-code-review",
+    category: "Code review follow-up",
+    blurb: "Consume a code-review report and verify each item before changing code.",
+    lead:
+      "A response workflow for turning code-review findings, questions, test gaps, and coverage gaps into evidence-backed fixes, challenges, or carry-forward decisions.",
+    overview:
+      "Use this skill after a code-review report or equivalent PR feedback. It builds a disposition ledger for every finding, approval-affecting question, test gap, and open coverage row before changing code, then fixes only what still applies and preserves evidence for challenged, answered, or carried-forward items.",
+    bestFor: [
+      "Re-checking a code-review report against the current diff and baseline.",
+      "Fixing confirmed correctness, security, contract, or test issues.",
+      "Answering approval-affecting questions with current evidence.",
+      "Closing or carrying forward `Not covered` review areas.",
+    ],
+    workflow: [
+      "Read the report and enumerate every finding, question, test gap, and coverage gap.",
+      "Verify each item against the current code, baseline, outputs, tests, and relevant call sites.",
+      "Create a disposition ledger before editing.",
+      "Apply scoped fixes for confirmed items while preserving Git staging.",
+      "Report the final disposition for every item and refresh the review when material behavior or coverage changes.",
+    ],
+    outputs: [
+      "A full disposition ledger.",
+      "Scoped fixes for confirmed review findings.",
+      "Evidence for challenged, narrowed, answered, and carried-forward items.",
+    ],
+    guardrails: [
+      "Do not blindly apply review feedback.",
+      "Do not stage changes unless the current request explicitly asks for it.",
+      "Do not claim the review is clean until every finding, question, test gap, and coverage row is accounted for.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/receiving-code-review/SKILL.md",
+        description: "Disposition ledger and code-review response requirements.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/receiving-code-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "hack-review",
     title: "hack-review",
     category: "Code review",
