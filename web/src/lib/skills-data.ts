@@ -293,16 +293,16 @@ export const SKILLS: SkillDetail[] = [
     category: "Git workflow",
     blurb: "Use and maintain the Git MR/PR helper CLI.",
     lead:
-      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume, automatic update notices, and tool maintenance.",
+      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume with detached worktree dependency setup, automatic update notices, and tool maintenance.",
     overview:
-      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior, non-blocking update notices, and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
+      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior, non-blocking update notices, detached conflict worktree dependency setup, and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
     bestFor: [
       "Creating or previewing Git merge requests or pull requests from a current branch to master, test, prerelease, or an arbitrary target.",
       "Checking for a missing local mr install and installing it after user confirmation.",
       "Choosing between merge, rebase, merge-target, direct PR, and default detached-mode workflows.",
       "Configuring CNB, GitHub, GitLab, or custom request commands for pushed source branches.",
       "Understanding automatic update notices and the environment variables that disable them.",
-      "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
+      "Handling stopped merge or rebase states while preserving the CLI-owned resume path and installing dependencies in detached conflict worktrees.",
       "Maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI.",
     ],
     workflow: [
@@ -312,13 +312,13 @@ export const SKILLS: SkillDetail[] = [
       "Use `--dry-run` when strategy, detached mode, or repository state is unclear.",
       "Run exactly one strategy and respect config precedence for strategy, detached mode, request provider, and custom request command settings.",
       "Treat interactive update notices as informational stderr, not workflow output or command failures.",
-      "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
+      "On detached conflicts, install dependencies in the reported worktree when needed; then hand off resolution and rerun the matching `mr` resume command only after conflicts are staged.",
       "When editing the CLI project, verify the implementation repository instead of assuming a local path, and keep README behavior, command examples, and diagrams aligned with implementation changes.",
     ],
     outputs: [
       "Safe command choices for `mr`, `mrm`, `mrt`, and `mrp` workflows.",
       "Update-notice interpretation and disablement guidance.",
-      "Conflict handoff and resume instructions that match the current CLI implementation.",
+      "Conflict handoff, detached worktree dependency setup, and resume instructions that match the current CLI implementation.",
       "Scoped maintenance guidance and verification commands for the mr project.",
     ],
     guardrails: [

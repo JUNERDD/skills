@@ -234,7 +234,7 @@ Key entry points:
 
 ### `mr`
 
-[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume with detached worktree dependency setup, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
 
 Install:
 
@@ -249,7 +249,7 @@ Best for:
 - choosing between `merge`, `rebase`, `merge-target`, `pr`, and default detached-mode flows
 - configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
 - understanding non-blocking update notices and the environment variables that disable them
-- handling stopped merge/rebase states by preserving CLI-owned resume paths
+- handling stopped merge/rebase states by preserving CLI-owned resume paths and hydrating detached conflict worktree dependencies
 - maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI
 
 Key entry points:

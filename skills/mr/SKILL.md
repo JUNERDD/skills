@@ -134,6 +134,7 @@ When `mr` stops for a merge or rebase conflict:
 
 - Preserve the branch or worktree state where the CLI stopped.
 - Run only read-only inspection unless the user explicitly asks you to resolve conflicts: `git status --short --branch`, `git branch --show-current`, `git rev-parse -q --verify MERGE_HEAD`, `git rev-parse -q --verify REBASE_HEAD`, and `git worktree list --porcelain`.
+- For detached conflict worktrees, make the reported worktree usable before asking the user to resolve or before resolving there yourself: install project dependencies inside that worktree using the repo's locked package-manager command (`npm ci`, `corepack pnpm install --frozen-lockfile`, `corepack yarn install --immutable` or Yarn classic `yarn install --frozen-lockfile`, `bun install --frozen-lockfile`). Do not install in the main repo as a substitute, do not modify lockfiles, and stop if private registry credentials or system dependencies are missing.
 - Tell the user to resolve conflicts, run `git add <files>`, and then either ask you to continue or rerun the command shown by the CLI.
 - Do not run `git add`, `git commit`, `git rebase --continue`, `git merge --continue`, aborts, resets, branch switches, pushes, or request commands unless the user explicitly asks for that exact operation.
 
@@ -145,7 +146,7 @@ After the user says conflict resolution is staged and asks you to continue, insp
 - Inline default merge or rebase resume: `mr <target> --no-detached` or the matching alias plus `--no-detached`, unless `mr.detached=false` was the original source of inline mode.
 - Inline merge-target resume: `mr <target> --no-detached --merge-target` or the matching alias plus both flags.
 
-Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`. The main repo stays on the business branch. The user should resolve conflicts inside the reported worktree, run `git add <files>` there, then rerun the matching detached command from the main repo. The CLI resumes, pushes, handles the request, and removes the worktree.
+Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`. The main repo stays on the business branch. The user should install dependencies in the reported worktree when needed, resolve conflicts inside that worktree, run `git add <files>` there, then rerun the matching detached command from the main repo. The CLI resumes, pushes, handles the request, and removes the worktree.
 
 ## Maintaining The Project
 

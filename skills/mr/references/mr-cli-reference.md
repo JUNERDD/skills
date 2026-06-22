@@ -9,6 +9,7 @@
 - [Detached Mode](#detached-mode)
 - [Configuration](#configuration)
 - [Conflict And Resume](#conflict-and-resume)
+- [Dependency Setup In Detached Conflict Worktrees](#dependency-setup-in-detached-conflict-worktrees)
 - [Diagnostics And Output](#diagnostics-and-output)
 - [Install, Update, Uninstall](#install-update-uninstall)
 - [Project Maintenance](#project-maintenance)
@@ -320,6 +321,7 @@ Handoff to the user:
 
 ```sh
 cd <reported-worktree>
+# install dependencies here when the project needs them for IDE support, checks, or conflict resolution
 # resolve files
 git add <files>
 cd <main-repo>
@@ -334,6 +336,40 @@ mr <target> --detached --merge-target
 ```
 
 On resume, the CLI checks unresolved paths, continues merge/rebase inside the worktree, pushes the MR branch, handles the request, removes the worktree, and reports that the main repo stayed on the business branch.
+
+## Dependency Setup In Detached Conflict Worktrees
+
+Detached conflict worktrees are separate checkouts. They do not share `node_modules` or other ignored dependency directories with the main repo. When the user needs IDE diagnostics, type-aware conflict resolution, local tests, or asks you to resolve conflicts in that worktree, install dependencies inside the reported worktree before editing or handing off.
+
+Choose the install command from the files in the worktree and keep lockfiles unchanged:
+
+```sh
+cd <reported-worktree>
+
+# npm
+npm ci
+
+# pnpm
+corepack pnpm install --frozen-lockfile
+
+# Yarn Berry / modern Yarn
+corepack yarn install --immutable
+
+# Yarn classic
+yarn install --frozen-lockfile
+
+# Bun
+bun install --frozen-lockfile
+```
+
+Selection rules:
+
+- Prefer the package manager declared in `package.json` `packageManager`.
+- Otherwise infer from lockfiles: `package-lock.json` or `npm-shrinkwrap.json` means `npm ci`; `pnpm-lock.yaml` means pnpm; `yarn.lock` means Yarn; `bun.lock` or `bun.lockb` means Bun.
+- Run the command in `<reported-worktree>`, not the main repository.
+- Use frozen/immutable/CI installs so dependency setup does not rewrite `package.json` or lockfiles.
+- If the install wants private registry credentials, system packages, or lockfile changes, stop and report the blocker instead of continuing with a dirty dependency setup.
+- If the repository is not a JS/TS package or has no recognizable lockfile, follow the project's checked-in setup docs or ask before running an install command.
 
 ### Inline merge conflicts
 
