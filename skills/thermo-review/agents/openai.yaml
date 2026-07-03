@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thermo Review"
+  short_description: "Harsh structural quality report"
+  default_prompt: "Use $thermo-review to perform an extremely strict structural quality review and write a Markdown report with recursive coverage, 350-line file checks, and a gate recommendation."

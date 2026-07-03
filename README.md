@@ -38,6 +38,8 @@ If you are deciding what to install, start here:
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`code-review`](#code-review) - write findings-first code review reports
+- [`thermo-review`](#thermo-review) - write harsh structural quality review reports
+- [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
 - [`receiving-code-review`](#receiving-code-review) - consume a code-review report and verify each item before changing code
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
@@ -88,6 +90,8 @@ npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill reduce-reinvention
 npx skills@latest add JUNERDD/skills --skill find-local-skill
 npx skills@latest add JUNERDD/skills --skill code-review
+npx skills@latest add JUNERDD/skills --skill thermo-review
+npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
 npx skills@latest add JUNERDD/skills --skill receiving-code-review
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
@@ -447,6 +451,49 @@ Key entry points:
 - Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
 - Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
 
+### `thermo-review`
+
+[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source threshold, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill thermo-review
+```
+
+Best for:
+
+- reviewing whether a change makes the implementation more tangled, oversized, or indirect
+- finding missed simplification, decomposition, canonical-ownership, and type-boundary opportunities
+- producing a durable structural review artifact with candidate coverage and residual blind spots
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/thermo-review/SKILL.md`](./skills/thermo-review/SKILL.md)
+- Report template: [`skills/thermo-review/references/report-template.md`](./skills/thermo-review/references/report-template.md)
+- Optional runtime metadata: [`skills/thermo-review/agents/openai.yaml`](./skills/thermo-review/agents/openai.yaml)
+
+### `receiving-thermo-review`
+
+[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
+```
+
+Best for:
+
+- verifying harsh structural review findings against the current diff before changing code
+- resolving 350-line threshold concerns, decomposition gaps, and recursive coverage gaps
+- applying scoped structural fixes while preserving Git staging, checking behavior parity, and avoiding unapproved architecture refactors
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/receiving-thermo-review/SKILL.md`](./skills/receiving-thermo-review/SKILL.md)
+- Optional runtime metadata: [`skills/receiving-thermo-review/agents/openai.yaml`](./skills/receiving-thermo-review/agents/openai.yaml)
+
 ### `receiving-code-review`
 
 [`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and builds a disposition ledger for every finding, question, test gap, and open coverage row before deciding whether to fix, challenge, answer, or carry it forward.
@@ -590,6 +637,16 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       └── report-template.md
+    ├── thermo-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── report-template.md
+    ├── receiving-thermo-review/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
     ├── debug/
     │   ├── SKILL.md
     │   ├── agents/
