@@ -28,6 +28,7 @@ helper=""
 
 for candidate in \
   "$workspace_root/skills/grill-me/scripts/grill_log.py" \
+  "$workspace_root/grill-me/scripts/grill_log.py" \
   "$HOME/.agents/skills/grill-me/scripts/grill_log.py" \
   "$HOME/.codex/skills/grill-me/scripts/grill_log.py"
 do
@@ -36,6 +37,17 @@ do
     break
   fi
 done
+
+if [ -z "$helper" ]; then
+  for skill_root in "$HOME/.agents/skills" "$HOME/.codex/skills"; do
+    [ -d "$skill_root" ] || continue
+    candidate="$(find -L "$skill_root" -path "*/grill-me/scripts/grill_log.py" -type f -print 2>/dev/null | head -n 1)"
+    if [ -n "$candidate" ]; then
+      helper="$candidate"
+      break
+    fi
+  done
+fi
 
 [ -n "$helper" ] || { echo "grill_log.py not found" >&2; exit 1; }
 ```
