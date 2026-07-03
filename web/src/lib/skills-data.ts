@@ -436,6 +436,68 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "delegate-to-cursor-composer",
+    title: "delegate-to-cursor-composer",
+    category: "Agent coordination",
+    blurb: "Route bounded work to Cursor with reviewed packets.",
+    lead:
+      "A Cursor Composer delegation workflow that keeps upstream ownership over scope, risk gates, model defaults, monitoring, and final acceptance.",
+    overview:
+      "Use this skill when bounded coding work should be routed to Cursor Composer for inspect-only, proposal, or apply-mode execution. It creates reviewed task packets, defaults Cursor and Cursor internal subagents to composer-2.5-fast unless explicitly overridden, monitors stream-json runs through sanitized status files, and treats Cursor output as evidence for upstream review rather than final authority.",
+    bestFor: [
+      "Dispatching implementation slices to Cursor Composer with explicit scope, non-goals, stop conditions, and verification commands.",
+      "Allowing Cursor Task()/taskToolCall internal subagents only under a packet policy with model, concurrency, purpose, and write limits.",
+      "Coordinating planned single-stream work or hierarchical workstreams while preserving parent-agent ownership of integration and final approval.",
+      "Monitoring long Cursor CLI runs through status.json, including active and recent internal subagents.",
+      "Running focused repair loops when Cursor output needs narrow follow-up rather than broad re-planning.",
+    ],
+    workflow: [
+      "Classify the task as direct Cursor, planned single-stream, hierarchical orchestration, or blocked.",
+      "Prepare a bounded task packet with the required authority section and Cursor Internal Subagent Policy.",
+      "Default Cursor and internal subagents to composer-2.5-fast unless the user explicitly authorizes another Cursor model.",
+      "Dispatch through the wrapper when headless Cursor CLI is available and monitor status.json for low-noise progress.",
+      "Review Cursor reports, taskToolCall evidence, diffs, verification results, scope boundaries, and repair output before final acceptance.",
+    ],
+    outputs: [
+      "A routing decision with mode, risk gates, workspace strategy, Cursor mode, model defaults, and internal subagent policy.",
+      "A Cursor task packet or repair packet ready for reviewed CLI dispatch.",
+      "A final review verdict grounded in logs, diffs, verification evidence, and any internal subagent reports.",
+    ],
+    guardrails: [
+      "Do not use this skill unless the user explicitly invokes delegate-to-cursor-composer or $delegate-to-cursor-composer.",
+      "Do not allow Cursor internal subagents unless the task packet includes a Cursor Internal Subagent Policy.",
+      "Do not treat support, planning, workstream, or internal subagent output as final authority without upstream review.",
+      "Do not commit, push, deploy, rotate credentials, alter billing, or broaden scope unless explicitly requested and reviewed.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/delegate-to-cursor-composer/SKILL.md",
+        description: "Routing, model defaults, guardrails, review ownership, and final reporting rules.",
+      },
+      {
+        label: "Internal subagents",
+        path: "skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md",
+        description: "Cursor Task()/taskToolCall policy, evidence, and model defaults.",
+      },
+      {
+        label: "Task packets",
+        path: "skills/delegate-to-cursor-composer/references/task-contract.md",
+        description: "Direct, reviewed, local workstream, and repair packet templates.",
+      },
+      {
+        label: "Dispatch wrapper",
+        path: "skills/delegate-to-cursor-composer/scripts/cursor_delegate.py",
+        description: "Headless Cursor CLI wrapper with authority, git, log, and status checks.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/delegate-to-cursor-composer/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
     slug: "plan-mode",
     title: "plan-mode",
     category: "Planning",

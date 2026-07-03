@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delegate to Cursor Composer"
+  short_description: "Route bounded coding work to Cursor"
+  default_prompt: "Use $delegate-to-cursor-composer to route bounded Cursor work, default Cursor and internal subagents to composer-2.5-fast unless explicitly overridden, monitor status.json when useful, and keep final review upstream."
