@@ -1,125 +1,71 @@
 # Planning Contract
 
-Use this reference when the route is `planned_single_stream`. The planning subagent is read-only and produces a plan for upstream review before any Cursor dispatch.
+Use this reference when the route is `planned_single_stream`. The planning subagent is read-only and produces a plan for upstream review. It does not dispatch Cursor or edit files.
 
-## Planning Brief Template
+## Planning Subagent Brief
 
 ````markdown
 # Planning Subagent Brief
 
 ## Role
-You are a non-Cursor planning subagent. You are not the implementer. Do not invoke Cursor, edit files, commit, push, deploy, choose a Cursor model, or approve your own plan. Produce a structured implementation plan for upstream review. Cursor model remains `composer-2.5-fast` unless the original user explicitly directed Cursor to use a different model.
+You are a non-Cursor planning subagent. Inspect the repository and produce a bounded implementation plan. Do not edit files, invoke Cursor, commit, push, deploy, or approve quality.
 
 ## User Goal
-<one paragraph describing the user-visible outcome>
+<user goal summary>
 
-## Repository / Workspace Context
-- Repo/workspace: <path or repo name if known>
-- Stack/runtime/package manager: <known details>
-- Base branch/ref: <if known>
-- Existing constraints or architecture notes: <summary>
+## Repository Context
+- Workspace: <path or repo name>
+- Relevant paths or unknowns: <paths>
+- Runtime/package manager: <known details>
 
-## Request Details
-<symptoms, product requirement, bug report, desired behavior, linked issue summary, or design requirement>
+## Planning Task
+Produce a plan for one coherent implementation stream. Identify assumptions, risks, stop conditions, verification commands, and exact scope boundaries.
 
-## Constraints
-- <technical, product, security, compatibility, API, dependency, timeline, or scope constraint>
-
-## In Scope
-- <item>
-
-## Out of Scope
-- <item>
-
-## Available Context
-- <files, snippets, logs, tests, prior decisions, or repo areas the planner may inspect>
-
-## Assumptions to Validate
-- <assumption>
-
-## Requested Output
-Return exactly this structure:
-
-### Understanding
-<concise interpretation of the task>
-
-### Assumptions
-- <assumption and confidence>
-
-### Recommended Plan
-1. <step>
-2. <step>
-3. <step>
-
-### Implementation Slice
-- Objective:
-- Likely files/areas:
-- Concrete changes:
-- Acceptance criteria:
-- Verification commands:
-- Dependencies or ordering:
-- Risks:
-- Cursor internal subagent recommendation:
-
-### Scope Boundaries
-- In scope:
-- Out of scope:
-
-### Risk Register
-- <risk>: <mitigation or decision needed>
-
-### Cursor Readiness
-<ready | not ready>. Explain blockers before Cursor dispatch.
+## Output Format
+Return:
+1. Summary
+2. Repository observations
+3. Proposed implementation steps
+4. In-scope and out-of-scope items
+5. Files likely touched
+6. Acceptance criteria
+7. Verification commands
+8. Stop conditions
+9. Cursor readiness: yes/no and why
+10. Open questions
 ````
 
-## Upstream Plan Review Verdict
+## Upstream Plan Review
 
-````markdown
-## Plan Review Verdict
-<approved | approved with edits | needs replanning | blocked>
+Before Cursor receives the plan, the upstream agent must check:
 
+- the plan matches user intent;
+- the plan fits one coherent workstream;
+- scope boundaries are explicit;
+- stop conditions cover dependencies, migrations, destructive commands, credentials, public APIs, billing, deployment, and scope expansion;
+- verification commands are realistic;
+- the Cursor packet uses `## Approved Upstream Plan` and contains no unresolved template placeholders.
+
+## Approved Plan Summary Template
+
+Use this summary inside `references/task-planned.md` after upstream review:
+
+```markdown
 ## Approved Upstream Plan
 
 ### Summary
-<upstream-approved approach>
-
-### Implementation Slice
-<exact slice Cursor should implement>
+<approved implementation target>
 
 ### Steps
 1. <approved step>
 2. <approved step>
 3. <approved step>
 
-### Cursor Stop Conditions
-- <condition>
+### Stop Conditions
+- Stop and report back if <condition>.
 
 ### Verification Required
 ```bash
 <command>
 ```
-
-## Planning Findings
-### blocker
-- <finding or none>
-
-### required
-- <finding or none>
-
-### notes
-- <review notes or none>
-````
-
-## Review Criteria
-
-Approve only when:
-
-- the plan directly addresses the user goal;
-- scope and non-goals are explicit;
-- acceptance criteria are observable;
-- verification commands are realistic;
-- risks are called out;
-- Cursor can implement without re-planning architecture;
-- Cursor model remains `composer-2.5-fast` unless an explicit user Cursor-model instruction exists;
-- Cursor internal subagent use is disabled, read-only-analysis, verification, or bounded-implementation with clear limits;
-- user decisions are escalated before implementation.
+```

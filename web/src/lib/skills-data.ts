@@ -481,9 +481,29 @@ export const SKILLS: SkillDetail[] = [
         description: "Cursor Task()/taskToolCall policy, evidence, and model defaults.",
       },
       {
-        label: "Task packets",
-        path: "skills/delegate-to-cursor-composer/references/task-contract.md",
-        description: "Direct, reviewed, local workstream, and repair packet templates.",
+        label: "Direct task packet",
+        path: "skills/delegate-to-cursor-composer/references/task-direct.md",
+        description: "Template for direct Cursor implementation packets.",
+      },
+      {
+        label: "Planned task packet",
+        path: "skills/delegate-to-cursor-composer/references/task-planned.md",
+        description: "Template for upstream-reviewed plan implementation packets.",
+      },
+      {
+        label: "Local workstream packet",
+        path: "skills/delegate-to-cursor-composer/references/task-local.md",
+        description: "Template for bounded hierarchical workstream packets.",
+      },
+      {
+        label: "User-plan packet",
+        path: "skills/delegate-to-cursor-composer/references/task-user-plan.md",
+        description: "Template for accepted user-provided plan packets.",
+      },
+      {
+        label: "Follow-up packet",
+        path: "skills/delegate-to-cursor-composer/references/task-follow-up.md",
+        description: "Template for bounded review follow-up packets.",
       },
       {
         label: "Dispatch wrapper",

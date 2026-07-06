@@ -330,7 +330,7 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/delegate-to-cursor-composer/SKILL.md`](./skills/delegate-to-cursor-composer/SKILL.md)
 - Cursor internal subagent policy: [`skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md)
-- Task packet templates: [`skills/delegate-to-cursor-composer/references/task-contract.md`](./skills/delegate-to-cursor-composer/references/task-contract.md)
+- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-composer/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-composer/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-composer/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-composer/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-composer/references/task-follow-up.md)
 - Cursor dispatch wrapper: [`skills/delegate-to-cursor-composer/scripts/cursor_delegate.py`](./skills/delegate-to-cursor-composer/scripts/cursor_delegate.py)
 - Optional runtime metadata: [`skills/delegate-to-cursor-composer/agents/openai.yaml`](./skills/delegate-to-cursor-composer/agents/openai.yaml)
 
