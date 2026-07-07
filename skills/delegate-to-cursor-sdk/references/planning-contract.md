@@ -48,7 +48,7 @@ Before Cursor receives the plan, the upstream agent must check:
 
 ## Approved Plan Summary Template
 
-Use this summary inside `references/task-planned.md` after upstream review:
+Use this summary inside the task packet copied from `references/task-planned.md` after upstream review:
 
 ```markdown
 ## Approved Upstream Plan

@@ -35,7 +35,7 @@ If you are deciding what to install, start here:
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
-- [`delegate-to-cursor-composer`](#delegate-to-cursor-composer) - route bounded work to Cursor Composer with reviewed packets
+- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
 - [`code-review`](#code-review) - write findings-first code review reports
@@ -85,7 +85,7 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
@@ -308,19 +308,19 @@ Key entry points:
 - Workflow and guardrails: [`skills/multitask-coordinator/SKILL.md`](./skills/multitask-coordinator/SKILL.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
 
-### `delegate-to-cursor-composer`
+### `delegate-to-cursor-sdk`
 
-[`skills/delegate-to-cursor-composer/`](./skills/delegate-to-cursor-composer/) routes bounded coding work to Cursor Composer through reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
+[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through Cursor SDK with reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
 
 Install:
 
 ```bash
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 ```
 
 Best for:
 
-- dispatching bounded implementation, proposal, or inspect-only packets to Cursor Composer
+- dispatching bounded implementation, proposal, or inspect-only packets through Cursor SDK
 - using `composer-2.5-fast` consistently for Cursor and Cursor internal subagents unless explicitly overridden
 - allowing Cursor `Task()` / `taskToolCall` subagents only under an explicit packet policy
 - monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
@@ -328,11 +328,11 @@ Best for:
 
 Key entry points:
 
-- Workflow and guardrails: [`skills/delegate-to-cursor-composer/SKILL.md`](./skills/delegate-to-cursor-composer/SKILL.md)
-- Cursor internal subagent policy: [`skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md)
-- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-composer/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-composer/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-composer/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-composer/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-composer/references/task-follow-up.md)
-- Cursor dispatch wrapper: [`skills/delegate-to-cursor-composer/scripts/cursor_delegate.py`](./skills/delegate-to-cursor-composer/scripts/cursor_delegate.py)
-- Optional runtime metadata: [`skills/delegate-to-cursor-composer/agents/openai.yaml`](./skills/delegate-to-cursor-composer/agents/openai.yaml)
+- Workflow and guardrails: [`skills/delegate-to-cursor-sdk/SKILL.md`](./skills/delegate-to-cursor-sdk/SKILL.md)
+- Cursor internal subagent policy: [`skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md)
+- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-sdk/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-sdk/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-sdk/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-sdk/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-sdk/references/task-follow-up.md)
+- Cursor dispatch wrapper: [`skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs`](./skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs)
+- Optional runtime metadata: [`skills/delegate-to-cursor-sdk/agents/openai.yaml`](./skills/delegate-to-cursor-sdk/agents/openai.yaml)
 
 ### `plan-mode`
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delegate to Cursor SDK"
+  short_description: "Route bounded coding work through Cursor SDK"
+  default_prompt: "Use $delegate-to-cursor-sdk to route bounded Cursor SDK work, default Cursor to composer-2.5 fast=true unless explicitly overridden, request Cursor API-key authorization safely when missing, monitor status.json when useful, and keep acceptance upstream."
