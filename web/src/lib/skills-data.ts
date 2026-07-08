@@ -293,16 +293,16 @@ export const SKILLS: SkillDetail[] = [
     category: "Git workflow",
     blurb: "Use and maintain the Git MR/PR helper CLI.",
     lead:
-      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume, automatic update notices, and tool maintenance.",
+      "A Git merge-request workflow for running the mr CLI safely across branch strategies, default detached mode, request providers, config, conflict resume with detached worktree dependency setup, automatic update notices, and tool maintenance.",
     overview:
-      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior, non-blocking update notices, and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
+      "Use this skill when creating, previewing, configuring, troubleshooting, installing, updating, uninstalling, or maintaining Git merge requests or pull requests through the `mr`, `mrm`, `mrt`, and `mrp` commands. It keeps agents aligned with the CLI's real request-provider behavior, non-blocking update notices, detached conflict worktree dependency setup, and resume paths for inline and detached conflicts instead of inventing manual git recovery steps.",
     bestFor: [
       "Creating or previewing Git merge requests or pull requests from a current branch to master, test, prerelease, or an arbitrary target.",
       "Checking for a missing local mr install and installing it after user confirmation.",
       "Choosing between merge, rebase, merge-target, direct PR, and default detached-mode workflows.",
       "Configuring CNB, GitHub, GitLab, or custom request commands for pushed source branches.",
       "Understanding automatic update notices and the environment variables that disable them.",
-      "Handling stopped merge or rebase states while preserving the CLI-owned resume path.",
+      "Handling stopped merge or rebase states while preserving the CLI-owned resume path and installing dependencies in detached conflict worktrees.",
       "Maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI.",
     ],
     workflow: [
@@ -312,13 +312,13 @@ export const SKILLS: SkillDetail[] = [
       "Use `--dry-run` when strategy, detached mode, or repository state is unclear.",
       "Run exactly one strategy and respect config precedence for strategy, detached mode, request provider, and custom request command settings.",
       "Treat interactive update notices as informational stderr, not workflow output or command failures.",
-      "On conflicts, hand off resolution to the user and then rerun the matching `mr` resume command only after conflicts are staged.",
+      "On detached conflicts, install dependencies in the reported worktree when needed; then hand off resolution and rerun the matching `mr` resume command only after conflicts are staged.",
       "When editing the CLI project, verify the implementation repository instead of assuming a local path, and keep README behavior, command examples, and diagrams aligned with implementation changes.",
     ],
     outputs: [
       "Safe command choices for `mr`, `mrm`, `mrt`, and `mrp` workflows.",
       "Update-notice interpretation and disablement guidance.",
-      "Conflict handoff and resume instructions that match the current CLI implementation.",
+      "Conflict handoff, detached worktree dependency setup, and resume instructions that match the current CLI implementation.",
       "Scoped maintenance guidance and verification commands for the mr project.",
     ],
     guardrails: [
@@ -431,6 +431,88 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/multitask-coordinator/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "delegate-to-cursor-composer",
+    title: "delegate-to-cursor-composer",
+    category: "Agent coordination",
+    blurb: "Route bounded work to Cursor with reviewed packets.",
+    lead:
+      "A Cursor Composer delegation workflow that keeps upstream ownership over scope, risk gates, model defaults, monitoring, and final acceptance.",
+    overview:
+      "Use this skill when bounded coding work should be routed to Cursor Composer for inspect-only, proposal, or apply-mode execution. It creates reviewed task packets, defaults Cursor and Cursor internal subagents to composer-2.5-fast unless explicitly overridden, monitors stream-json runs through sanitized status files, and treats Cursor output as evidence for upstream review rather than final authority.",
+    bestFor: [
+      "Dispatching implementation slices to Cursor Composer with explicit scope, non-goals, stop conditions, and verification commands.",
+      "Allowing Cursor Task()/taskToolCall internal subagents only under a packet policy with model, concurrency, purpose, and write limits.",
+      "Coordinating planned single-stream work or hierarchical workstreams while preserving parent-agent ownership of integration and final approval.",
+      "Monitoring long Cursor CLI runs through status.json, including active and recent internal subagents.",
+      "Running focused repair loops when Cursor output needs narrow follow-up rather than broad re-planning.",
+    ],
+    workflow: [
+      "Classify the task as direct Cursor, planned single-stream, hierarchical orchestration, or blocked.",
+      "Prepare a bounded task packet with the required authority section and Cursor Internal Subagent Policy.",
+      "Default Cursor and internal subagents to composer-2.5-fast unless the user explicitly authorizes another Cursor model.",
+      "Dispatch through the wrapper when headless Cursor CLI is available and monitor status.json for low-noise progress.",
+      "Review Cursor reports, taskToolCall evidence, diffs, verification results, scope boundaries, and repair output before final acceptance.",
+    ],
+    outputs: [
+      "A routing decision with mode, risk gates, workspace strategy, Cursor mode, model defaults, and internal subagent policy.",
+      "A Cursor task packet or repair packet ready for reviewed CLI dispatch.",
+      "A final review verdict grounded in logs, diffs, verification evidence, and any internal subagent reports.",
+    ],
+    guardrails: [
+      "Do not use this skill unless the user explicitly invokes delegate-to-cursor-composer or $delegate-to-cursor-composer.",
+      "Do not allow Cursor internal subagents unless the task packet includes a Cursor Internal Subagent Policy.",
+      "Do not treat support, planning, workstream, or internal subagent output as final authority without upstream review.",
+      "Do not commit, push, deploy, rotate credentials, alter billing, or broaden scope unless explicitly requested and reviewed.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/delegate-to-cursor-composer/SKILL.md",
+        description: "Routing, model defaults, guardrails, review ownership, and final reporting rules.",
+      },
+      {
+        label: "Internal subagents",
+        path: "skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md",
+        description: "Cursor Task()/taskToolCall policy, evidence, and model defaults.",
+      },
+      {
+        label: "Direct task packet",
+        path: "skills/delegate-to-cursor-composer/references/task-direct.md",
+        description: "Template for direct Cursor implementation packets.",
+      },
+      {
+        label: "Planned task packet",
+        path: "skills/delegate-to-cursor-composer/references/task-planned.md",
+        description: "Template for upstream-reviewed plan implementation packets.",
+      },
+      {
+        label: "Local workstream packet",
+        path: "skills/delegate-to-cursor-composer/references/task-local.md",
+        description: "Template for bounded hierarchical workstream packets.",
+      },
+      {
+        label: "User-plan packet",
+        path: "skills/delegate-to-cursor-composer/references/task-user-plan.md",
+        description: "Template for accepted user-provided plan packets.",
+      },
+      {
+        label: "Follow-up packet",
+        path: "skills/delegate-to-cursor-composer/references/task-follow-up.md",
+        description: "Template for bounded review follow-up packets.",
+      },
+      {
+        label: "Dispatch wrapper",
+        path: "skills/delegate-to-cursor-composer/scripts/cursor_delegate.py",
+        description: "Headless Cursor CLI wrapper with authority, git, log, and status checks.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/delegate-to-cursor-composer/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],
@@ -593,6 +675,200 @@ export const SKILLS: SkillDetail[] = [
         label: "Reference",
         path: "skills/grill-me/references/logged-grilling.md",
         description: "Logged grilling behavior and session lifecycle notes.",
+      },
+    ],
+  },
+  {
+    slug: "code-review",
+    title: "code-review",
+    category: "Code review",
+    blurb: "Write findings-first code review reports.",
+    lead:
+      "A general code review report workflow that keeps findings first and avoids implementation changes unless explicitly requested.",
+    overview:
+      "Use this skill when a user asks for `/code-review`, a PR review, diff review, branch review, staged-change review, or safety check before merge. It reviews the relevant scope as a reviewer, prioritizes correctness, behavioral regressions, security, contracts, and missing tests, then writes a Markdown report with severity-ordered findings, test gaps, coverage notes, and a recommendation.",
+    bestFor: [
+      "Reviewing PRs, branch diffs, staged changes, working trees, focused files, or pasted code.",
+      "Surfacing correctness bugs, release-blocking regressions, security issues, and missing tests.",
+      "Producing a reusable review artifact with findings, coverage gaps, and residual risk.",
+    ],
+    workflow: [
+      "Identify the review scope and baseline, preferring the smallest reasonable scope when the user does not name one.",
+      "Read the diff plus relevant tests, fixtures, schemas, config, docs, and call sites needed to understand impact.",
+      "Trace changed data and control flow far enough to verify user-visible, persisted, security, or integration effects.",
+      "Build a review coverage ledger for changed review-relevant areas.",
+      "Check whether tests cover the risky changed behavior.",
+      "Write a Markdown report with recommendation, findings, test gaps, coverage ledger, and evidence appendix.",
+    ],
+    outputs: [
+      "A Markdown code-review report.",
+      "A short terminal summary.",
+      "A complete findings index, test gaps, and review coverage ledger.",
+    ],
+    guardrails: [
+      "Do not make code changes during review unless the user explicitly asks for fixes.",
+      "Do not stage, commit, push, or mutate Git state.",
+      "Do not lead with style or broad refactor preferences unless they create concrete review risk.",
+      "Use `regression-review` or `hack-review` instead when the user asks for those specialized gates.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/code-review/SKILL.md",
+        description: "Scope, findings, recommendation, report-writing rules, and guardrails.",
+      },
+      {
+        label: "Report template",
+        path: "skills/code-review/references/report-template.md",
+        description: "Canonical report sections and review coverage ledger shape.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/code-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "thermo-review",
+    title: "thermo-review",
+    category: "Code review",
+    blurb: "Write harsh structural quality reports.",
+    lead:
+      "An extremely strict code-quality gate for structural simplification, file-size pressure, abstraction boundaries, and spaghetti growth.",
+    overview:
+      "Use this skill when a change needs a thermonuclear maintainability review rather than a general correctness review. It reviews the relevant scope, writes a Markdown report, applies a 350-line threshold for maintained source files, recursively sweeps structural candidates until coverage reaches a fixed point or is marked incomplete, and avoids code changes unless explicitly asked for fixes.",
+    bestFor: [
+      "Reviewing whether a diff makes the implementation more tangled, oversized, indirect, or hard to extend.",
+      "Finding missed code-judo simplifications, decomposition opportunities, canonical-ownership moves, and clearer type boundaries.",
+      "Producing a durable structural review artifact with findings, recursive coverage, line-count evidence, and residual blind spots.",
+    ],
+    workflow: [
+      "Set the review scope and baseline, preferring staged changes before the working tree when the user does not name a scope.",
+      "Build a diff and line-count inventory, including the 350-line maintained-source threshold check.",
+      "Seed a recursive candidate frontier from file growth, branches, helpers, abstractions, types, ownership boundaries, orchestration, tests, and duplicated blocks.",
+      "Trace each candidate inward and outward through local flow, call sites, contracts, tests, and canonical helpers.",
+      "Append newly discovered simplification candidates until the frontier reaches a fixed point or uncovered areas are explicitly marked.",
+      "Write a Markdown report with recommendation, findings, decomposition gaps, recursive coverage ledger, and evidence appendix.",
+    ],
+    outputs: [
+      "A Markdown thermo-nuclear code-quality report.",
+      "A short terminal summary with recommendation, completion status, severity counts, and top structural risks.",
+      "A recursive coverage ledger, line-count ledger, candidate sweep log, and quality-gate recommendation.",
+    ],
+    guardrails: [
+      "Do not make code changes during review unless the user explicitly asks for fixes.",
+      "Do not treat passing tests as proof that the implementation is structurally sound.",
+      "Do not silently waive the 350-line maintained-source threshold; account for oversized files or mark the area uncovered.",
+      "Use `code-review` instead when correctness, security, privacy, data loss, or merge safety is the main question.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/thermo-review/SKILL.md",
+        description: "Structural quality gate, recursive sweep, 350-line threshold, and report rules.",
+      },
+      {
+        label: "Report template",
+        path: "skills/thermo-review/references/report-template.md",
+        description: "Canonical report sections, recursive coverage ledger, and line-count ledger.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/thermo-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "receiving-thermo-review",
+    title: "receiving-thermo-review",
+    category: "Code review follow-up",
+    blurb: "Resolve harsh structural review reports.",
+    lead:
+      "A response workflow for consuming thermo reports without blindly turning harsh feedback into broad refactors or behavior regressions.",
+    overview:
+      "Use this skill after a thermo report or equivalent structural review feedback. It builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, candidate sweep entry, and blind spot before changing code, adds a behavior-parity ledger for touched user-visible or unknown-impact surfaces, then fixes only verified structural issues while preserving Git staging and avoiding unapproved architecture refactors.",
+    bestFor: [
+      "Verifying harsh structural findings against the current diff, line counts, call sites, and ownership boundaries.",
+      "Resolving 350-line threshold concerns, decomposition gaps, recursive coverage gaps, and candidate sweep items.",
+      "Applying scoped behavior-preserving simplifications while checking source, guard, output, and extension-point parity.",
+    ],
+    workflow: [
+      "Read the full report and confirm scope, baseline, completion status, and current checkout still match.",
+      "Create a disposition ledger from findings, decomposition gaps, recursive coverage rows, line-count rows, sweep rows, and blind spots.",
+      "Resolve report inconsistencies or stale line counts before editing.",
+      "Present a structural change plan with behavior-parity, ownership, verification, and no-staging notes before changing code.",
+      "Fix or disprove Blocker and Major items first, then decide Minor, Question, decomposition, and coverage items.",
+      "Recompute affected line counts and run targeted verification for every touched surface.",
+    ],
+    outputs: [
+      "A full disposition ledger for every consumed thermo report item.",
+      "Scoped structural fixes or evidence-backed challenges, waivers, and carry-forward decisions.",
+      "Updated line-count, coverage, and behavior-parity status for affected surfaces.",
+    ],
+    guardrails: [
+      "Do not blindly apply thermo review feedback.",
+      "Do not start broad architecture refactors without approved scope.",
+      "Do not hide potential user-visible regressions behind structural cleanup.",
+      "Do not stage changes unless the current request explicitly asks for staging, committing, or PR publication.",
+      "Do not claim the thermo gate is resolved until every finding, decomposition gap, threshold item, and open coverage row is accounted for.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/receiving-thermo-review/SKILL.md",
+        description: "Disposition ledger, structural response rules, and Git staging guardrails.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/receiving-thermo-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "receiving-code-review",
+    title: "receiving-code-review",
+    category: "Code review follow-up",
+    blurb: "Consume a code-review report and verify each item before changing code.",
+    lead:
+      "A response workflow for turning code-review findings, questions, test gaps, and coverage gaps into evidence-backed fixes, challenges, or carry-forward decisions.",
+    overview:
+      "Use this skill after a code-review report or equivalent PR feedback. It builds a disposition ledger for every finding, approval-affecting question, test gap, and open coverage row before changing code, then fixes only what still applies and preserves evidence for challenged, answered, or carried-forward items.",
+    bestFor: [
+      "Re-checking a code-review report against the current diff and baseline.",
+      "Fixing confirmed correctness, security, contract, or test issues.",
+      "Answering approval-affecting questions with current evidence.",
+      "Closing or carrying forward `Not covered` review areas.",
+    ],
+    workflow: [
+      "Read the report and enumerate every finding, question, test gap, and coverage gap.",
+      "Verify each item against the current code, baseline, outputs, tests, and relevant call sites.",
+      "Create a disposition ledger before editing.",
+      "Apply scoped fixes for confirmed items while preserving Git staging.",
+      "Report the final disposition for every item and refresh the review when material behavior or coverage changes.",
+    ],
+    outputs: [
+      "A full disposition ledger.",
+      "Scoped fixes for confirmed review findings.",
+      "Evidence for challenged, narrowed, answered, and carried-forward items.",
+    ],
+    guardrails: [
+      "Do not blindly apply review feedback.",
+      "Do not stage changes unless the current request explicitly asks for it.",
+      "Do not claim the review is clean until every finding, question, test gap, and coverage row is accounted for.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/receiving-code-review/SKILL.md",
+        description: "Disposition ledger and code-review response requirements.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/receiving-code-review/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
       },
     ],
   },

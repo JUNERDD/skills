@@ -404,6 +404,76 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "已记录追问行为和会话生命周期说明。", label: "参考" },
       ],
     },
+    "code-review": {
+      category: "代码审查",
+      blurb: "生成 findings-first 代码审查报告。",
+      lead: "一个通用代码审查报告工作流，让 findings 优先，并避免未请求的实现修改。",
+      overview:
+        "当用户请求 `/code-review`、PR review、diff review、branch review、staged-change review 或 merge 前安全检查时使用此 skill。它会以 reviewer 视角审查相关范围，优先关注正确性、行为回归、安全、契约和缺失测试，然后写出包含 severity-ordered findings、test gaps、coverage notes 和 recommendation 的 Markdown report。",
+      bestFor: [
+        "审查 PR、branch diff、staged changes、working tree、聚焦文件或 pasted code。",
+        "在 merge 前发现正确性 bug、release-blocking regression、安全问题和缺失测试。",
+        "产出可复用的 review artifact，包含 findings、coverage gaps 和 residual risk。",
+      ],
+      workflow: [
+        "识别审查范围和 baseline；用户未指定时选择最小合理范围。",
+        "阅读 diff 以及理解影响所需的 tests、fixtures、schemas、config、docs 和 call sites。",
+        "追踪变化的数据流和控制流，覆盖用户可见、持久化、安全或集成影响。",
+        "为变化的 review-relevant areas 建立 review coverage ledger。",
+        "检查 tests 是否覆盖风险变化行为。",
+        "写出 Markdown report，包含 recommendation、findings、test gaps、coverage ledger 和 evidence appendix。",
+      ],
+      outputs: [
+        "一份 Markdown code-review report。",
+        "一段简短 terminal summary。",
+        "完整 findings index、test gaps 和 review coverage ledger。",
+      ],
+      guardrails: [
+        "除非用户明确要求 fixes，否则不要在 review 期间改代码。",
+        "不要 stage、commit、push 或改变 Git 状态。",
+        "除非风格或宽泛重构偏好造成具体 review risk，否则不要把它们放在前面。",
+        "当用户要求专门的 regression 或 hack gate 时，改用 `regression-review` 或 `hack-review`。",
+      ],
+      entryPoints: [
+        { description: "范围、findings、recommendation、报告写作规则和 guardrails。", label: "工作流" },
+        { description: "标准报告章节和 review coverage ledger 形状。", label: "报告模板" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
+    "receiving-code-review": {
+      category: "代码审查后续",
+      blurb: "消费 code-review 报告，并在改代码前验证每个条目。",
+      lead: "一个响应工作流，把 code-review findings、questions、test gaps 和 coverage gaps 转化为有证据的修复、挑战或延续决策。",
+      overview:
+        "在收到 code-review report 或等价 PR feedback 后使用此 skill。它会在改代码前为每个 finding、approval-affecting question、test gap 和 open coverage row 建立 disposition ledger，然后只修复仍成立的问题，并为被挑战、回答或延续的条目保留证据。",
+      bestFor: [
+        "用当前 diff 和 baseline 重新检查 code-review report。",
+        "修复已确认的正确性、安全、契约或测试问题。",
+        "用当前证据回答影响 approval 的 questions。",
+        "关闭或延续 `Not covered` review areas。",
+      ],
+      workflow: [
+        "阅读报告并枚举每个 finding、question、test gap 和 coverage gap。",
+        "用当前代码、baseline、outputs、tests 和相关 call sites 验证每个条目。",
+        "编辑前建立 disposition ledger。",
+        "对已确认条目应用有范围的修复，并保持 Git staging 不变。",
+        "报告每个条目的最终 disposition；当行为或 coverage 出现实质变化时刷新 review。",
+      ],
+      outputs: [
+        "完整 disposition ledger。",
+        "针对已确认 review findings 的有范围修复。",
+        "challenged、narrowed、answered 和 carried-forward 条目的证据。",
+      ],
+      guardrails: [
+        "不要盲目应用 review feedback。",
+        "除非当前请求明确要求，否则不要 stage changes。",
+        "在每个 finding、question、test gap 和 coverage row 都有 disposition 前，不要声称 review 已清理。",
+      ],
+      entryPoints: [
+        { description: "Disposition ledger 和 code-review response 要求。", label: "工作流" },
+        { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
     "hack-review": {
       category: "代码审查",
       blurb: "审查实现是否依赖脆弱的 hack-like 捷径。",

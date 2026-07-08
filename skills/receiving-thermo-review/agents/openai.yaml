@@ -1,0 +1,4 @@
+interface:
+  display_name: "Receiving Thermo Review"
+  short_description: "Resolve structural reports without regressions"
+  default_prompt: "Use $receiving-thermo-review to consume a thermo report, verify every structural item and behavior-parity risk, and apply scoped fixes without touching Git staging."

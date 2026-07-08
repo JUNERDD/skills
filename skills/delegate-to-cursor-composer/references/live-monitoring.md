@@ -1,0 +1,45 @@
+# Live Cursor Monitoring
+
+Read this reference when the upstream agent or a workstream orchestrator needs in-flight visibility into a Cursor CLI run.
+
+## Artifacts
+
+`scripts/cursor_delegate.py` writes one run directory under `<workspace>/.agent/delegations/<timestamp>` by default. Use `--log-dir` to choose a stable parent directory.
+
+- `latest`: file in the log parent that contains the newest run directory path.
+- `status.json`: sanitized rolling status for parent-agent monitoring.
+- `metadata.json`: run configuration, safety overrides, and return code.
+- `prompt.txt`: exact prompt sent to Cursor.
+- `stdout.log`, `stderr.log`, `events.ndjson`: raw logs written only when `--include-raw-logs` is used; `events.ndjson` alone can be written with `--include-raw-events`. Raw-output flags require `--override-reason`.
+
+Prefer `status.json` for normal parent updates. Raw Cursor events can include file contents, internal subagent prompts, or proposed write text in tool results.
+
+## Monitor Workflow
+
+1. Run the wrapper with `--output-format stream-json`; add `--stream-partial-output` when real-time assistant text deltas matter.
+2. Capture the printed `Live status:` path. If the caller only knows the log parent, read `<log-dir>/latest`.
+3. Poll `status.json` for low-noise progress: state, model, internal subagent model, session id, last assistant text, current tool call, active/recent internal subagents, recent tool calls, and result.
+4. Use raw logs only when debugging event-level behavior is worth the noise and sensitivity risk.
+5. Treat live status as observation, not approval. Cursor still must obey packet stop conditions, wrapper failures, or explicit upstream/user intervention outside the running process.
+
+## Status Semantics
+
+Expected `status.json` fields:
+
+- `state`: `starting`, `running`, `succeeded`, or `failed`.
+- `current_tool_call`: sanitized active tool call, or `null`.
+- `recent_tool_calls`: bounded list of recent started/completed tool events with safe args and result metadata.
+- `active_subagents`: sanitized active Cursor internal `taskToolCall` entries keyed by call id.
+- `recent_subagents`: bounded list of completed or failed internal subagent calls with description, requested model, agent id, timing, and safe result metadata.
+- `last_assistant_text`: latest assistant text or text delta, truncated.
+- `result`: result summary, truncated, after Cursor emits a result event.
+- `events_seen`: parsed JSON event count.
+
+The status file intentionally omits full file contents, internal subagent prompts, write payloads, and long assistant output.
+
+## Limits
+
+- Cursor print mode may suppress thinking events. Monitoring can show messages and tool activity, not private reasoning.
+- The Cursor event schema may gain fields over time. Consumers must ignore unknown fields.
+- Network reconnects or CLI bugs can affect event completeness; acceptance review must still inspect reports, diffs, and verification.
+- The `latest` pointer is convenient for one run. For parallel external wrapper runs, use each printed `status.json` path instead of relying on one shared `latest`.

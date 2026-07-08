@@ -35,8 +35,13 @@ If you are deciding what to install, start here:
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
+- [`delegate-to-cursor-composer`](#delegate-to-cursor-composer) - route bounded work to Cursor Composer with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
+- [`code-review`](#code-review) - write findings-first code review reports
+- [`thermo-review`](#thermo-review) - write harsh structural quality review reports
+- [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
+- [`receiving-code-review`](#receiving-code-review) - consume a code-review report and verify each item before changing code
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -80,11 +85,16 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
 npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill reduce-reinvention
 npx skills@latest add JUNERDD/skills --skill find-local-skill
+npx skills@latest add JUNERDD/skills --skill code-review
+npx skills@latest add JUNERDD/skills --skill thermo-review
+npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
+npx skills@latest add JUNERDD/skills --skill receiving-code-review
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
@@ -230,7 +240,7 @@ Key entry points:
 
 ### `mr`
 
-[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume with detached worktree dependency setup, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
 
 Install:
 
@@ -245,7 +255,7 @@ Best for:
 - choosing between `merge`, `rebase`, `merge-target`, `pr`, and default detached-mode flows
 - configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
 - understanding non-blocking update notices and the environment variables that disable them
-- handling stopped merge/rebase states by preserving CLI-owned resume paths
+- handling stopped merge/rebase states by preserving CLI-owned resume paths and hydrating detached conflict worktree dependencies
 - maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI
 
 Key entry points:
@@ -297,6 +307,32 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/multitask-coordinator/SKILL.md`](./skills/multitask-coordinator/SKILL.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
+
+### `delegate-to-cursor-composer`
+
+[`skills/delegate-to-cursor-composer/`](./skills/delegate-to-cursor-composer/) routes bounded coding work to Cursor Composer through reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
+```
+
+Best for:
+
+- dispatching bounded implementation, proposal, or inspect-only packets to Cursor Composer
+- using `composer-2.5-fast` consistently for Cursor and Cursor internal subagents unless explicitly overridden
+- allowing Cursor `Task()` / `taskToolCall` subagents only under an explicit packet policy
+- monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
+- reviewing Cursor output, diffs, verification evidence, and repair loops before final acceptance
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/delegate-to-cursor-composer/SKILL.md`](./skills/delegate-to-cursor-composer/SKILL.md)
+- Cursor internal subagent policy: [`skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md)
+- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-composer/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-composer/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-composer/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-composer/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-composer/references/task-follow-up.md)
+- Cursor dispatch wrapper: [`skills/delegate-to-cursor-composer/scripts/cursor_delegate.py`](./skills/delegate-to-cursor-composer/scripts/cursor_delegate.py)
+- Optional runtime metadata: [`skills/delegate-to-cursor-composer/agents/openai.yaml`](./skills/delegate-to-cursor-composer/agents/openai.yaml)
 
 ### `plan-mode`
 
@@ -421,6 +457,93 @@ python3 skills/debug/scripts/local_log_collector/main.py \
   --session-id "demo-session"
 ```
 
+### `code-review`
+
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a findings-first reviewer workflow. It writes a scoped Markdown report with severity-ordered findings, test gaps, coverage notes, and a merge recommendation while keeping the agent in review mode and avoiding code changes unless the user explicitly asks for fixes.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill code-review
+```
+
+Best for:
+
+- reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
+- surfacing bugs, user-visible regressions, security issues, and missing tests before merge
+- producing a reusable review artifact with findings, coverage gaps, and residual risk
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/code-review/SKILL.md`](./skills/code-review/SKILL.md)
+- Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
+- Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
+
+### `thermo-review`
+
+[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source threshold, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill thermo-review
+```
+
+Best for:
+
+- reviewing whether a change makes the implementation more tangled, oversized, or indirect
+- finding missed simplification, decomposition, canonical-ownership, and type-boundary opportunities
+- producing a durable structural review artifact with candidate coverage and residual blind spots
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/thermo-review/SKILL.md`](./skills/thermo-review/SKILL.md)
+- Report template: [`skills/thermo-review/references/report-template.md`](./skills/thermo-review/references/report-template.md)
+- Optional runtime metadata: [`skills/thermo-review/agents/openai.yaml`](./skills/thermo-review/agents/openai.yaml)
+
+### `receiving-thermo-review`
+
+[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
+```
+
+Best for:
+
+- verifying harsh structural review findings against the current diff before changing code
+- resolving 350-line threshold concerns, decomposition gaps, and recursive coverage gaps
+- applying scoped structural fixes while preserving Git staging, checking behavior parity, and avoiding unapproved architecture refactors
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/receiving-thermo-review/SKILL.md`](./skills/receiving-thermo-review/SKILL.md)
+- Optional runtime metadata: [`skills/receiving-thermo-review/agents/openai.yaml`](./skills/receiving-thermo-review/agents/openai.yaml)
+
+### `receiving-code-review`
+
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and builds a disposition ledger for every finding, question, test gap, and open coverage row before deciding whether to fix, challenge, answer, or carry it forward.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill receiving-code-review
+```
+
+Best for:
+
+- re-checking that a code-review report still matches the current diff and baseline
+- fixing confirmed correctness, security, contract, or test issues without blindly applying comments
+- answering approval-affecting questions with current evidence
+- closing or explicitly carrying forward `Not covered` review areas
+
+Key entry points:
+
+- Workflow and guardrails: [`skills/receiving-code-review/SKILL.md`](./skills/receiving-code-review/SKILL.md)
+- Optional runtime metadata: [`skills/receiving-code-review/agents/openai.yaml`](./skills/receiving-code-review/agents/openai.yaml)
+
 ### `hack-review`
 
 [`skills/hack-review/`](./skills/hack-review/) reviews whether an implementation is relying on hack-like tactics instead of sound ownership and abstraction boundaries. It produces a coverage-led reviewer report that enumerates all distinct hack-risk findings discovered within scope, records intentional exceptions, and marks uncovered ownership boundaries explicitly.
@@ -536,6 +659,22 @@ When you add more skills later:
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml
+    ├── code-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── report-template.md
+    ├── thermo-review/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── report-template.md
+    ├── receiving-thermo-review/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
     ├── debug/
     │   ├── SKILL.md
     │   ├── agents/
@@ -587,6 +726,10 @@ When you add more skills later:
     │   └── references/
     │       └── mr-cli-reference.md
     ├── multitask-coordinator/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
+    ├── receiving-code-review/
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml

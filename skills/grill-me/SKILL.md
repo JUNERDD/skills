@@ -63,7 +63,8 @@ Prefer pressure over pleasantries. Weak questions collect narration. Strong ques
 Before asking the first question in a session:
 
 - Resolve the workspace root. Prefer `git rev-parse --show-toplevel`; otherwise use the current working directory.
-- Resolve the installed helper path for `scripts/grill_log.py`. Check the workspace copy first, then common installed-skill locations.
+- Resolve the installed helper path for `scripts/grill_log.py`. Check the workspace copy first, then direct and collection-style installed-skill locations.
+- Treat bundled files as relative to the resolved `grill-me` skill directory, not the target project cwd.
 - Determine the session key. Prefer `CODEX_THREAD_ID`. If it is unavailable, choose one stable manual key and reuse it for the whole grilling session.
 
 Normal path:
@@ -74,6 +75,7 @@ helper=""
 
 for candidate in \
   "$workspace_root/skills/grill-me/scripts/grill_log.py" \
+  "$workspace_root/grill-me/scripts/grill_log.py" \
   "$HOME/.agents/skills/grill-me/scripts/grill_log.py" \
   "$HOME/.codex/skills/grill-me/scripts/grill_log.py"
 do
@@ -82,6 +84,17 @@ do
     break
   fi
 done
+
+if [ -z "$helper" ]; then
+  for skill_root in "$HOME/.agents/skills" "$HOME/.codex/skills"; do
+    [ -d "$skill_root" ] || continue
+    candidate="$(find -L "$skill_root" -path "*/grill-me/scripts/grill_log.py" -type f -print 2>/dev/null | head -n 1)"
+    if [ -n "$candidate" ]; then
+      helper="$candidate"
+      break
+    fi
+  done
+fi
 
 [ -n "$helper" ] || { echo "grill_log.py not found" >&2; exit 1; }
 ```

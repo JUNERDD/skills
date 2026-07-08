@@ -1,0 +1,4 @@
+interface:
+  display_name: "Receiving Code Review"
+  short_description: "Resolve code-review findings safely"
+  default_prompt: "Use $receiving-code-review to consume a code-review report, build a disposition ledger for every finding, question, test gap, and coverage gap, then verify, fix, challenge, or carry items forward with evidence without staging changes unless explicitly requested."
