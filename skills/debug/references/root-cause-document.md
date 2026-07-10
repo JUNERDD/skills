@@ -1,6 +1,6 @@
 # Investigation and Root-Cause Document
 
-Use one evolving Markdown document to preserve the hypothesis plan, evidence, rejected paths, root cause, fix, and verification for a debug session.
+Use one evolving Markdown document to preserve the hypothesis plan, evidence, rejected paths, root cause, root-cause repair, and verification for a debug session.
 
 ## Table of contents
 
@@ -14,7 +14,7 @@ Use one evolving Markdown document to preserve the hypothesis plan, evidence, re
 ## Creation timing
 
 - In one-shot mode, create the document after the causal map and initial hypothesis-probe matrix are ready, before adding probes.
-- In standard mode, create it no later than the first leading evidence-backed root-cause candidate and before applying a fix.
+- In standard mode, create it no later than the first leading evidence-backed root-cause candidate and before applying a repair.
 - Create one document per session. Update the same file even when the leading theory changes.
 - Never overwrite an unrelated existing report.
 
@@ -47,7 +47,7 @@ Append an investigation-ledger row for each of these events:
 - Reproduction analysis
 - Targeted rerun
 - Root-cause change
-- Fix decision
+- Root-cause repair decision
 - Failed verification
 - Successful verification
 - Cleanup or retention decision
@@ -72,8 +72,8 @@ Use these document statuses:
 - `Analyzing`
 - `Working theory`
 - `Confirmed root cause`
-- `Fix applied; awaiting verification`
-- `Fixed and verified`
+- `Root-cause repair applied; awaiting verification`
+- `Root cause repaired and verified`
 - `Still failing`
 - `Incomplete`
 
@@ -176,10 +176,14 @@ Look here first:
 | --- | --- | --- | --- | --- | --- |
 | `1` | `initial plan` | `[files/map]` | `[matrix created]` | `[coverage]` | `[new evidence condition]` |
 
-## Fix and Verification
+## Root-Cause Repair and Verification
 
-- Fix applied: `[file/function/behavior or Not applied]`
-- Why this fixes the origin: `[causal explanation]`
+- Repair applied: `[file/function/behavior or Not applied]`
+- Causal mechanism eliminated: `[mechanism and owning boundary]`
+- Violated invariant or contract restored: `[invariant/contract]`
+- Why eliminating this mechanism prevents propagation to the symptom: `[causal explanation]`
+- Scope rationale: `[why every changed file/layer is necessary and why the repair is no broader than needed]`
+- Rejected smaller workarounds: `[symptom masks or incomplete alternatives, or none]`
 - Verification run: `[runId]`
 - Verification status: `[Not run | Passed | Failed | Blocked]`
 - Before evidence: `[probe evidence]`
@@ -208,7 +212,8 @@ Look here first:
 - `[yes/no]` The root cause cites origin, propagation, and symptom evidence.
 - `[yes/no]` Rejected or superseded paths retain their exclusion evidence.
 - `[yes/no]` Every analysis/verification pass has an append-only ledger row.
-- `[yes/no]` The fix addresses the origin rather than only the symptom.
+- `[yes/no]` The repair eliminates the evidenced causal mechanism and restores the violated invariant or contract rather than only suppressing the symptom.
+- `[yes/no]` Scope minimization was applied only after causal sufficiency; every changed file or layer is necessary and unrelated cleanup is excluded.
 - `[yes/no]` Before/after verification uses the same relevant probe IDs.
 - `[yes/no]` Temporary instrumentation and artifacts are accounted for.
 - `[yes/no]` Secrets and unnecessary PII are absent or redacted.

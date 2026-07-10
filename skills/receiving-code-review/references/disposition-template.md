@@ -7,24 +7,27 @@
 3. [Current Scope](#current-scope)
 4. [Re-Review Orchestration](#re-review-orchestration)
 5. [Intake Integrity](#intake-integrity)
-6. [Disposition Ledger](#disposition-ledger)
-7. [Challenges to Source Review](#challenges-to-source-review)
-8. [Implementation Plan and Delegation](#implementation-plan-and-delegation)
-9. [Code Changes](#code-changes)
-10. [Verification](#verification)
-11. [Post-Implementation Review](#post-implementation-review)
-12. [Residual Risks](#residual-risks)
-13. [Final State](#final-state)
-14. [Resolution Self-Check](#resolution-self-check)
+6. [Disposition Lineage](#disposition-lineage)
+7. [Execution Chain Reconstruction](#execution-chain-reconstruction)
+8. [Disposition Ledger](#disposition-ledger)
+9. [Challenges to Source Review](#challenges-to-source-review)
+10. [Implementation Plan and Delegation](#implementation-plan-and-delegation)
+11. [Code Changes](#code-changes)
+12. [Verification](#verification)
+13. [Post-Implementation Review](#post-implementation-review)
+14. [Residual Risks](#residual-risks)
+15. [Final State](#final-state)
+16. [Resolution Self-Check](#resolution-self-check)
 
 ## Report Contract
 
 - Report type: `receiving-code-review`
 - Resolution ID: `rr-YYYYMMDD-<random-id>`
+- Review chain ID: `rc-YYYYMMDD-<id>`
 - Generated at: `YYYY-MM-DDTHH:MM:SSZ`
 - Resolution path: `[absolute or repository-relative path]`
 - Source skill: `receiving-code-review`
-- Status: `[Re-reviewing | Implementation in progress | Verification in progress | Resolved | Partially resolved]`
+- Status: `[Re-reviewing | Implementation in progress | Verification in progress | Resolved | Partially resolved | Blocked]`
 - Git index mutation by this workflow: `None`
 
 This report records current evidence, challenges, dispositions, implementation, and verification while leaving the supplied review artifact unchanged. Link the two artifacts by Report ID when the source is a canonical `code-review` report.
@@ -37,6 +40,11 @@ This report records current evidence, challenges, dispositions, implementation, 
 - Source recommendation: `[Block | Changes requested | Discuss | Pass with caveat | Pass | Not stated]`
 - Source completion: `[Complete within reviewed scope | Incomplete - reason | Not stated]`
 - Source scope fingerprint: `[sha256:<digest> | Unavailable - reason]`
+- Source review generation: `[0 | 1]`
+- Source review trigger: `[initial | post-implementation | unstructured]`
+- Source parent resolution ID: `[None | rr-YYYYMMDD-<id>]`
+- Source parent resolution path: `[None | path]`
+- Continuation authority: `[Initial receiving handoff | Explicit current user instruction]`
 - Source item counts: `F [n] | T [n] | unresolved A [n] | intake I [n]`
 
 ## Current Scope
@@ -67,7 +75,7 @@ This report records current evidence, challenges, dispositions, implementation, 
 
 ### Re-Review Synthesis
 
-`[State how the coordinator independently verified final dispositions, how conflicts were resolved, and what remains uncertain.]`
+`[State how the coordinator verified full EC# chains before local dispositions, resolved conflicts, and handled blocked chains.]`
 
 ## Intake Integrity
 
@@ -85,6 +93,24 @@ If none exist, write `None.` Otherwise list every synthetic `I#` item.
 | --- | --- | --- | --- | --- |
 | `I1` | `[mismatch or stale identity]` | `[why it matters]` | `[source/current evidence]` | `[regenerate, re-review, normalize, or carry]` |
 
+## Disposition Lineage
+
+Include every source `F#` and `T#`. For generation `0`, use `New`. For generation `1`, inherit protected parent decisions with the same exact issue key/fingerprint unless changed code, contract, or material evidence justifies `Reopened`.
+
+| Item ID | Issue key | Issue fingerprint | Parent resolution / item / verdict | Chain or evidence delta | Lineage state | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| `F1` | `behavior; entry=...; contract=...; effect=...` | `ifp-sha256:<64 lowercase hex>` | `[None | rr-... / F# / Intentional]` | `[None | kind:<code|contract|evidence>; ref:<source>; change:<concrete delta>]` | `[New | Inherited | Reopened]` | `[source identity, parent disposition, changed code/contract/evidence]` |
+
+## Execution Chain Reconstruction
+
+Create an `EC#` before assigning a final disposition. Reuse one chain for multiple items when they share the same real trigger, propagation, expected basis, and terminal effect.
+
+Fill every stage for `Complete`; use `Checked: none - <reason>` for an explicitly inspected but inapplicable stage. Use `Blocked` when evidence is unavailable.
+
+| Chain ID | Item IDs | Trigger / entry | Guards / alternate paths | Propagation / dependencies | Terminal effect | Failure semantics | Expected basis | Evidence / gaps | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `EC1` | `[F1, T1]` | `[real trigger, input, semantic entry]` | `[validation, auth, config, feature gates, alternate entries]` | `[control/data/state, async, cache, queue, persistence, external calls]` | `[user/API/CLI/data/security/operations/test effect]` | `[errors, retries, ordering, idempotency, concurrency, timeout, cleanup]` | `kind:<kind>; strength:<authoritative|inferred|unavailable>; evidence:<source>` | `[code/test/runtime/contract evidence and exact gaps]` | `[Complete | Blocked]` |
+
 ## Disposition Ledger
 
 Include exactly one row for every source `F#`, standalone `T#`, source `A#` marked `Not covered`, and intake `I#`.
@@ -95,18 +121,21 @@ Allowed action states: `No change needed`, `Fix required`, `Test required`, `Evi
 
 Allowed implementation states: `Not needed`, `Not started`, `Implemented`, `Verified`, `Blocked`, `Carried forward`.
 
-| Item ID | Source status | Re-review verdict | Action state | Implementation state | Challenge | Evidence | Next action |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `F1` | `[Blocker | Major | Minor | Question]` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[current code/test/runtime/contract evidence]` | `[specific next action | None]` |
-| `T1` | `[Blocker | Major | Minor test gap]` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[evidence]` | `[next action | None]` |
-| `A3` | `Not covered` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[coverage evidence]` | `[next action | None]` |
-| `I1` | `Intake integrity` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[evidence]` | `[next action | None]` |
+| Item ID | Issue fingerprint | Execution chain(s) | Source status | Re-review verdict | Action state | Implementation state | Challenge | Evidence | Next action |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `F1` | `ifp-sha256:<64 lowercase hex>` | `EC1` | `[Blocker | Major | Minor | Question]` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[whole-chain code/test/runtime/contract evidence]` | `[specific next action | None]` |
+| `T1` | `ifp-sha256:<64 lowercase hex>` | `EC1` | `[Blocker | Major | Minor test gap]` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[whole-chain evidence]` | `[next action | None]` |
+| `A3` | `N/A` | `EC2` | `Not covered` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[coverage evidence]` | `[next action | None]` |
+| `I1` | `N/A` | `N/A` | `Intake integrity` | `[verdict]` | `[action state]` | `[implementation state]` | `[C# | None]` | `[evidence]` | `[next action | None]` |
 
 ## Challenges to Source Review
 
 If no source claim is challenged, write `None.` Otherwise repeat this card for every material challenge.
 
 ### C1 - Challenge to F1
+
+Execution chains:
+- `EC1`
 
 Source claim:
 `[accurate restatement of the source claim]`
@@ -132,9 +161,15 @@ Limits and residual uncertainty:
 Settlement criterion:
 - `[specific evidence that would conclusively settle any remaining dispute]`
 
+Decision authority:
+- `[user/product owner/requirement/contract/invariant | Not applicable]`
+
+Reopen condition:
+- `[specific code, contract, or evidence change required to revisit this decision]`
+
 Verdict effect:
 - Re-review verdict: `[Narrowed | Reclassified | Disproved | Stale | Duplicate | Intentional | Unverifiable | Open]`
-- Severity/action effect: `[change or no change]`
+- Severity/action effect: `[No change needed | Fix required | Test required | Evidence/answer required | Coverage verification required | Carried forward]`
 - Independent adversarial verifier: `[V# | Not required | Unavailable]`
 
 ## Implementation Plan and Delegation
@@ -144,6 +179,7 @@ Verdict effect:
 - Coding subagent: `[D1 launched | Subagent unavailable - coordinator fallback | Not required]`
 - Coding mode: `[Single coding agent | Multiple disjoint agents | Not applicable]`
 - Allowed files or surfaces: `[paths/surfaces | Not applicable]`
+- Affected execution chains: `[EC1, EC2 | None]`
 - Prohibited scope: `[unrelated refactors, staging, commit, etc.]`
 - Regression/security/contract risk assessment: `[risks and why plan is scoped]`
 - Required verification: `[focused tests, runtime checks, post-implementation review]`
@@ -188,22 +224,31 @@ If no code or tests changed, write `None.`
 
 ## Post-Implementation Review
 
+- Post-review budget at intake: `[0 | 1]`
+- Post-review runs used: `[0 | 1]`
 - Post-implementation review required: `[yes | no - reason]`
+- Post-review generation: `[1 | None]`
+- Post-review scope: `[implementation delta plus affected EC# chains | None]`
 - Post-review report ID: `[cr-YYYYMMDD-<id> | None]`
 - Post-review report path: `[path | None]`
 - Post-review recommendation: `[Block | Changes requested | Discuss | Pass with caveat | Pass | Not applicable]`
 - Post-review scope fingerprint: `[sha256:<digest> | None]`
 - Remaining review items after post-review: `[IDs | None]`
+- Automatic follow-on receiving: `No`
+- Terminal handoff: `Return remaining findings to the user or product owner; do not invoke receiving-code-review automatically.`
+- Termination reason: `[no post-review needed | terminal generation completed | review budget exhausted | explicit user decision required]`
 
 ## Residual Risks
 
 | ID / area | Residual risk | Why unresolved | Concrete next step | Owner |
 | --- | --- | --- | --- | --- |
-| `[F#, T#, A#, I#, or area]` | `[risk]` | `[reason]` | `[verification or follow-up]` | `[owner or unknown]` |
+| `[F#, T#, A#, I#, V#-N#, D#-N#, or area]` | `[risk]` | `[reason]` | `[verification or follow-up]` | `[owner or unknown]` |
 
 If none exist, write `None.`
 
 ## Final State
+
+These IDs describe the current source disposition ledger only; post-review findings remain in the terminal handoff.
 
 - Completion: `[Resolved | Partially resolved | Blocked]`
 - Resolved item IDs: `[IDs | None]`
@@ -213,15 +258,22 @@ If none exist, write `None.`
 - Carried-forward item IDs: `[IDs | None]`
 - Open item IDs: `[IDs | None]`
 - Final source recommendation effect: `[unchanged | strengthened | weakened | superseded by post-review report]`
+- Review-chain completion: `[Terminal | Awaiting explicit user decision]`
 - Git index mutation by this workflow: `None`
 
 ## Resolution Self-Check
 
 - `[yes | no]` Every source `F#`, standalone `T#`, unresolved `A#`, and intake `I#` appears exactly once in `Disposition Ledger`.
-- `[yes | no]` Every challenge includes claim, counterclaim, argument, evidence, limits, settlement criterion, and verdict effect.
-- `[yes | no]` Every `Fix required` or `Test required` item was assigned to a coding subagent or unavailable fallback is disclosed.
-- `[yes | no]` Every implemented item has coordinator verification.
+- `[yes | no]` Every source `F#`, standalone `T#`, and unresolved `A#` references a complete or explicitly blocked `EC#` covering its whole execution chain.
+- `[yes | no]` Every source `F#` and `T#` has lineage with an exact issue key and verified fingerprint; protected parent decisions are inherited or reopened with concrete delta evidence.
+- `[yes | no]` Blocked execution chains produce only `Open` or `Unverifiable` and never actionable fixes/tests.
+- `[yes | no]` Verdict, action, and implementation states satisfy the compatibility matrix.
+- `[yes | no]` Every challenge includes claim, counterclaim, argument, evidence, limits, settlement criterion, and verdict/action effects that exactly match its disposition row.
+- `[yes | no]` Every `Fix required` or `Test required` item appears exactly once in `Coding Assignments`, and unavailable fallback is disclosed when used.
+- `[yes | no]` Every `Implemented` or `Verified` item appears exactly once in `Code Changes` and has coordinator verification.
+- `[yes | no]` Report-contract `Status` exactly matches final `Completion`.
+- `[yes | no]` Every distinct material verifier/coding discovery outside the source universe is recorded as a provisional residual candidate and did not trigger automatic scope expansion.
 - `[yes | no]` Scope drift and source inconsistencies are explicit.
-- `[yes | no]` A material code change has a linked post-implementation review, or a reason that review was unnecessary.
+- `[yes | no]` Post-review use is within the 0/1 budget; any generation `1` report is terminal and automatic follow-on receiving is `No`.
 - `[yes | no]` Pre-existing staged state is unchanged and new changes remain unstaged.
-- `[yes | no]` `python scripts/validate_disposition_report.py <resolution> --source-report <source>` passes.
+- `[yes | no]` The validator passes; a generation `1` source includes `--parent-resolution <parent-resolution>`.

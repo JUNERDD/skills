@@ -585,33 +585,38 @@ export const SKILLS: SkillDetail[] = [
     slug: "debug",
     title: "debug",
     category: "Runtime debugging",
-    blurb: "Prove runtime root causes with high-coverage probes and an investigation ledger.",
+    blurb: "Prove runtime root causes with complete page-lifetime fetch capture.",
     lead:
-      "A prove-it debugging system that maximizes information gained per reproduction for runtime bugs, regressions, flaky behavior, and expensive failures.",
+      "A prove-it debugging system with callback-aware dashboard startup, surfaced confirmation or failure status, a page-local acknowledged browser transport, and complete application-fetch capture without an event-count cap.",
     overview:
-      "Use this skill when code reading is not enough. It builds a broad but deduplicated causal hypothesis set, maps hypotheses to high-information probes, collects correlated NDJSON evidence with the bundled local collector, summarizes large logs before reading raw volume, proves the causal chain through an incremental root-cause ledger, applies the smallest proven fix, verifies with a separate run, and removes temporary instrumentation. One-shot mode drops arbitrary hypothesis or probe caps when reproduction is expensive or flaky.",
+      "Use this skill when code reading is not enough. It builds a broad but deduplicated causal hypothesis set, opens the bundled dashboard automatically after HTTP readiness with at most two callback-aware requests, and collects correlated NDJSON evidence through a page-local acknowledged memory queue. For fetch investigations it records every application fetch issued during the page lifetime without sampling or an artificial event-count cap, frames transport by bytes, and posts acknowledged batches to `/ingest/batch`. It then summarizes large logs, proves the causal chain through an incremental root-cause ledger, repairs the proven root cause, constrains the change to the narrowest causally sufficient scope, verifies with a separate run, and removes temporary instrumentation.",
     bestFor: [
       "Expensive, flaky, or hard-to-repeat reproductions that need one high-coverage probe pass.",
       "Frontend issues where browser logs need to reach an active collector directly.",
+      "High-frequency browser request streams where every issued application fetch in one page lifetime must remain auditable.",
       "Runtime failures that are easy to guess about but hard to prove from static code.",
       "Investigations that must preserve rejected paths so later passes do not repeat them without new evidence.",
     ],
     workflow: [
       "Define the failure contract and build a causal map across boundaries, branches, state, async work, caches, and external calls.",
       "Enumerate and deduplicate hypotheses; in one-shot mode, cover every plausible subsystem without an arbitrary probe cap.",
-      "Start or attach a logging session with `scripts/debug_session.py`, then add high-information temporary probes with observer-cost controls.",
+      "Start or attach a logging session with `scripts/debug_session.py`; let local startup make callback-aware dashboard attempts and surface their status, or opt out explicitly with `--no-open-dashboard` in headless environments.",
+      "For browser fetch streams, copy `assets/browser-debug-transport.mjs`, enqueue one serialized in-memory copy per event, and drain byte-framed acknowledged batches without a count cap.",
       "Pass the coverage gate, collect one clean reproduction, and summarize the NDJSON log before reading raw volume.",
       "Mark hypotheses confirmed, rejected, inconclusive, or not reached, then append the root-cause investigation ledger.",
-      "Apply only proven fixes, verify with a separate run, then remove instrumentation and stop the collector.",
+      "Repair the evidence-proven root cause; minimize scope only after causal sufficiency, verify with a separate run, then remove instrumentation and stop the collector.",
     ],
     outputs: [
       "An incremental root-cause document that preserves each investigation pass and is deleted after successful final cleanup unless retained by request.",
       "Temporary instrumentation plus collector, log, and root-cause document cleanup.",
-      "A verified fix backed by fresh runtime logs.",
+      "A verified root-cause repair backed by fresh runtime logs.",
     ],
     guardrails: [
-      "Do not ship speculative fixes without runtime proof.",
+      "Do not ship speculative fixes without runtime proof, or choose a smaller symptom-level workaround that leaves the proven causal mechanism active.",
       "Do not create app-local proxy APIs for browser logs unless direct collector delivery is proven blocked.",
+      "Do not sample, truncate, or count-cap actual application fetch lifecycle events when complete coverage is required.",
+      "Do not claim that the page-local browser queue survives navigation, reload, process termination, or memory exhaustion.",
+      "Do not instrument collector `/ingest`, `/ingest/batch`, or dashboard traffic as application fetches.",
       "Do not retry rejected or superseded root-cause paths unless new runtime evidence explains why.",
       "Do not analyze collector stdout when the NDJSON evidence file is available; summarize first.",
       "Keep root-cause documents through intermediate log clears, then delete them during final successful cleanup unless the user asks to retain evidence.",
@@ -640,7 +645,12 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Session helper",
         path: "skills/debug/scripts/debug_session.py",
-        description: "Start and stop the local collector session.",
+        description: "Start, confirm, recover, and stop the local collector and dashboard session.",
+      },
+      {
+        label: "Browser transport",
+        path: "skills/debug/assets/browser-debug-transport.mjs",
+        description: "Page-local in-memory queue for byte-framed acknowledged fetch capture.",
       },
       {
         label: "Log summarizer",
@@ -651,6 +661,16 @@ export const SKILLS: SkillDetail[] = [
         label: "Collector",
         path: "skills/debug/scripts/local_log_collector/",
         description: "Local NDJSON collector and dashboard implementation.",
+      },
+      {
+        label: "Lifecycle tests",
+        path: "skills/debug/scripts/test_debug_tools.py",
+        description: "Detached session, automatic dashboard, and lifecycle regressions.",
+      },
+      {
+        label: "Browser transport tests",
+        path: "skills/debug/scripts/test_browser_debug_transport.mjs",
+        description: "Memory-queue, complete-fetch, batching, timeout, and retry regressions.",
       },
     ],
   },
@@ -707,34 +727,37 @@ export const SKILLS: SkillDetail[] = [
     slug: "code-review",
     title: "code-review",
     category: "Code review",
-    blurb: "Run deep orchestrated reviews and persist canonical code-review reports.",
+    blurb: "Run product-grounded deep reviews with bounded report lineage.",
     lead:
-      "A deep review workflow that starts with a read-only orchestration assessment, launches specialist subagents when justified, and writes a validated code-review report without editing code unless asked.",
+      "A frozen-scope deep review workflow with authoritative expected-behavior evidence, stable issue fingerprints, and a terminal post-implementation generation.",
     overview:
-      "Use this skill when a user asks for `/code-review`, a PR review, diff review, branch review, staged-change review, or safety check before merge. It begins with one read-only orchestration-assessment subagent that decides whether a single reviewer or parallel specialists are justified by scope and risk, then prioritizes correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. The coordinator synthesizes findings into a validated canonical `code-review` Markdown report with coverage ledger and receiving handoff, and does not edit code or Git state unless the user separately requests fixes.",
+      "Use this skill for `/code-review`, PR or diff review, branch or staged-change review, and merge-safety assessment. It begins with one read-only orchestration assessor, freezes the initial scope, traces propagated risk, requires authoritative product or contract evidence before classifying a product choice as a defect, and assigns deterministic semantic issue fingerprints. A receiving workflow may create one generation-1 review limited to the implementation delta and affected execution chains; that report is terminal and cannot automatically start another receiving cycle.",
     bestFor: [
       "Reviewing PRs, branch diffs, staged changes, working trees, focused files, or pasted code.",
       "Deciding when parallel specialist subagents add material review value.",
       "Surfacing correctness bugs, release-blocking regressions, security issues, contract risks, and missing tests.",
-      "Producing a reusable `code-review` artifact with coverage evidence and receiving handoff.",
+      "Separating verified defects from unconfirmed or settled product intent.",
+      "Producing a reusable artifact with coverage evidence, semantic issue lineage, and a bounded receiving handoff.",
     ],
     workflow: [
-      "Resolve scope, baseline, target, and a minimal diff inventory without forming findings first.",
+      "Resolve review-chain generation, freeze scope, and capture baseline, target, requirements, and a minimal diff inventory.",
       "Launch the read-only orchestration-assessment subagent and follow its single-reviewer or specialist plan.",
       "Trace changed control, data, security, persistence, integration, and test paths beyond the diff when risk can propagate.",
-      "Independently verify, de-duplicate, and classify every specialist candidate before assigning final IDs.",
+      "Ground expected behavior, independently verify and de-duplicate candidates, then assign stable IDs, issue keys, and fingerprints.",
       "Write a canonical `code-review` Markdown report from the template, then validate it with `scripts/validate_review_report.py`.",
     ],
     outputs: [
       "A validated canonical `code-review` Markdown report.",
       "A short terminal summary with recommendation, completion, severity counts, and orchestration mode.",
-      "A complete findings index, test gaps, review coverage ledger, and receiving handoff.",
+      "A complete findings index, test gaps, coverage ledger, issue lineage, and bounded receiving handoff.",
     ],
     guardrails: [
       "Do not make code changes during review unless the user explicitly asks for fixes.",
       "Do not stage, commit, push, or mutate Git state.",
       "Do not equate review depth with agent count; launch specialists only when justified by scope and risk.",
       "Do not copy subagent conclusions into the report without independent coordinator synthesis.",
+      "Do not classify an unconfirmed product choice as a defect; use an approval-affecting Question.",
+      "Do not automatically consume a generation-1 post-review; return its findings to the user or product owner.",
       "Use `regression-review` or `hack-review` instead when the user asks for those specialized gates.",
     ],
     entryPoints: [
@@ -756,7 +779,12 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Report validator",
         path: "skills/code-review/scripts/validate_review_report.py",
-        description: "Structural validation for completed review reports.",
+        description: "Validates lineage, expected-basis authority, fingerprints, and terminal generation rules.",
+      },
+      {
+        label: "Validator tests",
+        path: "skills/code-review/scripts/test_validate_review_report.py",
+        description: "Regression coverage for report lineage and product-intent gates.",
       },
       {
         label: "Runtime metadata",
@@ -867,35 +895,39 @@ export const SKILLS: SkillDetail[] = [
     slug: "receiving-code-review",
     title: "receiving-code-review",
     category: "Code review follow-up",
-    blurb: "Re-verify code-review findings, challenge errors, and fix confirmed items.",
+    blurb: "Trace findings end to end and resolve them without recursive review loops.",
     lead:
-      "A response workflow that re-reviews every code-review claim, formally challenges incorrect or stale findings, and delegates confirmed fixes to a coding subagent while preserving the Git index.",
+      "An execution-chain-first response workflow that preserves settled intent, enforces compatible dispositions, and bounds post-implementation review.",
     overview:
-      "Use this skill after a `code-review` report or equivalent PR feedback. It launches a re-review assessment subagent, builds a complete disposition ledger for every finding, test gap, uncovered area, and intake mismatch, formally challenges incorrect or stale claims with evidence, and implements confirmed actions through a coding subagent. The companion `receiving-code-review` resolution report is validated before completion, and staged work stays untouched unless staging or publishing is explicitly requested.",
+      "Use this skill after a `code-review` report or equivalent PR feedback. Before assigning dispositions, it reconstructs each problem from its real trigger and entry through guards, control/data/state propagation, persistence and external effects, failure semantics, and terminal impact. It preserves matching Intentional, Disproved, Stale, and Duplicate decisions across generations, blocks fixes when chain or product-authority evidence is incomplete, delegates only compatible confirmed actions, returns distinct adjacent discoveries as provisional residuals, and allows at most one terminal post-implementation review without automatically consuming its findings.",
     bestFor: [
-      "Re-verifying every `F#`, `T#`, and uncovered `A#` against the current scope before changing code.",
+      "Re-verifying every `F#`, `T#`, and uncovered `A#` against a complete end-to-end execution chain.",
       "Formally challenging incorrect, overstated, or stale review claims with evidence.",
       "Fixing confirmed correctness, security, contract, or test issues through a coding subagent.",
+      "Preserving authoritative product intent unless code, contract, or material evidence changes.",
       "Preserving staged work while keeping new fixes unstaged unless publication is requested.",
     ],
     workflow: [
       "Read the complete source review or normalize unstructured feedback into stable item IDs.",
-      "Capture current Git state and scope identity, then launch the re-review assessment subagent.",
-      "Verify each item, create formal challenge cards where needed, and assign final dispositions.",
+      "Capture lineage and Git state, then reconstruct and freeze reusable EC# execution chains before launching re-review orchestration.",
+      "Verify each item against its complete chain and expected-behavior authority, then assign compatible verdict, action, and implementation states.",
       "Delegate confirmed fix or test work to a coding subagent with explicit ownership and a no-staging rule.",
-      "Write and validate a `receiving-code-review` resolution report; run post-implementation `code-review` when material risk changes.",
+      "Use at most one implementation-delta post-review for a generation-0 source, link it as terminal, and return remaining findings without automatic receiving.",
     ],
     outputs: [
       "A validated `receiving-code-review` disposition ledger and resolution report.",
       "Formal challenge cards for disputed source claims.",
+      "Auditable EC# execution-chain and semantic-lineage ledgers.",
       "Scoped unstaged fixes for confirmed review findings, plus verification evidence.",
     ],
     guardrails: [
       "Do not blindly apply review feedback.",
-      "Do not edit code until intake, item enumeration, and preliminary dispositions are complete.",
+      "Do not edit code until intake, item enumeration, and complete-or-blocked EC# reconstruction are recorded.",
       "Do not implement confirmed code or test changes only in the coordinator when a coding subagent is available.",
       "Do not stage, commit, or mutate the Git index unless the current request explicitly asks for it.",
       "Do not claim resolution until every source item has a disposition and every implemented item has targeted verification.",
+      "Do not silently drop or auto-implement distinct verifier discoveries; return them as provisional residual candidates.",
+      "Do not auto-fix blocked chains or unconfirmed product choices, and do not start another receiving cycle from the terminal post-review.",
     ],
     entryPoints: [
       {
@@ -916,7 +948,12 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Disposition validator",
         path: "skills/receiving-code-review/scripts/validate_disposition_report.py",
-        description: "Structural validation for disposition ledgers against source reports.",
+        description: "Validates execution chains, lineage inheritance, state compatibility, and the one-review budget.",
+      },
+      {
+        label: "Validator tests",
+        path: "skills/receiving-code-review/scripts/test_validate_disposition_report.py",
+        description: "Regression coverage for chain-first dispositions and bounded follow-up.",
       },
       {
         label: "Runtime metadata",

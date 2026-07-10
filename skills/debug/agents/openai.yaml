@@ -1,4 +1,4 @@
 interface:
-  display_name: "One-Shot Runtime Debug"
-  short_description: "Maximize root-cause coverage per reproduction"
-  default_prompt: "Use $debug to maximize first-pass root-cause coverage, add correlated structured probes, analyze one clean reproduction, prove the fix, and clean up temporary instrumentation."
+  display_name: "Runtime Debug"
+  short_description: "Evidence-first root-cause debugging workflows"
+  default_prompt: "Use $debug to instrument causal boundaries, prove the root cause from runtime evidence, repair the causal mechanism at the responsible ownership boundary and across every causally necessary layer, verify separately, and clean up temporary probes."

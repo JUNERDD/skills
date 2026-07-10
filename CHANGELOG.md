@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## Unreleased
+
+### Changed
+
+- Bounded code-review lineage to one frozen initial review plus at most one terminal implementation-delta review, with authoritative product-intent evidence and deterministic semantic issue fingerprints.
+- Made receiving-code-review reconstruct complete execution chains before disposition, inherit settled decisions across generations, enforce verdict/action compatibility, return distinct adjacent discoveries as provisional residuals, and prohibit automatic review/receiving recursion.
+- Added validator regression coverage for lineage, execution-chain, product-intent, and post-review-budget gates.
+
 ## [0.2.6] - 2026-07-10
 
 ### Changed

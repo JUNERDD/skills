@@ -36,7 +36,6 @@ from collector_ide import (
 from collector_state import (
     DEFAULT_LOG_WINDOW_LIMIT,
     MAX_LOG_WINDOW_LIMIT,
-    append_entry_to_cache,
     build_location_state_payload,
     build_log_detail_response,
     build_logs_response,
@@ -44,6 +43,7 @@ from collector_state import (
     build_service_payload,
     build_state_response,
     clear_log_file,
+    index_new_log_data,
     schedule_location_state_file_write,
     sync_log_cache,
     sync_tracked_locations,
@@ -54,7 +54,6 @@ INGEST_CORS_ALLOW_HEADERS = 'Content-Type, X-Debug-Session-Id'
 INGEST_CORS_ALLOW_METHODS = 'POST, OPTIONS'
 INGEST_PATHS = {'/ingest', '/ingest/batch'}
 MAX_JSON_BODY_BYTES = 4 * 1024 * 1024
-MAX_BATCH_EVENTS = 200
 DASHBOARD_TOKEN_HEADER = 'X-Debug-Dashboard-Token'
 SENSITIVE_POST_PATHS = {
     '/api/clear',
@@ -73,6 +72,7 @@ class CollectorServer(ThreadingHTTPServer):
 
     daemon_threads = True
     allow_reuse_address = True
+    request_queue_size = 1024
 
     def __init__(
         self,
@@ -97,6 +97,11 @@ class CollectorServer(ThreadingHTTPServer):
         self.session_id = session_id
         self.service_log_file = service_log_file
         self.started_at = int(time.time() * 1000)
+        self.max_json_body_bytes = MAX_JSON_BODY_BYTES
+        # Keep ingestion file I/O independent from dashboard/index state work. The
+        # request path performs one append and acknowledges immediately; a
+        # background tailer updates the dashboard cache afterwards.
+        self.ingest_lock = threading.Lock()
         self.write_lock = threading.Lock()
         self.location_state_flush_ms = max(int(location_state_flush_ms), 0)
         self.location_state_schedule_lock = threading.Lock()
@@ -119,14 +124,85 @@ class CollectorServer(ThreadingHTTPServer):
         self.file_updated_at: int | None = None
         self.location_state_updated_at: int | None = None
         self.physical_line_count = 0
+        self.indexed_file_offset = 0
+        self.ingest_request_count = 0
+        self.ingest_accepted_event_count = 0
+        self.ingest_accepted_bytes = 0
+        self.ingest_last_accepted_at: int | None = None
+        self.index_last_completed_at: int | None = None
+        self.index_error_count = 0
+        self.index_last_error = ''
+        self.seen_transport_batch_ids: set[str] = set()
+        self._index_wake_event = threading.Event()
+        self._index_stop_event = threading.Event()
+        self._index_thread: threading.Thread | None = None
         self.dashboard_open_attempted = False
         self.dashboard_open_succeeded: bool | None = None
         self.dashboard_open_error = ''
+        self.dashboard_auto_open_enabled = False
+        self.dashboard_open_pending = False
+        self.dashboard_open_started_at: int | None = None
+        self.dashboard_open_completed_at: int | None = None
+        self.dashboard_open_method = ''
+        self.dashboard_open_attempts: list[dict[str, Any]] = []
         self.dashboard_frontend_opened_at: int | None = None
         self.dashboard_frontend_open_failure_count = 0
         self.dashboard_frontend_open_last_failure_at: int | None = None
         self.dashboard_frontend_open_last_error = ''
         self.dashboard_frontend_open_last_failed_url = ''
+
+    def start_background_workers(self) -> None:
+        """Start the asynchronous file tailer once the initial cache is hydrated."""
+
+        if self._index_thread is not None and self._index_thread.is_alive():
+            return
+        self._index_stop_event.clear()
+        self._index_thread = threading.Thread(
+            target=self._index_loop,
+            name='debug-log-indexer',
+            daemon=True,
+        )
+        self._index_thread.start()
+
+    def stop_background_workers(self) -> None:
+        self._index_stop_event.set()
+        self._index_wake_event.set()
+        thread = self._index_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=5.0)
+        self._index_thread = None
+        # Catch up synchronously before the final state-sidecar flush.
+        try:
+            with self.write_lock:
+                indexed = index_new_log_data(self)
+                if indexed:
+                    schedule_location_state_file_write(self)
+        except OSError as exc:
+            self.index_error_count += 1
+            self.index_last_error = str(exc)
+
+    def wake_indexer(self) -> None:
+        self._index_wake_event.set()
+
+    def _index_loop(self) -> None:
+        while not self._index_stop_event.is_set():
+            self._index_wake_event.wait(timeout=0.25)
+            self._index_wake_event.clear()
+            try:
+                with self.write_lock:
+                    indexed = index_new_log_data(self)
+                    if indexed:
+                        schedule_location_state_file_write(self)
+                self.index_last_completed_at = int(time.time() * 1000)
+                self.index_last_error = ''
+            except OSError as exc:
+                self.index_error_count += 1
+                self.index_last_error = str(exc)
+                time.sleep(0.05)
+
+    def server_close(self) -> None:
+        self.stop_background_workers()
+        super().server_close()
 
     @property
     def base_url(self) -> str:
@@ -241,6 +317,28 @@ class CollectorServer(ThreadingHTTPServer):
         self.dashboard_frontend_opened_at = int(time.time() * 1000)
         self.write_ready_file()
 
+    def record_dashboard_open_result(self, result: dict[str, Any]) -> None:
+        """Record an OS/browser launch request without treating it as page-load proof."""
+
+        self.dashboard_open_pending = False
+        self.dashboard_open_completed_at = int(time.time() * 1000)
+        self.dashboard_open_attempted = bool(result.get('attempted'))
+        self.dashboard_open_succeeded = bool(result.get('succeeded'))
+        self.dashboard_open_error = str(result.get('error') or '')
+        self.dashboard_open_method = str(result.get('method') or '')
+        raw_attempts = result.get('attempts')
+        self.dashboard_open_attempts = raw_attempts if isinstance(raw_attempts, list) else []
+
+        if not self.dashboard_open_succeeded and self.dashboard_frontend_opened_at is None:
+            self.dashboard_frontend_open_failure_count += 1
+            self.dashboard_frontend_open_last_failure_at = self.dashboard_open_completed_at
+            self.dashboard_frontend_open_last_error = (
+                self.dashboard_open_error or 'dashboard_auto_open_failed'
+            )
+            self.dashboard_frontend_open_last_failed_url = self.dashboard_url
+
+        self.write_ready_file()
+
     def record_dashboard_frontend_open_failed(
         self,
         *,
@@ -259,6 +357,7 @@ class CollectorServer(ThreadingHTTPServer):
 
 class CollectorRequestHandler(BaseHTTPRequestHandler):
     server_version = 'DebugLogCollector/1.0'
+    protocol_version = 'HTTP/1.1'
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
@@ -329,8 +428,11 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         if path in SENSITIVE_POST_PATHS and not self._require_dashboard_access():
             return
         if path == '/api/clear':
-            with self.server.write_lock:
-                clear_log_file(self.server)
+            # Prevent append/clear races without blocking normal dashboard reads
+            # behind ingestion file I/O.
+            with self.server.ingest_lock:
+                with self.server.write_lock:
+                    clear_log_file(self.server)
             self._json_response(HTTPStatus.OK, self.server.build_state())
             return
         if path == '/api/config':
@@ -381,10 +483,10 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
 
         event = self._prepare_ingest_event(payload)
-        self._append_ingest_events([event])
+        persisted_bytes, _ = self._append_ingest_events([event])
         self._json_response(
             HTTPStatus.ACCEPTED,
-            {'ok': True, 'accepted': 1},
+            {'ok': True, 'accepted': 1, 'persistedBytes': persisted_bytes},
             cors_mode='ingest',
         )
 
@@ -399,6 +501,8 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
 
         raw_events = payload.get('events') if isinstance(payload, dict) else payload
+        raw_batch_id = payload.get('batchId') if isinstance(payload, dict) else None
+        batch_id = raw_batch_id.strip() if isinstance(raw_batch_id, str) else ''
         if not isinstance(raw_events, list):
             self._json_response(
                 HTTPStatus.BAD_REQUEST,
@@ -413,17 +517,6 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
                 cors_mode='ingest',
             )
             return
-        if len(raw_events) > MAX_BATCH_EVENTS:
-            self._json_response(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-                {
-                    'ok': False,
-                    'error': 'too_many_events',
-                    'maximum': MAX_BATCH_EVENTS,
-                },
-                cors_mode='ingest',
-            )
-            return
         if any(not isinstance(item, dict) for item in raw_events):
             self._json_response(
                 HTTPStatus.BAD_REQUEST,
@@ -433,10 +526,23 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
 
         events = [self._prepare_ingest_event(item) for item in raw_events]
-        self._append_ingest_events(events)
+        if batch_id:
+            for event in events:
+                event.setdefault('transportBatchId', batch_id)
+        persisted_bytes, duplicate_batch = self._append_ingest_events(
+            events,
+            batch_id=batch_id or None,
+        )
         self._json_response(
             HTTPStatus.ACCEPTED,
-            {'ok': True, 'accepted': len(events)},
+            {
+                'ok': True,
+                'accepted': len(events),
+                'persistedBytes': persisted_bytes,
+                'persistedEvents': 0 if duplicate_batch else len(events),
+                'duplicateBatch': duplicate_batch,
+                'batchId': batch_id or None,
+            },
             cors_mode='ingest',
         )
 
@@ -451,27 +557,34 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             event['timestamp'] = int(time.time() * 1000)
         return event
 
-    def _append_ingest_events(self, events: list[dict[str, Any]]) -> None:
+    def _append_ingest_events(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        batch_id: str | None = None,
+    ) -> tuple[int, bool]:
         encoded_events = [
             f"{json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n".encode('utf-8')
             for event in events
         ]
-        with self.server.write_lock:
+        encoded_blob = b''.join(encoded_events)
+        accepted_at = int(time.time() * 1000)
+        with self.server.ingest_lock:
+            if batch_id and batch_id in self.server.seen_transport_batch_ids:
+                return 0, True
             with self.server.log_file.open('ab') as file:
-                offset = file.tell()
-                for event, encoded_line in zip(events, encoded_events):
-                    file.write(encoded_line)
-                    append_entry_to_cache(
-                        self.server,
-                        event,
-                        offset=offset,
-                        size=len(encoded_line),
-                    )
-                    offset += len(encoded_line)
+                file.write(encoded_blob)
                 file.flush()
                 self.server.file_size_bytes = file.tell()
-            self.server.file_updated_at = int(time.time() * 1000)
-            schedule_location_state_file_write(self.server)
+            if batch_id:
+                self.server.seen_transport_batch_ids.add(batch_id)
+            self.server.file_updated_at = accepted_at
+            self.server.ingest_request_count += 1
+            self.server.ingest_accepted_event_count += len(events)
+            self.server.ingest_accepted_bytes += len(encoded_blob)
+            self.server.ingest_last_accepted_at = accepted_at
+        self.server.wake_indexer()
+        return len(encoded_blob), False
 
     def _handle_config_update(self) -> None:
         payload = self._read_json_body()
@@ -721,7 +834,13 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # The event may already be appended even if the caller
+            # disconnects before reading the acknowledgement.
+            pass
 
     def _json_response(
         self,
@@ -738,7 +857,14 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # An ingest frame may already be appended even when the
+            # client times out before reading the acknowledgement. A retry with
+            # the same batchId is idempotent.
+            pass
 
     def _send_ingest_cors_headers(self) -> None:
         self.send_header('Access-Control-Allow-Origin', '*')

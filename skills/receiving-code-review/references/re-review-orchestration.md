@@ -24,6 +24,8 @@ Give the assessor:
 - source report ID or source identifier, source type, scope fingerprint, baseline, target, and completion status
 - current scope identity and any drift
 - complete `F#`, `T#`, unresolved `A#`, and `I#` inventory
+- review chain ID, source generation, parent resolution when applicable, and remaining post-review budget
+- frozen `EC#` execution-chain records for every `F#`, `T#`, and review-relevant or uncovered `A#`
 - severity distribution and source recommendation
 - source evidence quality, blind spots, and subagent adjudication
 - which claims are already suspected to be stale or contested
@@ -35,6 +37,7 @@ Use this assignment:
 ```text
 Act as the re-review orchestration assessor. Remain read-only and do not implement fixes.
 Evaluate both the current change scope and the source review results.
+Start from the supplied end-to-end execution chains, not isolated reported lines.
 Decide whether one verifier or multiple specialist verifiers will materially improve correctness, false-positive detection, coverage closure, or evidence quality.
 Partition by independent claim clusters, risk angles, or evidence methods. Identify when a challenged high-severity claim needs an adversarial verifier.
 Return the required structured assessment with assumptions.
@@ -47,6 +50,7 @@ orchestration_decision: single-verifier | parallel-specialists
 confidence: high | medium | low
 scope_match: exact | drifted | stale | unknown
 source_integrity: consistent | inconsistent | incomplete
+risk_chain_summary: <which EC# paths carry the material risk and where evidence is blocked>
 risk_summary: <one paragraph>
 dispute_summary: <one paragraph>
 parallelism_benefit: <specific benefit or why low>
@@ -59,6 +63,8 @@ verification_assignments:
     angle: <correctness, security, false-positive challenge, tests, etc.>
     owned_surfaces:
       - <paths or behavior paths>
+    execution_chains:
+      - EC1
     required_evidence:
       - <trace, focused test, runtime output, contract, history>
     adversarial_role: true | false
@@ -93,6 +99,10 @@ Prefer `single-verifier` when:
 Do not use item count alone. One disputed authorization blocker can justify two independent verifiers; ten trivial style comments do not.
 
 ## Verifier Roles
+
+### Execution-Chain Verifier
+
+Own the end-to-end behavior path first. Confirm the real trigger and entry, guards and alternate entries, control/data/state propagation, persistence and external effects, retries/concurrency/cleanup, terminal impact, and authoritative expected basis. Every other verifier consumes or challenges this chain record; no local line-level conclusion may replace it.
 
 ### Current-Behavior Verifier
 
@@ -134,8 +144,23 @@ Require:
 
 ```yaml
 verifier_id: V1
+execution_chains:
+  - chain_id: EC1
+    item_ids: [F1, T1]
+    trigger_and_entry: <real trigger, input, and semantic entry>
+    guards_and_alternates: <validation, auth, config, feature gates, alternate entries>
+    propagation: <control, data, state, async, cache, queue, persistence, external calls>
+    terminal_effect: <user/API/CLI/data/security/operational/test effect>
+    failure_semantics: <errors, retries, ordering, idempotency, concurrency, timeout, cleanup>
+    expected_basis: "kind:<kind>; strength:<authoritative|inferred|unavailable>; evidence:<source>"
+    evidence:
+      - <path/line, trace, test, runtime output, contract, history>
+    gaps:
+      - <missing evidence or None>
+    status: complete | blocked
 items:
   - item_id: F1
+    chain_ids: [EC1]
     source_claim: <claim>
     verdict_proposal: confirmed | narrowed | reclassified | disproved | stale | duplicate | intentional | unverifiable | open
     current_risk: <concrete risk or why absent>
@@ -157,6 +182,8 @@ blind_spots:
   - <unverified surface and resolution step>
 ```
 
+Return `execution_chains` before `items`. A blocked chain permits only `open` or `unverifiable` plus evidence, coverage, or carry-forward action proposals. Propose `intentional` only when `expected_basis` cites authoritative product or contract evidence.
+
 ## Challenge Adjudication
 
 The coordinator must turn a material challenge into a `C#` card only after independently checking the evidence.
@@ -165,14 +192,15 @@ Use these rules:
 
 1. Quote or accurately restate the source claim; do not attack a weaker restatement.
 2. Separate factual contradiction from different risk tolerance or product judgment.
-3. Prefer direct current evidence over assumptions and stale report text.
-4. Prefer behavioral, contract, or targeted test evidence over lint or broad green CI.
-5. For a blocker, require stronger counter-evidence than the source evidence. When available, use an adversarial verifier plus coordinator verification.
-6. Record evidence that supports the source claim as well as evidence against it.
-7. Use `Narrowed` or `Reclassified` when only part of the claim fails.
-8. Use `Unverifiable` or `Open` when the missing evidence is approval-affecting.
-9. Persist the settlement criterion so a later reviewer can close the dispute.
-10. Never resolve conflicts by majority vote.
+3. Judge the claim against the complete referenced `EC#`, including evidence that supports the source at earlier or later chain stages.
+4. Prefer direct current evidence over assumptions and stale report text.
+5. Prefer behavioral, contract, or targeted test evidence over lint or broad green CI.
+6. For a blocker, require stronger counter-evidence than the source evidence. When available, use an adversarial verifier plus coordinator verification.
+7. Record evidence that supports the source claim as well as evidence against it.
+8. Use `Narrowed` or `Reclassified` when only part of the claim fails.
+9. Use `Unverifiable` or `Open` when the chain or expected-basis evidence is incomplete.
+10. Persist the settlement criterion and reopen condition so a later reviewer can close or inherit the dispute.
+11. Never resolve conflicts by majority vote.
 
 ## Coding Subagent Contract
 
@@ -184,6 +212,7 @@ Give the coding subagent:
 
 - resolution/source report IDs and current scope fingerprint
 - only accepted actionable `F#`, `T#`, or `A#` items
+- the complete referenced `EC#` records and expected terminal behavior
 - exact expected behavior or test outcome for each item
 - allowed files or owned subsystem
 - prohibited unrelated refactors
@@ -198,6 +227,7 @@ Implement only the accepted actionable review items listed below.
 Do not revisit disproved, stale, duplicate, intentional, or carried-forward items unless new code evidence directly affects implementation safety.
 Keep the patch narrow, preserve existing staged state, and do not run any staging or commit command.
 Map every changed file and verification result back to item IDs. Stop and report rather than guessing when an unresolved contract would make the patch unsafe.
+Preserve the full referenced execution chain, including guards, alternate entries, persistence, failure semantics, and terminal effects.
 ```
 
 Require:
@@ -221,6 +251,8 @@ changed_files:
 git_index_mutated: false
 ```
 
+The coordinator must copy the frozen actionable IDs into `Coding Assignments` exactly once each. After accepting the patch, map every `Implemented` or `Verified` item exactly once in `Code Changes`; an implementation state without both that mapping and independent coordinator verification is unfinished.
+
 The coordinator must inspect the patch, compare it with item boundaries, run the highest-value verification independently, and reject unrelated churn.
 
 ## Fallbacks and Conflict Safety
@@ -228,6 +260,7 @@ The coordinator must inspect the patch, compare it with item boundaries, run the
 - If subagents are unavailable, disclose the fallback in the resolution report and execute the same assessor, verifier, and coding contracts in the coordinator.
 - If a verifier fails, retry once with a narrower item set when practical; otherwise mark owned items `Unverifiable` or reassign them.
 - If verifiers conflict, seek stronger evidence or a focused independent verifier. Do not average conclusions.
+- If a verifier discovers a distinct material issue outside the frozen source universe, record it as a provisional `V#-N#` residual and return it to the user. Do not silently omit it, promote it into implementation, or launch another review. Merge it only when its canonical semantic issue key matches an existing source item.
 - If coding agents would edit shared files, use one agent or a serial plan.
-- If a coding agent finds a new material defect, stop expanding implementation scope automatically. Record it as a provisional `D#-N#` candidate and run `code-review` again so it receives a canonical `F#`, `T#`, or `A#`; use `I#` only for source/intake integrity problems. Do not implement the new candidate until it is explicitly admitted to the actionable set.
+- If a coding agent finds a new material defect, stop expanding implementation scope automatically. Record it as a provisional `D#-N#` candidate for the one remaining post-implementation review; use `I#` only for source/intake integrity problems. If the review budget is exhausted, carry the candidate as residual risk and return it to the user. Never launch a second review or receiving cycle automatically.
 - If any agent mutates the Git index, stop, inspect exactly what changed, restore only known agent mutations without disturbing prior staged work, and record the incident.

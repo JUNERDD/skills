@@ -38,10 +38,10 @@ If you are deciding what to install, start here:
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - prove runtime root causes with high-coverage probes and an incremental investigation ledger
-- [`code-review`](#code-review) - run deep orchestrated reviews and persist canonical code-review reports
+- [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
-- [`receiving-code-review`](#receiving-code-review) - re-verify code-review findings, challenge errors, and fix confirmed items
+- [`receiving-code-review`](#receiving-code-review) - trace findings end to end, preserve intent, and resolve confirmed items without recursive review loops
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -362,7 +362,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It maximizes information gained per reproduction with a broad but deduplicated hypothesis set, high-coverage probes, the bundled local NDJSON collector, log summarization, and an incremental root-cause ledger.
+[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It starts the bundled local dashboard automatically with callback-aware fallback, captures every actual application `fetch` during the page lifetime without an artificial event-count cap through an acknowledged in-memory browser queue, and turns correlated NDJSON evidence into an incremental root-cause ledger.
 
 Install:
 
@@ -377,8 +377,11 @@ Key entry points:
 - Operator reference: [`skills/debug/references/runtime-debugging.md`](./skills/debug/references/runtime-debugging.md)
 - Root-cause report rules: [`skills/debug/references/root-cause-document.md`](./skills/debug/references/root-cause-document.md)
 - Session helper: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
+- Page-local browser transport: [`skills/debug/assets/browser-debug-transport.mjs`](./skills/debug/assets/browser-debug-transport.mjs)
 - Log summarizer: [`skills/debug/scripts/summarize_debug_log.py`](./skills/debug/scripts/summarize_debug_log.py)
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
+- Lifecycle regression tests: [`skills/debug/scripts/test_debug_tools.py`](./skills/debug/scripts/test_debug_tools.py)
+- Browser transport regression tests: [`skills/debug/scripts/test_browser_debug_transport.mjs`](./skills/debug/scripts/test_browser_debug_transport.mjs)
 - Optional runtime metadata: [`skills/debug/agents/openai.yaml`](./skills/debug/agents/openai.yaml)
 
 ### `debug` Skill Snapshot
@@ -387,12 +390,12 @@ The `debug` skill is designed to prevent speculative fixes by forcing a prove-it
 
 1. Define the failure contract and build a causal map.
 2. Enumerate and deduplicate hypotheses; in one-shot mode, cover every plausible subsystem without an arbitrary probe cap.
-3. Start or attach a logging session with `scripts/debug_session.py`, then add high-information temporary probes.
+3. Start or attach a logging session with `scripts/debug_session.py`; local sessions open the dashboard automatically after readiness and use `--no-open-dashboard` only for explicit headless operation.
 4. Pass the coverage gate, collect one clean reproduction, and summarize the NDJSON log before reading raw volume.
 5. Mark each hypothesis as `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`.
 6. Append the root-cause investigation ledger so rejected paths and their evidence are preserved.
-7. Apply a fix only after the root cause is proven.
-8. Verify with a separate post-fix run before removing instrumentation and stopping the collector.
+7. Repair the proven root cause; treat minimal scope as a constraint applied only after causal sufficiency, not as the objective.
+8. Verify with a separate post-repair run before removing instrumentation and stopping the collector.
 
 This keeps the skill focused on evidence, not guesswork.
 
@@ -411,7 +414,7 @@ flowchart LR
   Collector --> UI["Live dashboard"]
   File --> Agent
   UI --> Agent
-  Agent --> Fix["Proven fix + post-fix verification"]
+  Agent --> Repair["Root-cause repair + post-repair verification"]
 ```
 
 ### `debug` Highlights
@@ -422,7 +425,9 @@ flowchart LR
 - Per-hypothesis logging, log summarization, and before/after comparison
 - Incremental root-cause ledger entries that prevent repeated investigation loops
 - Local collector bootstrap when the host does not already provide logging
-- Browser-first log transport for frontend debugging, with explicit prohibition on app-local proxy routes unless direct delivery is proven blocked
+- Callback-aware automatic dashboard opening with at most two attempts, surfaced confirmation or failure status, and an explicit headless opt-out
+- Page-local browser transport that records every issued application `fetch`, frames the in-memory queue by bytes instead of event count, and acknowledges `POST /ingest/batch` before deleting queued evidence; navigation and reload remain explicit evidence-loss boundaries
+- Explicit prohibition on app-local proxy routes unless direct browser-to-collector delivery is proven blocked
 
 ### `debug` Runtime Support
 
@@ -441,13 +446,14 @@ If your runtime ignores [`skills/debug/agents/openai.yaml`](./skills/debug/agent
 
 ### `debug` Collector
 
-The bundled collector is a zero-dependency Python app built on the standard library. It accepts JSON log events, appends them to an NDJSON file, and serves a same-origin dashboard for live inspection.
+The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. Local startup opens the dashboard automatically and waits through at most two callback-aware opener requests; pass `--no-open-dashboard` only for an explicitly headless environment.
 
 For frontend and browser debugging, the intended transport is direct client-to-collector HTTP posting. The collector already handles CORS and preflight, so the skill should not create temporary Next.js API routes or other app-local proxy layers unless direct browser delivery has been proven blocked in the current host.
 
 Collector endpoints:
 
 - `POST /ingest`
+- `POST /ingest/batch`
 - `GET /health`
 - `GET /api/state`
 - `GET /api/logs`
@@ -467,7 +473,7 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `code-review`
 
-[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a deep orchestrated review. It begins with a read-only orchestration-assessment subagent that decides whether one reviewer or specialist subagents are justified, then persists a validated canonical `code-review` Markdown report with findings, test gaps, coverage ledger, and a merge recommendation. It does not edit code or Git state unless the user separately requests fixes.
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into one frozen-scope deep review. It begins with a read-only orchestration assessment, requires authoritative expected-behavior evidence before treating product choices as defects, assigns stable semantic issue fingerprints, and persists a validated lineage-aware report. A receiving workflow may produce one implementation-delta post-review, but that generation is terminal and cannot automatically start another receiving cycle. The skill does not edit code or Git state unless the user separately requests fixes.
 
 Install:
 
@@ -480,7 +486,8 @@ Best for:
 - reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
 - deciding when parallel specialist subagents add material review value
 - surfacing bugs, regressions, security issues, contract risks, and missing tests before merge
-- producing a reusable `code-review` artifact with coverage evidence and receiving handoff
+- distinguishing verified defects from unconfirmed product intent
+- producing a reusable `code-review` artifact with coverage evidence, semantic issue lineage, and a bounded receiving handoff
 
 Key entry points:
 
@@ -488,6 +495,7 @@ Key entry points:
 - Subagent orchestration: [`skills/code-review/references/subagent-orchestration.md`](./skills/code-review/references/subagent-orchestration.md)
 - Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
 - Report validator: [`skills/code-review/scripts/validate_review_report.py`](./skills/code-review/scripts/validate_review_report.py)
+- Validator regression tests: [`skills/code-review/scripts/test_validate_review_report.py`](./skills/code-review/scripts/test_validate_review_report.py)
 - Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
 
 ### `thermo-review`
@@ -535,7 +543,7 @@ Key entry points:
 
 ### `receiving-code-review`
 
-[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback, launches a re-review assessment subagent, formally challenges incorrect or stale claims, and delegates confirmed fixes to a coding subagent. It persists a validated `receiving-code-review` disposition ledger and preserves the user's Git index unless staging or publishing is explicitly requested.
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and reconstructs each problem's complete execution chain before assigning a disposition. It carries a claim from its real trigger and entry through guards, state/data propagation, persistence and external effects, failure handling, and terminal impact; preserves authoritative `Intentional` and other settled decisions across review generations; delegates only compatible confirmed fixes; and permits at most one terminal post-implementation review. Distinct adjacent issues discovered during re-review are returned as provisional residual candidates instead of silently expanding into another review/implementation loop. It preserves the user's Git index unless staging or publishing is explicitly requested.
 
 Install:
 
@@ -545,8 +553,9 @@ npx skills@latest add JUNERDD/skills --skill receiving-code-review
 
 Best for:
 
-- re-verifying every `F#`, `T#`, and uncovered `A#` against the current scope before changing code
+- re-verifying every `F#`, `T#`, and uncovered `A#` against its complete end-to-end execution chain before changing code
 - formally challenging incorrect, overstated, or stale review claims with evidence
+- protecting authoritative product intent from being reopened without changed code, contract, or evidence
 - fixing confirmed correctness, security, contract, or test issues through a coding subagent
 - preserving staged work while keeping new fixes unstaged unless publication is requested
 
@@ -556,6 +565,7 @@ Key entry points:
 - Re-review orchestration: [`skills/receiving-code-review/references/re-review-orchestration.md`](./skills/receiving-code-review/references/re-review-orchestration.md)
 - Disposition template: [`skills/receiving-code-review/references/disposition-template.md`](./skills/receiving-code-review/references/disposition-template.md)
 - Disposition validator: [`skills/receiving-code-review/scripts/validate_disposition_report.py`](./skills/receiving-code-review/scripts/validate_disposition_report.py)
+- Validator regression tests: [`skills/receiving-code-review/scripts/test_validate_disposition_report.py`](./skills/receiving-code-review/scripts/test_validate_disposition_report.py)
 - Optional runtime metadata: [`skills/receiving-code-review/agents/openai.yaml`](./skills/receiving-code-review/agents/openai.yaml)
 
 ### `hack-review`
@@ -681,6 +691,7 @@ When you add more skills later:
     │   │   ├── report-template.md
     │   │   └── subagent-orchestration.md
     │   └── scripts/
+    │       ├── test_validate_review_report.py
     │       └── validate_review_report.py
     ├── thermo-review/
     │   ├── SKILL.md
@@ -696,6 +707,8 @@ When you add more skills later:
     │   ├── SKILL.md
     │   ├── agents/
     │   │   └── openai.yaml
+    │   ├── assets/
+    │   │   └── browser-debug-transport.mjs
     │   ├── references/
     │   │   ├── one-shot-debugging.md
     │   │   ├── root-cause-document.md
@@ -703,6 +716,7 @@ When you add more skills later:
     │   └── scripts/
     │       ├── debug_session.py
     │       ├── summarize_debug_log.py
+    │       ├── test_browser_debug_transport.mjs
     │       ├── test_debug_tools.py
     │       └── local_log_collector/
     │           ├── main.py
@@ -761,6 +775,7 @@ When you add more skills later:
     │   │   ├── disposition-template.md
     │   │   └── re-review-orchestration.md
     │   └── scripts/
+    │       ├── test_validate_disposition_report.py
     │       └── validate_disposition_report.py
     ├── receiving-hack-review/
     │   ├── SKILL.md

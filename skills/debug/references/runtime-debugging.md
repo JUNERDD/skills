@@ -12,15 +12,15 @@ Use this reference for exact collector, instrumentation, evidence-reading, and c
 - Health, clear, and restart rules
 - Location synchronization
 - Structured log format
-- JavaScript and TypeScript template
+- Browser transport and JavaScript/TypeScript instrumentation
 - Non-JavaScript guidance
 - Volume controls
 - Evidence summarization
 - Reading raw evidence
-- Optional dashboard
+- Dashboard startup and recovery
 - CORS and security
 - Reproduction handoff
-- Fix verification
+- Root-cause repair verification
 - Final cleanup
 
 ## Session selection
@@ -62,7 +62,9 @@ Use a unique session ID. The CLI starts the collector detached, waits for the re
   --session-id "checkout-$(date +%s)"
 ```
 
-The default is headless. Add `--open-dashboard` only when the user wants the live dashboard. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. Use `--no-open-dashboard` or its `--headless` alias only for an explicitly headless, CI, container-only, or remote session. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+
+Automatic browser opening is non-fatal: evidence collection remains available if no desktop browser can be launched. Inspect `dashboardOpenPending`, `dashboardOpenSucceeded`, `dashboardOpenError`, and `dashboardFrontendOpenRecorded` in the returned payload. `dashboardOpenSucceeded` means an opener accepted the request; `dashboardFrontendOpenRecorded` is the stronger page-load confirmation and is the value to check before the first reproduction handoff.
 
 The CLI writes session artifacts under `<workspace>/.debug-logs/` unless `--artifact-dir` is supplied. Capture the returned `readyFile` path and use it for every later command.
 
@@ -78,12 +80,21 @@ Treat the ready file as authoritative. It includes at least:
   "batchEndpoint": "http://127.0.0.1:43125/ingest/batch",
   "dashboardUrl": "http://127.0.0.1:43125/",
   "dashboardToken": "<SESSION_TOKEN>",
+  "dashboardAutoOpenEnabled": true,
+  "dashboardOpenPending": false,
+  "dashboardOpenAttempted": true,
+  "dashboardOpenSucceeded": true,
+  "dashboardFrontendOpenRecorded": true,
   "stateUrl": "http://127.0.0.1:43125/api/state",
   "logsUrl": "http://127.0.0.1:43125/api/logs",
   "syncLocationsUrl": "http://127.0.0.1:43125/api/locations/sync",
   "clearUrl": "http://127.0.0.1:43125/api/clear",
   "shutdownUrl": "http://127.0.0.1:43125/api/shutdown",
   "healthUrl": "http://127.0.0.1:43125/health",
+  "ingestEventCountLimited": false,
+  "ingestMaxJsonBodyBytes": 4194304,
+  "ingestAcceptedEventCount": 0,
+  "indexLagBytes": 0,
   "logFile": "/workspace/.debug-logs/checkout-1733456789.ndjson",
   "locationStateFile": "/workspace/.debug-logs/checkout-1733456789.locations.json",
   "serviceLogFile": "/workspace/.debug-logs/checkout-1733456789.service.log",
@@ -96,6 +107,10 @@ Treat the ready file as authoritative. It includes at least:
 ```
 
 When the collector restarts on another port, replace stale endpoint constants in all active temporary probes before reproduction.
+
+The dashboard state response keeps high-cardinality count lists small so polling does not compete with ingestion. Read `summary.countCardinality`, `summary.countListLimit`, and `summary.countListsTruncated` when a list such as `correlationCounts` is abbreviated. This is a presentation bound only: `summary.totalEntries`, the paginated logs API, and the NDJSON evidence file still represent every accepted event.
+
+`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Continue with subsequent acknowledged frames until the page-local queue is empty. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`; ingestion acknowledgement is intentionally independent from dashboard indexing.
 
 ## Session commands
 
@@ -112,6 +127,10 @@ Use the lifecycle CLI rather than reimplementing token handling and cleanup in s
 
 # Clear the current session log and in-memory counters
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py clear \
+  --ready-file <READY_FILE>
+
+# Retry browser opening for a healthy session and print the URL/status
+"$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py open-dashboard \
   --ready-file <READY_FILE>
 
 # Replace the complete active instrumentation-location set
@@ -216,111 +235,83 @@ Required when concurrency or fan-out is possible:
 
 Keep values bounded and JSON-serializable. Log serialization must not throw into product code.
 
-## JavaScript and TypeScript template
+## Browser transport and JavaScript/TypeScript instrumentation
 
-Prefer one small file-local helper per runtime boundary instead of repeating a large `fetch` block at every probe. Use the endpoint, batch endpoint, and session values from the ready file. The helper below micro-batches probes emitted in the same turn, bounds each request, and never throws into product code.
+For browser `fetch` investigations or any high-frequency browser stream, use the bundled transport asset instead of writing a fire-and-forget `fetch` helper at every probe. The transport has one standard mode: a page-local in-memory queue. Copy `assets/browser-debug-transport.mjs` into a temporary project path that the application can import, then configure it with the active ready-file values.
 
 ```ts
-// #region agent log config
-const debugEndpoint = '<ENDPOINT>'
-const debugBatchEndpoint = '<BATCH_ENDPOINT>'
-const debugSessionId = '<SESSION_ID>'
-const debugBatchSize = 20
-let debugSequence = 0
-let debugFlushScheduled = false
-const debugQueue: Array<Record<string, unknown>> = []
-const scheduleDebugFlush = typeof queueMicrotask === 'function'
-  ? queueMicrotask
-  : (callback: () => void) => { void Promise.resolve().then(callback) }
+import {
+  createBrowserDebugTransport,
+  instrumentGlobalFetch,
+} from './browser-debug-transport.mjs'
 
-function flushDebugProbes() {
-  debugFlushScheduled = false
-  const events = debugQueue.splice(0, debugBatchSize)
-  if (events.length === 0) return
+const debugTransport = createBrowserDebugTransport({
+  endpoint: '<ENDPOINT>',
+  batchEndpoint: '<BATCH_ENDPOINT>',
+  sessionId: '<SESSION_ID>',
+  runId: 'initial',
+  onError(status) {
+    console.error('[debug transport]', status)
+  },
+})
 
-  try {
-    const requests = debugBatchEndpoint
-      ? [{ url: debugBatchEndpoint, body: JSON.stringify({ events }) }]
-      : events.map((event) => ({ url: debugEndpoint, body: JSON.stringify(event) }))
-    for (const request of requests) {
-      void fetch(request.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': debugSessionId,
-        },
-        body: request.body,
-        keepalive: true,
-      }).catch(() => {})
-    }
-  } catch {
-    // Temporary debugging must never affect product behavior.
-  }
-
-  if (debugQueue.length > 0 && !debugFlushScheduled) {
-    debugFlushScheduled = true
-    scheduleDebugFlush(flushDebugProbes)
-  }
-}
-
-function debugProbe(input: {
-  probeId: string
-  hypothesisIds: string[]
-  location: string
-  phase: string
-  event: string
-  correlationId: string
-  message: string
-  data?: Record<string, unknown>
-}) {
-  try {
-    debugQueue.push({
-      sessionId: debugSessionId,
-      runId: 'initial',
-      correlationId: input.correlationId,
-      sequence: ++debugSequence,
-      probeId: input.probeId,
-      hypothesisIds: input.hypothesisIds,
-      location: input.location,
-      phase: input.phase,
-      event: input.event,
-      message: input.message,
-      data: input.data ?? {},
-      timestamp: Date.now(),
-      monotonicMs: typeof performance !== 'undefined' ? performance.now() : undefined,
-    })
-    if (!debugFlushScheduled) {
-      debugFlushScheduled = true
-      scheduleDebugFlush(flushDebugProbes)
-    }
-  } catch {
-    // Temporary debugging must never affect product behavior.
-  }
-}
-// #endregion
+const restoreFetch = instrumentGlobalFetch({
+  transport: debugTransport,
+  hypothesisIds: ['H-request-order', 'H-response-race'],
+  location: 'src/api/client.ts:1',
+  runId: 'initial',
+})
 ```
 
-For runtimes without `queueMicrotask`, use a resolved Promise or send a single event to `endpoint`. Keep batches below 200 events and comfortably below browser `keepalive` payload limits; 20 small bounded events is the default. Do not allow an unbounded client queue.
+The global wrapper records every actual application `fetch` start and terminal result. It does not cap, sample, rate-limit, or truncate the number of application requests. It records method and a query-stripped URL by default; do not add raw authorization headers, cookies, request bodies, access tokens, or sensitive query values.
 
-Call the helper inside collapsible temporary regions when the language supports them. Remove the helper, endpoint constants, and calls after successful verification.
+The transport deliberately separates event count from network framing:
 
-For concurrent flows, use a sequence counter scoped to a correlation rather than one global counter when practical. Emit a terminal sentinel before navigation or teardown so the last batch is scheduled.
+- Serialize each event once and keep it in the page-local memory queue until acknowledgement.
+- Frame queued events by serialized bytes, not by event count. The collector has no batch event-count cap; the request body retains a finite byte boundary.
+- Keep one collector request active at a time. This limits only debug-transport concurrency, never the number of application `fetch` calls or queued evidence events.
+- Delete a frame only after the collector acknowledges its complete event count.
+- Abort a collector request that exceeds the configured timeout and retry the same deterministic `batchId`; the collector treats a repeated `batchId` idempotently.
+- Use the native `fetch` captured before instrumentation, exclude collector URLs again by URL, and set `keepalive: false` for the steady stream. This prevents recursive self-instrumentation and accumulating pending `/ingest/batch` calls.
+- Treat navigation, reload, process termination, and memory exhaustion as evidence-loss boundaries. Use an authoritative logger on both sides when the reproduction crosses one of them.
+
+Use `await debugTransport.getStatus()` to inspect `queuedEvents`, `queuedBytes`, `inFlightRequests`, `failedRequests`, `rejectedEvents`, `deliveryScope`, and `reloadSafe`. Complete page-lifetime delivery requires `queuedEvents: 0` and `inFlightRequests: 0`; `eventCountLimited` remains `false`, `deliveryScope` is `page_lifetime`, and `reloadSafe` is `false`.
+
+Emit custom probes through the same queue:
+
+```ts
+void debugTransport.record({
+  correlationId: 'flow-8f31',
+  sequence: 3,
+  probeId: 'cart.commit.before',
+  hypothesisIds: ['H-cache-stale', 'H-race-overwrite'],
+  location: 'src/cart.ts:118',
+  phase: 'mutation',
+  event: 'before_commit',
+  message: 'cart state before persistence',
+  data: { cartVersion: 7, itemCount: 3 },
+})
+```
+
+Before removing temporary instrumentation or intentionally navigating away, call `restoreFetch()`, allow terminal events to enter the queue, and use `await debugTransport.flush({ timeoutMs: 30000 })`. A `false` result means events remain queued; inspect `await debugTransport.getStatus()` and do not claim complete evidence.
+
+Do not send one network request per event or use `keepalive: true` for continuous capture. Monitor `queuedEvents` and `queuedBytes`; stop the reproduction and report incomplete delivery when the collector cannot drain the page-local queue. A small `sendBeacon` or keepalive request may carry a teardown sentinel, but it is not an authoritative evidence channel.
 
 ## Non-JavaScript guidance
 
-Prefer `batchEndpoint` when the runtime can buffer a small bounded burst; otherwise use the single-event `endpoint`. If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close immediately.
+Use `batchEndpoint` for serialized frames and `endpoint` for a single event. Do not impose an event-count cap when complete request coverage is required. Split only by request bytes or runtime-specific payload constraints, then continue sending subsequent frames until every event is acknowledged.
 
-When appending directly:
+If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close promptly. When appending directly:
 
 - Use the same schema.
 - Serialize under a process-safe lock when multiple writers share a file.
 - Keep each object on one physical line.
-- Expect the collector to rehydrate the file on the next state read.
+- Expect the collector to incrementally index the file on the next state read or background tail pass.
 - Do not mix unrelated sessions in one file.
 
 ## Volume controls
 
-Before instrumenting a loop or hot path, select and document a control:
+For general loops or hot paths unrelated to complete `fetch` capture, select and document an information-preserving control:
 
 ```text
 first 5 per correlation
@@ -331,9 +322,11 @@ aggregate count and emit at flow end
 deterministic sample by correlation ID
 ```
 
-Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing events are interpretable.
+Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing general-purpose probe events are interpretable.
 
-Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees. Batch transport reduces request and file-open overhead but does not justify larger payloads or an unbounded queue.
+Do **not** apply those controls to actual application `fetch` lifecycle events when the failure contract requires complete request coverage. Record every start and terminal outcome during the page lifetime. Control cost by bounding fields, stripping secrets, framing by bytes, monitoring the in-memory backlog, and draining with acknowledgements—not by dropping requests from the evidence set.
+
+Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees.
 
 ## Evidence summarization
 
@@ -373,11 +366,20 @@ After summarization:
 
 Do not paste the entire NDJSON file into chat when a compact summary and targeted lines suffice.
 
-## Optional dashboard
+## Dashboard startup and recovery
 
-The collector can serve a same-origin dashboard with state, log windows, and active source locations. It is optional and must not block evidence collection.
+The collector serves a same-origin dashboard with state, bounded log windows, and active source locations. Normal local sessions open it automatically after the HTTP health endpoint responds; this ordering avoids a browser landing on a port before the request loop is ready.
 
-Start with `--open-dashboard` only when the user wants it. Otherwise use ready-file values, CLI commands, and the NDJSON file. Do not spend reproduction time proving that the dashboard frontend opened.
+Use this recovery sequence when the console does not appear or `dashboardFrontendOpenRecorded` remains `false`:
+
+1. Read the ready payload and confirm `dashboardAutoOpenEnabled` is `true`.
+2. Check `dashboardOpenPending`, `dashboardOpenSucceeded`, `dashboardOpenError`, and `dashboardOpenAttempts`.
+3. Run `debug_session.py open-dashboard --ready-file <READY_FILE>`, then re-query state. The command skips reopening when the frontend is already recorded, retries platform and Python browser openers, waits briefly for the page-load callback, and always returns `dashboardUrl`.
+4. Make no more than two fallback attempts for one session. Record and surface both opener failures and accepted requests that never produced a frontend callback.
+5. If the page still does not load, surface the exact URL and errors. Do not restart a healthy collector merely to open the page.
+6. Continue evidence collection through the CLI and NDJSON file when the runtime is genuinely headless.
+
+Do not silently add `--no-open-dashboard` for convenience. Use it only when browser opening is impossible or explicitly unwanted. Dashboard failure must not block logging, reproduction, analysis, or cleanup.
 
 ## CORS and security
 
@@ -403,14 +405,16 @@ Make the reproduction request the final visible section and stop. Use the host's
 
 Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow.
 
-## Fix verification
+## Root-cause repair verification
 
-- Keep discriminating probes active while applying the fix.
-- Use the smallest change that addresses the proven origin, not only the downstream symptom.
-- Use a new `runId`, such as `post-fix`.
+- Keep discriminating probes active while applying the repair.
+- Eliminate the evidence-proven causal mechanism and restore its violated invariant or contract at the owning boundary.
+- Treat change size as a constraint, not the objective. After establishing causal sufficiency, choose the narrowest safe, coherent repair; include every causally necessary file or layer and exclude unrelated cleanup.
+- Do not substitute a smaller downstream guard, fallback, or coercion while the proven causal mechanism remains active.
+- Use a new `runId`, such as `post-repair`.
 - Reproduce the same flow and compare the same probe IDs and invariants.
-- Treat a missing post-fix symptom as insufficient when the flow itself did not complete.
-- If verification fails, preserve the failed-fix evidence and update the same investigation document.
+- Treat a missing post-repair symptom as insufficient when the flow itself did not complete.
+- If verification fails, preserve the failed-repair evidence and update the same investigation document.
 
 ## Final cleanup
 

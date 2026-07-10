@@ -15,12 +15,21 @@ from collector_ide import resolve_location
 
 DEFAULT_LOG_WINDOW_LIMIT = 120
 MAX_LOG_WINDOW_LIMIT = 300
+MAX_STATE_COUNT_ITEMS = 200
 
 
-def compact_count_pairs(counter: Counter[str]) -> list[dict[str, Any]]:
+def compact_count_pairs(
+    counter: Counter[str],
+    *,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    if limit is not None and len(counter) > limit:
+        items = counter.most_common(limit)
+    else:
+        items = counter.items()
     return [
         {'name': name, 'count': count}
-        for name, count in sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+        for name, count in sorted(items, key=lambda item: (-item[1], item[0]))
     ]
 
 
@@ -82,6 +91,9 @@ def reset_log_cache(service: Any) -> None:
     service.file_updated_at = None
     service.location_state_updated_at = None
     service.physical_line_count = 0
+    service.indexed_file_offset = 0
+    if hasattr(service, 'seen_transport_batch_ids'):
+        service.seen_transport_batch_ids = set()
 
 
 def _build_entry_metadata(
@@ -149,6 +161,13 @@ def append_entry_to_cache(
         service.hypothesis_counts[hypothesis_id] += 1
     _update_location_cache(service, entry)
     service.last_event = payload
+    transport_batch_id = payload.get('transportBatchId')
+    if (
+        isinstance(transport_batch_id, str)
+        and transport_batch_id
+        and hasattr(service, 'seen_transport_batch_ids')
+    ):
+        service.seen_transport_batch_ids.add(transport_batch_id)
     return entry
 
 
@@ -415,7 +434,86 @@ def hydrate_log_cache(service: Any) -> None:
     stat = service.log_file.stat()
     service.file_size_bytes = stat.st_size
     service.file_updated_at = int(stat.st_mtime * 1000)
+    service.indexed_file_offset = stat.st_size
     write_location_state_file(service)
+
+
+def index_new_log_data(service: Any) -> int:
+    """Incrementally index complete NDJSON lines appended after the cache offset.
+
+    Call while holding ``service.write_lock``. Ingestion uses a separate file
+    append lock, so dashboard indexing cannot delay the HTTP acknowledgement.
+    """
+
+    if not service.log_file.exists():
+        if service.entries or service.invalid_lines or service.file_size_bytes:
+            reset_log_cache(service)
+        return 0
+
+    stat = service.log_file.stat()
+    actual_size = stat.st_size
+    actual_updated_at = int(stat.st_mtime * 1000)
+    indexed_offset = int(getattr(service, 'indexed_file_offset', 0))
+
+    # A truncation or same-size rewrite invalidates all stored offsets.
+    if actual_size < indexed_offset:
+        hydrate_log_cache(service)
+        return len(service.entries)
+    if actual_size == indexed_offset:
+        service.file_size_bytes = actual_size
+        service.file_updated_at = actual_updated_at
+        return 0
+
+    indexed_count = 0
+    next_offset = indexed_offset
+    partial_tail = False
+    with service.log_file.open('rb') as file:
+        file.seek(indexed_offset)
+        while file.tell() < actual_size:
+            current_offset = file.tell()
+            raw_line = file.readline(actual_size - current_offset)
+            if raw_line == b'':
+                next_offset = file.tell()
+                break
+
+            # Leave an externally-written partial tail for the next pass.
+            if not raw_line.endswith(b'\n') and file.tell() >= actual_size:
+                next_offset = current_offset
+                partial_tail = True
+                break
+
+            next_offset = file.tell()
+            decoded_line = raw_line.decode('utf-8', errors='replace').strip()
+            if not decoded_line:
+                continue
+
+            service.physical_line_count += 1
+            line_number = service.physical_line_count
+            try:
+                payload: Any = json.loads(decoded_line)
+            except json.JSONDecodeError:
+                service.invalid_lines += 1
+                continue
+            if not isinstance(payload, dict):
+                service.invalid_lines += 1
+                continue
+
+            append_entry_to_cache(
+                service,
+                payload,
+                offset=current_offset,
+                size=len(raw_line),
+                line_number=line_number,
+            )
+            indexed_count += 1
+
+        if not partial_tail and file.tell() >= actual_size:
+            next_offset = actual_size
+
+    service.indexed_file_offset = next_offset
+    service.file_size_bytes = actual_size
+    service.file_updated_at = actual_updated_at
+    return indexed_count
 
 
 def sync_log_cache(service: Any) -> None:
@@ -428,10 +526,18 @@ def sync_log_cache(service: Any) -> None:
     stat = service.log_file.stat()
     file_size_bytes = stat.st_size
     file_updated_at = int(stat.st_mtime * 1000)
-    if file_size_bytes == service.file_size_bytes and file_updated_at == service.file_updated_at:
+    indexed_offset = int(getattr(service, 'indexed_file_offset', 0))
+    if file_size_bytes == indexed_offset and file_updated_at == service.file_updated_at:
         return
-
-    hydrate_log_cache(service)
+    if file_size_bytes == indexed_offset and file_updated_at != service.file_updated_at:
+        hydrate_log_cache(service)
+        return
+    if file_size_bytes < indexed_offset:
+        hydrate_log_cache(service)
+        return
+    indexed = index_new_log_data(service)
+    if indexed:
+        schedule_location_state_file_write(service)
 
 
 def _read_payload_at_entry(log_file: Path, entry: dict[str, Any]) -> dict[str, Any] | None:
@@ -657,6 +763,13 @@ def flush_location_state_file(service: Any) -> None:
 def clear_log_file(service: Any) -> None:
     service.log_file.write_text('', encoding='utf-8')
     reset_log_cache(service)
+    service.ingest_request_count = 0
+    service.ingest_accepted_event_count = 0
+    service.ingest_accepted_bytes = 0
+    service.ingest_last_accepted_at = None
+    service.index_last_completed_at = None
+    service.index_error_count = 0
+    service.index_last_error = ''
     stat = service.log_file.stat()
     service.file_size_bytes = stat.st_size
     service.file_updated_at = int(stat.st_mtime * 1000)
@@ -682,6 +795,8 @@ def _slice_entries(
 
 
 def build_service_payload(service: Any) -> dict[str, Any]:
+    indexed_offset = int(getattr(service, 'indexed_file_offset', 0))
+    file_size_bytes = int(getattr(service, 'file_size_bytes', 0))
     return {
         'sessionId': service.session_id,
         'logFile': str(service.log_file),
@@ -691,6 +806,20 @@ def build_service_payload(service: Any) -> dict[str, Any]:
             str(service.location_state_file) if service.location_state_file else None
         ),
         'locationStateFlushMs': int(getattr(service, 'location_state_flush_ms', 0)),
+        'ingestEventCountLimited': False,
+        'ingestMaxJsonBodyBytes': int(getattr(service, 'max_json_body_bytes', 0)),
+        'ingestRequestCount': int(getattr(service, 'ingest_request_count', 0)),
+        'ingestAcceptedEventCount': int(
+            getattr(service, 'ingest_accepted_event_count', 0),
+        ),
+        'ingestAcceptedBytes': int(getattr(service, 'ingest_accepted_bytes', 0)),
+        'ingestLastAcceptedAt': getattr(service, 'ingest_last_accepted_at', None),
+        'indexedFileOffset': indexed_offset,
+        'indexLagBytes': max(file_size_bytes - indexed_offset, 0),
+        'indexLastCompletedAt': getattr(service, 'index_last_completed_at', None),
+        'indexErrorCount': int(getattr(service, 'index_error_count', 0)),
+        'indexLastError': str(getattr(service, 'index_last_error', '') or ''),
+        'transportBatchCount': len(getattr(service, 'seen_transport_batch_ids', set())),
         'serviceLogFile': str(service.service_log_file) if service.service_log_file else None,
         'ownedArtifacts': service.owned_artifacts,
         'endpoint': service.endpoint_url,
@@ -715,9 +844,15 @@ def build_service_payload(service: Any) -> dict[str, Any]:
         'clearUrl': service.clear_url,
         'shutdownUrl': service.shutdown_url,
         'healthUrl': service.health_url,
+        'dashboardAutoOpenEnabled': service.dashboard_auto_open_enabled,
+        'dashboardOpenPending': service.dashboard_open_pending,
         'dashboardOpenAttempted': service.dashboard_open_attempted,
         'dashboardOpenSucceeded': service.dashboard_open_succeeded,
         'dashboardOpenError': service.dashboard_open_error,
+        'dashboardOpenMethod': service.dashboard_open_method,
+        'dashboardOpenAttempts': service.dashboard_open_attempts,
+        'dashboardOpenStartedAt': service.dashboard_open_started_at,
+        'dashboardOpenCompletedAt': service.dashboard_open_completed_at,
         'pid': os.getpid(),
         'startedAt': service.started_at,
     }
@@ -727,6 +862,14 @@ def build_state_response(service: Any) -> dict[str, Any]:
     with service.write_lock:
         sync_log_cache(service)
         merged_locations = _build_active_location_records(service)
+        count_sources = {
+            'runCounts': service.run_counts,
+            'correlationCounts': service.correlation_counts,
+            'probeCounts': service.probe_counts,
+            'hypothesisCounts': service.hypothesis_counts,
+            'eventCounts': service.event_counts,
+            'locationCounts': service.location_counts,
+        }
         summary = {
             'totalEntries': len(service.entries),
             'uniqueLocations': len(merged_locations),
@@ -736,13 +879,20 @@ def build_state_response(service: Any) -> dict[str, Any]:
             'fileUpdatedAt': service.file_updated_at,
             'locationStateUpdatedAt': service.location_state_updated_at,
             'lastEvent': service.last_event,
-            'runCounts': compact_count_pairs(service.run_counts),
-            'correlationCounts': compact_count_pairs(service.correlation_counts),
-            'probeCounts': compact_count_pairs(service.probe_counts),
-            'hypothesisCounts': compact_count_pairs(service.hypothesis_counts),
-            'eventCounts': compact_count_pairs(service.event_counts),
-            'locationCounts': compact_count_pairs(service.location_counts),
+            'countListLimit': MAX_STATE_COUNT_ITEMS,
+            'countCardinality': {
+                name: len(counter) for name, counter in count_sources.items()
+            },
+            'countListsTruncated': [
+                name
+                for name, counter in count_sources.items()
+                if len(counter) > MAX_STATE_COUNT_ITEMS
+            ],
         }
+        summary.update({
+            name: compact_count_pairs(counter, limit=MAX_STATE_COUNT_ITEMS)
+            for name, counter in count_sources.items()
+        })
 
     return {
         'ok': True,

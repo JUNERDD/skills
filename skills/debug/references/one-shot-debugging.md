@@ -272,7 +272,7 @@ Prioritize high-value probes first. Continue adding lower-cost probes until all 
 
 Estimate dynamic events, not just static probe count.
 
-Use one or more controls for hot paths:
+Use one or more controls for general hot paths when complete event coverage is not required by the failure contract:
 
 - **First-N:** record only the first N events per run, correlation, probe, or key.
 - **Once-per-key:** record the first event for each stable identity/version.
@@ -282,9 +282,11 @@ Use one or more controls for hot paths:
 - **Sampling:** deterministic sampling by correlation or key; avoid random samples that may omit the failing flow.
 - **Payload bounding:** cap strings, arrays, stack depth, and nested fields; store lengths and hashes.
 - **Rate limiting:** emit a dropped-event counter so suppression is visible.
-- **Micro-batching:** combine a small bounded burst into one collector request; cap both event count and bytes, and never let the client queue grow without limit.
+- **Byte framing:** combine queued events into request frames bounded by serialized bytes. Do not impose an event-count cap when complete `fetch` coverage is required.
 
 Never silently suppress all evidence from a probe. Emit a compact summary with recorded and dropped counts.
+
+For an investigation that must explain every application `fetch`, do not apply First-N, sampling, rate limiting, anomaly-only filtering, or count-based batching to `fetch_start` and terminal `fetch_resolve`/`fetch_reject` events. Record every actual call during the page lifetime. Control overhead by bounding fields, redacting secrets, keeping one serialized in-memory copy per event, and draining byte-framed requests with acknowledgement and retry.
 
 ## Correlation and ordering
 
@@ -310,7 +312,7 @@ A missing log is ambiguous unless all of these are true:
 3. The enclosing branch or boundary was recorded.
 4. The probe was present at the current source location and used the current endpoint.
 5. The flow-end or an upstream terminating event was recorded.
-6. Suppression counters show the event was not sampled or rate-limited away.
+6. Suppression counters show the event was not sampled or rate-limited away; for complete page-lifetime `fetch` capture, verify that no count-based suppression was configured and that the transport queue reached zero queued events before any navigation or reload.
 
 Classify an otherwise missing probe as `INCONCLUSIVE` or `NOT_REACHED`, not automatically `REJECTED`.
 
@@ -341,7 +343,9 @@ Make logging serialization failure-tolerant. A debug probe must not throw into p
 
 - Instrument user-event receipt, handler generation, state ownership, render/commit, request lifecycle, navigation/pagehide, and stale-result guards.
 - Use direct collector requests when reachable; do not add a production API route only for temporary logs.
-- Use non-blocking requests and `keepalive` when navigation may terminate the page, while respecting browser payload limits.
+- Use `assets/browser-debug-transport.mjs` for high-frequency or complete page-lifetime `fetch` capture. It uses the native uninstrumented `fetch`, a single-copy in-memory queue, byte-framed acknowledged batches, timeout, and retry.
+- Do not use `keepalive: true` for the continuous debug stream. Flush before intentional navigation; when a reproduction must cross navigation or reload, use an authoritative logger on both sides and do not claim that the browser queue provides continuity. Reserve a small beacon/keepalive request only for an optional teardown sentinel.
+- Never instrument collector `/ingest`, `/ingest/batch`, or dashboard requests as application traffic.
 - Avoid logging every render. Record relevant state-version changes, selected branches, and invariant failures.
 - Distinguish event time, render time, effect time, request time, and commit time.
 - Capture component/key identity when reconciliation or stale instances are plausible.

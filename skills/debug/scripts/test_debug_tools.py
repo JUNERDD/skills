@@ -10,11 +10,17 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import urllib.request
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEBUG_SESSION = SCRIPT_DIR / "debug_session.py"
 SUMMARIZER = SCRIPT_DIR / "summarize_debug_log.py"
+
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import debug_session
 
 
 class DebugToolTests(unittest.TestCase):
@@ -42,6 +48,81 @@ class DebugToolTests(unittest.TestCase):
         with urllib.request.urlopen(request, timeout=5) as response:
             self.assertEqual(response.status, 202)
 
+    def test_start_parser_opens_dashboard_by_default_with_explicit_headless_opt_out(self) -> None:
+        parser = debug_session.build_parser()
+        default_args = parser.parse_args(["start"])
+        headless_args = parser.parse_args(["start", "--no-open-dashboard"])
+        alias_args = parser.parse_args(["start", "--headless"])
+
+        self.assertTrue(default_args.open_dashboard)
+        self.assertFalse(headless_args.open_dashboard)
+        self.assertFalse(alias_args.open_dashboard)
+
+    def test_open_dashboard_skips_when_frontend_is_already_recorded(self) -> None:
+        ready_path = Path("/tmp/debug-ready.json")
+        payload = {
+            "healthUrl": "http://127.0.0.1:43125/health",
+            "stateUrl": "http://127.0.0.1:43125/api/state",
+            "dashboardUrl": "http://127.0.0.1:43125/",
+        }
+        args = mock.Mock(ready_file=str(ready_path), timeout=1.0, confirm_seconds=0.01)
+
+        with mock.patch.object(debug_session, "_read_ready_file", return_value=(ready_path, payload)):
+            with mock.patch.object(
+                debug_session,
+                "_http_json",
+                side_effect=[{"ok": True}, {"service": {"dashboardFrontendOpenRecorded": True}}],
+            ):
+                with mock.patch.object(debug_session, "open_dashboard_in_browser") as open_mock:
+                    result = debug_session.command_open_dashboard(args)
+
+        self.assertTrue(result["skipped"])
+        self.assertEqual(result["status"], "already_open")
+        self.assertTrue(result["frontendConfirmed"])
+        open_mock.assert_not_called()
+
+    def test_open_dashboard_records_accepted_request_without_frontend_confirmation(self) -> None:
+        ready_path = Path("/tmp/debug-ready.json")
+        payload = {
+            "healthUrl": "http://127.0.0.1:43125/health",
+            "stateUrl": "http://127.0.0.1:43125/api/state",
+            "dashboardUrl": "http://127.0.0.1:43125/",
+            "dashboardFrontendOpenFailedUrl": "http://127.0.0.1:43125/api/dashboard-open-failed",
+            "dashboardToken": "token",
+        }
+        args = mock.Mock(ready_file=str(ready_path), timeout=1.0, confirm_seconds=0.01)
+        failed_calls: list[dict] = []
+
+        def fake_http(url: str, **kwargs: object) -> dict:
+            if url == payload["stateUrl"]:
+                return {"service": {"dashboardFrontendOpenRecorded": False}}
+            if url == payload["dashboardFrontendOpenFailedUrl"]:
+                failed_calls.append(dict(kwargs))
+                return {"ok": True}
+            return {"ok": True}
+
+        open_result = {
+            "method": "xdg_open",
+            "attempted": True,
+            "succeeded": True,
+            "error": "",
+            "attempts": [],
+        }
+        with mock.patch.object(debug_session, "_read_ready_file", return_value=(ready_path, payload)):
+            with mock.patch.object(debug_session, "_http_json", side_effect=fake_http):
+                with mock.patch.object(
+                    debug_session,
+                    "open_dashboard_in_browser",
+                    return_value=open_result,
+                ):
+                    result = debug_session.command_open_dashboard(args)
+
+        self.assertEqual(result["status"], "frontend_not_confirmed")
+        self.assertFalse(result["frontendConfirmed"])
+        self.assertTrue(result["failureRecorded"])
+        self.assertIn("not_confirmed", result["failureReason"])
+        self.assertEqual(len(failed_calls), 1)
+
     def test_session_lifecycle_structured_counts_and_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
@@ -59,6 +140,7 @@ class DebugToolTests(unittest.TestCase):
                     str(workspace),
                     "--session-id",
                     "integration",
+                    "--no-open-dashboard",
                     "--location-state-flush-ms",
                     "25",
                 )
