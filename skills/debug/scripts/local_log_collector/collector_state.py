@@ -7,6 +7,7 @@ from collections import Counter
 import json
 import os
 from pathlib import Path
+import threading
 import time
 from typing import Any
 
@@ -30,15 +31,47 @@ def _string_or_empty(value: Any) -> str:
 
 
 def _safe_timestamp(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
     if isinstance(value, (int, float)):
         return int(value)
     return None
+
+
+def _safe_sequence(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _normalize_payload_hypothesis_ids(payload: dict[str, Any]) -> list[str]:
+    normalized: list[str] = []
+    singular = payload.get('hypothesisId')
+    if isinstance(singular, str) and singular.strip():
+        normalized.append(singular.strip())
+
+    plural = payload.get('hypothesisIds')
+    if isinstance(plural, list):
+        for item in plural:
+            if not isinstance(item, str):
+                continue
+            text = item.strip()
+            if text and text not in normalized:
+                normalized.append(text)
+    return normalized
 
 
 def reset_log_cache(service: Any) -> None:
     service.entries = []
     service.run_counts = Counter()
     service.hypothesis_counts = Counter()
+    service.probe_counts = Counter()
+    service.correlation_counts = Counter()
+    service.event_counts = Counter()
     service.location_counts = Counter()
     service.location_records: dict[str, dict[str, Any]] = {}
     if not hasattr(service, 'tracked_location_records'):
@@ -59,14 +92,22 @@ def _build_entry_metadata(
     offset: int,
     size: int,
 ) -> dict[str, Any]:
+    hypothesis_ids = _normalize_payload_hypothesis_ids(payload)
     return {
         'entryIndex': entry_index,
         'lineNumber': line_number,
         'offset': offset,
         'size': size,
         'runId': _string_or_empty(payload.get('runId')),
-        'hypothesisId': _string_or_empty(payload.get('hypothesisId')),
+        'correlationId': _string_or_empty(payload.get('correlationId')),
+        'sequence': _safe_sequence(payload.get('sequence')),
+        'probeId': _string_or_empty(payload.get('probeId')),
+        'hypothesisId': hypothesis_ids[0] if hypothesis_ids else '',
+        'hypothesisIds': hypothesis_ids,
         'location': _string_or_empty(payload.get('location')),
+        'phase': _string_or_empty(payload.get('phase')),
+        'event': _string_or_empty(payload.get('event')),
+        'level': _string_or_empty(payload.get('level')),
         'message': _string_or_empty(payload.get('message')),
         'sessionId': _string_or_empty(payload.get('sessionId')),
         'timestamp': _safe_timestamp(payload.get('timestamp')),
@@ -98,8 +139,14 @@ def append_entry_to_cache(
 
     if entry['runId']:
         service.run_counts[entry['runId']] += 1
-    if entry['hypothesisId']:
-        service.hypothesis_counts[entry['hypothesisId']] += 1
+    if entry['correlationId']:
+        service.correlation_counts[entry['correlationId']] += 1
+    if entry['probeId']:
+        service.probe_counts[entry['probeId']] += 1
+    if entry['event']:
+        service.event_counts[entry['event']] += 1
+    for hypothesis_id in entry['hypothesisIds']:
+        service.hypothesis_counts[hypothesis_id] += 1
     _update_location_cache(service, entry)
     service.last_event = payload
     return entry
@@ -121,6 +168,7 @@ def _update_location_cache(service: Any, entry: dict[str, Any]) -> None:
             'lastLineNumber': None,
             'runIds': set(),
             'hypothesisIds': set(),
+            'probeIds': set(),
         }
         service.location_records[location] = record
 
@@ -131,27 +179,49 @@ def _update_location_cache(service: Any, entry: dict[str, Any]) -> None:
 
     if entry['runId']:
         record['runIds'].add(entry['runId'])
-    if entry['hypothesisId']:
-        record['hypothesisIds'].add(entry['hypothesisId'])
+    record['hypothesisIds'].update(entry['hypothesisIds'])
+    if entry['probeId']:
+        record['probeIds'].add(entry['probeId'])
 
 
-def _normalize_string_list(value: Any) -> list[str]:
+def _normalize_string_list(
+    value: Any,
+    *,
+    array_error: str,
+    item_error: str,
+) -> list[str]:
     if value in (None, ''):
         return []
     if not isinstance(value, list):
-        raise ValueError('tracked_location_hypothesis_ids_must_be_array')
+        raise ValueError(array_error)
 
     normalized: list[str] = []
     seen: set[str] = set()
     for item in value:
         if not isinstance(item, str):
-            raise ValueError('tracked_location_hypothesis_id_must_be_string')
+            raise ValueError(item_error)
         text = item.strip()
         if not text or text in seen:
             continue
         seen.add(text)
         normalized.append(text)
     return normalized
+
+
+def _normalize_probe_ids(item: dict[str, Any]) -> list[str]:
+    probe_ids = _normalize_string_list(
+        item.get('probeIds'),
+        array_error='tracked_location_probe_ids_must_be_array',
+        item_error='tracked_location_probe_id_must_be_string',
+    )
+    singular = item.get('probeId')
+    if singular not in (None, ''):
+        if not isinstance(singular, str):
+            raise ValueError('tracked_location_probe_id_must_be_string')
+        text = singular.strip()
+        if text and text not in probe_ids:
+            probe_ids.append(text)
+    return probe_ids
 
 
 def _normalize_tracked_location_item(item: Any) -> dict[str, Any]:
@@ -162,6 +232,7 @@ def _normalize_tracked_location_item(item: Any) -> dict[str, Any]:
         return {
             'location': location,
             'hypothesisIds': [],
+            'probeIds': [],
         }
 
     if not isinstance(item, dict):
@@ -173,7 +244,12 @@ def _normalize_tracked_location_item(item: Any) -> dict[str, Any]:
 
     return {
         'location': location.strip(),
-        'hypothesisIds': _normalize_string_list(item.get('hypothesisIds')),
+        'hypothesisIds': _normalize_string_list(
+            item.get('hypothesisIds'),
+            array_error='tracked_location_hypothesis_ids_must_be_array',
+            item_error='tracked_location_hypothesis_id_must_be_string',
+        ),
+        'probeIds': _normalize_probe_ids(item),
     }
 
 
@@ -233,6 +309,7 @@ def load_tracked_locations(service: Any) -> None:
             tracked_records[item['location']] = {
                 'location': item['location'],
                 'hypothesisIds': set(item['hypothesisIds']),
+                'probeIds': set(item['probeIds']),
                 'registeredAt': _safe_timestamp(raw_item.get('registeredAt'))
                 if isinstance(raw_item, dict)
                 else None,
@@ -243,6 +320,7 @@ def load_tracked_locations(service: Any) -> None:
             continue
 
         record['hypothesisIds'].update(item['hypothesisIds'])
+        record['probeIds'].update(item['probeIds'])
         if record['registeredAt'] is None and isinstance(raw_item, dict):
             record['registeredAt'] = _safe_timestamp(raw_item.get('registeredAt'))
         if isinstance(raw_item, dict):
@@ -275,6 +353,7 @@ def sync_tracked_locations(service: Any, raw_locations: Any) -> None:
             tracked_records[item['location']] = {
                 'location': item['location'],
                 'hypothesisIds': set(item['hypothesisIds']),
+                'probeIds': set(item['probeIds']),
                 'registeredAt': (
                     existing_registered_at
                     if existing_registered_at is not None
@@ -285,6 +364,7 @@ def sync_tracked_locations(service: Any, raw_locations: Any) -> None:
             continue
 
         record['hypothesisIds'].update(item['hypothesisIds'])
+        record['probeIds'].update(item['probeIds'])
         record['updatedAt'] = updated_at
 
     service.tracked_location_records = tracked_records
@@ -373,8 +453,15 @@ def _build_log_list_entry(entry: dict[str, Any]) -> dict[str, Any]:
         'entryIndex': entry['entryIndex'],
         'lineNumber': entry['lineNumber'],
         'runId': entry['runId'],
+        'correlationId': entry['correlationId'],
+        'sequence': entry['sequence'],
+        'probeId': entry['probeId'],
         'hypothesisId': entry['hypothesisId'],
+        'hypothesisIds': entry['hypothesisIds'],
         'location': entry['location'],
+        'phase': entry['phase'],
+        'event': entry['event'],
+        'level': entry['level'],
         'message': entry['message'],
         'sessionId': entry['sessionId'],
         'timestamp': entry['timestamp'],
@@ -400,6 +487,7 @@ def _build_tracked_location_list(service: Any) -> list[dict[str, Any]]:
         {
             'location': record['location'],
             'hypothesisIds': sorted(record['hypothesisIds']),
+            'probeIds': sorted(record.get('probeIds', set())),
             'registeredAt': record.get('registeredAt'),
             'updatedAt': record.get('updatedAt'),
         }
@@ -419,6 +507,7 @@ def _build_active_location_records(service: Any) -> list[dict[str, Any]]:
             'lastLineNumber': None,
             'runIds': set(),
             'hypothesisIds': set(tracked_record['hypothesisIds']),
+            'probeIds': set(tracked_record.get('probeIds', set())),
             'tracked': True,
             'registeredAt': tracked_record.get('registeredAt'),
             'updatedAt': tracked_record.get('updatedAt'),
@@ -431,6 +520,7 @@ def _build_active_location_records(service: Any) -> list[dict[str, Any]]:
             active_record['lastLineNumber'] = runtime_record['lastLineNumber']
             active_record['runIds'].update(runtime_record['runIds'])
             active_record['hypothesisIds'].update(runtime_record['hypothesisIds'])
+            active_record['probeIds'].update(runtime_record.get('probeIds', set()))
         active_records[tracked_record['location']] = active_record
 
     return sorted(active_records.values(), key=_location_sort_key)
@@ -447,6 +537,7 @@ def _build_location_list(service: Any) -> list[dict[str, Any]]:
             'lastLineNumber': record['lastLineNumber'],
             'runIds': sorted(record['runIds']),
             'hypothesisIds': sorted(record['hypothesisIds']),
+            'probeIds': sorted(record.get('probeIds', set())),
             'tracked': bool(record.get('tracked')),
             'registeredAt': record.get('registeredAt'),
             'updatedAt': record.get('updatedAt'),
@@ -475,6 +566,24 @@ def build_location_state_payload(service: Any) -> dict[str, Any]:
     }
 
 
+def _mark_location_state_written(service: Any) -> None:
+    schedule_lock = getattr(service, 'location_state_schedule_lock', None)
+    timer = None
+    if schedule_lock is None:
+        service.location_state_dirty = False
+        service.location_state_last_write_monotonic = time.monotonic()
+        return
+
+    with schedule_lock:
+        service.location_state_dirty = False
+        service.location_state_last_write_monotonic = time.monotonic()
+        timer = getattr(service, 'location_state_timer', None)
+        service.location_state_timer = None
+
+    if timer is not None and timer is not threading.current_thread():
+        timer.cancel()
+
+
 def write_location_state_file(service: Any) -> None:
     if not getattr(service, 'location_state_file', None):
         return
@@ -484,6 +593,65 @@ def write_location_state_file(service: Any) -> None:
     temp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding='utf-8')
     os.replace(temp_path, service.location_state_file)
     service.location_state_updated_at = payload['updatedAt']
+    _mark_location_state_written(service)
+
+
+def _scheduled_location_state_flush(service: Any) -> None:
+    with service.write_lock:
+        schedule_lock = getattr(service, 'location_state_schedule_lock', None)
+        if schedule_lock is None:
+            write_location_state_file(service)
+            return
+        with schedule_lock:
+            service.location_state_timer = None
+            dirty = bool(getattr(service, 'location_state_dirty', False))
+        if dirty:
+            write_location_state_file(service)
+
+
+def schedule_location_state_file_write(service: Any) -> None:
+    if not getattr(service, 'location_state_file', None):
+        return
+
+    flush_ms = max(int(getattr(service, 'location_state_flush_ms', 0)), 0)
+    if flush_ms == 0:
+        write_location_state_file(service)
+        return
+
+    schedule_lock = getattr(service, 'location_state_schedule_lock', None)
+    if schedule_lock is None:
+        write_location_state_file(service)
+        return
+
+    write_now = False
+    with schedule_lock:
+        service.location_state_dirty = True
+        existing_timer = getattr(service, 'location_state_timer', None)
+        if existing_timer is not None and existing_timer.is_alive():
+            return
+
+        last_write = float(getattr(service, 'location_state_last_write_monotonic', 0.0))
+        elapsed = time.monotonic() - last_write
+        delay = max((flush_ms / 1000.0) - elapsed, 0.0)
+        if delay <= 0:
+            service.location_state_timer = None
+            write_now = True
+        else:
+            timer = threading.Timer(delay, _scheduled_location_state_flush, args=(service,))
+            timer.daemon = True
+            service.location_state_timer = timer
+            timer.start()
+
+    if write_now:
+        write_location_state_file(service)
+
+
+def flush_location_state_file(service: Any) -> None:
+    with service.write_lock:
+        if getattr(service, 'location_state_dirty', False):
+            write_location_state_file(service)
+        elif getattr(service, 'location_state_file', None) and not service.location_state_file.exists():
+            write_location_state_file(service)
 
 
 def clear_log_file(service: Any) -> None:
@@ -522,9 +690,11 @@ def build_service_payload(service: Any) -> dict[str, Any]:
         'locationStateFile': (
             str(service.location_state_file) if service.location_state_file else None
         ),
+        'locationStateFlushMs': int(getattr(service, 'location_state_flush_ms', 0)),
         'serviceLogFile': str(service.service_log_file) if service.service_log_file else None,
         'ownedArtifacts': service.owned_artifacts,
         'endpoint': service.endpoint_url,
+        'batchEndpoint': service.batch_endpoint_url,
         'dashboardUrl': service.dashboard_url,
         'dashboardToken': service.dashboard_token,
         'stateUrl': service.state_url,
@@ -567,7 +737,10 @@ def build_state_response(service: Any) -> dict[str, Any]:
             'locationStateUpdatedAt': service.location_state_updated_at,
             'lastEvent': service.last_event,
             'runCounts': compact_count_pairs(service.run_counts),
+            'correlationCounts': compact_count_pairs(service.correlation_counts),
+            'probeCounts': compact_count_pairs(service.probe_counts),
             'hypothesisCounts': compact_count_pairs(service.hypothesis_counts),
+            'eventCounts': compact_count_pairs(service.event_counts),
             'locationCounts': compact_count_pairs(service.location_counts),
         }
 

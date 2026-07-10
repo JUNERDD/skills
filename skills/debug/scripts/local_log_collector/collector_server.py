@@ -44,6 +44,7 @@ from collector_state import (
     build_service_payload,
     build_state_response,
     clear_log_file,
+    schedule_location_state_file_write,
     sync_log_cache,
     sync_tracked_locations,
     write_location_state_file,
@@ -51,6 +52,9 @@ from collector_state import (
 
 INGEST_CORS_ALLOW_HEADERS = 'Content-Type, X-Debug-Session-Id'
 INGEST_CORS_ALLOW_METHODS = 'POST, OPTIONS'
+INGEST_PATHS = {'/ingest', '/ingest/batch'}
+MAX_JSON_BODY_BYTES = 4 * 1024 * 1024
+MAX_BATCH_EVENTS = 200
 DASHBOARD_TOKEN_HEADER = 'X-Debug-Dashboard-Token'
 SENSITIVE_POST_PATHS = {
     '/api/clear',
@@ -80,6 +84,7 @@ class CollectorServer(ThreadingHTTPServer):
         ready_file: Path | None,
         session_id: str | None,
         service_log_file: Path | None = None,
+        location_state_flush_ms: int = 0,
     ) -> None:
         super().__init__(server_address, CollectorRequestHandler)
         self.log_file = log_file
@@ -93,10 +98,18 @@ class CollectorServer(ThreadingHTTPServer):
         self.service_log_file = service_log_file
         self.started_at = int(time.time() * 1000)
         self.write_lock = threading.Lock()
+        self.location_state_flush_ms = max(int(location_state_flush_ms), 0)
+        self.location_state_schedule_lock = threading.Lock()
+        self.location_state_timer: threading.Timer | None = None
+        self.location_state_dirty = False
+        self.location_state_last_write_monotonic = 0.0
         self.shutdown_requested_at: int | None = None
         self.entries: list[dict[str, Any]] = []
         self.run_counts = Counter()
         self.hypothesis_counts = Counter()
+        self.probe_counts = Counter()
+        self.correlation_counts = Counter()
+        self.event_counts = Counter()
         self.location_counts = Counter()
         self.location_records: dict[str, dict[str, Any]] = {}
         self.tracked_location_records: dict[str, dict[str, Any]] = {}
@@ -122,6 +135,10 @@ class CollectorServer(ThreadingHTTPServer):
     @property
     def endpoint_url(self) -> str:
         return f'{self.base_url}/ingest'
+
+    @property
+    def batch_endpoint_url(self) -> str:
+        return f'{self.base_url}/ingest/batch'
 
     @property
     def dashboard_url(self) -> str:
@@ -246,7 +263,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         self.send_response(HTTPStatus.NO_CONTENT)
-        if path == '/ingest':
+        if path in INGEST_PATHS:
             self._send_ingest_cors_headers()
         self.send_header('Content-Length', '0')
         self.end_headers()
@@ -306,6 +323,9 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         if path == '/ingest':
             self._handle_ingest()
             return
+        if path == '/ingest/batch':
+            self._handle_ingest_batch()
+            return
         if path in SENSITIVE_POST_PATHS and not self._require_dashboard_access():
             return
         if path == '/api/clear':
@@ -360,29 +380,98 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        event = self._prepare_ingest_event(payload)
+        self._append_ingest_events([event])
+        self._json_response(
+            HTTPStatus.ACCEPTED,
+            {'ok': True, 'accepted': 1},
+            cors_mode='ingest',
+        )
+
+    def _handle_ingest_batch(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            self._json_response(
+                HTTPStatus.BAD_REQUEST,
+                {'ok': False, 'error': 'invalid_json'},
+                cors_mode='ingest',
+            )
+            return
+
+        raw_events = payload.get('events') if isinstance(payload, dict) else payload
+        if not isinstance(raw_events, list):
+            self._json_response(
+                HTTPStatus.BAD_REQUEST,
+                {'ok': False, 'error': 'events_must_be_array'},
+                cors_mode='ingest',
+            )
+            return
+        if not raw_events:
+            self._json_response(
+                HTTPStatus.BAD_REQUEST,
+                {'ok': False, 'error': 'events_required'},
+                cors_mode='ingest',
+            )
+            return
+        if len(raw_events) > MAX_BATCH_EVENTS:
+            self._json_response(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                {
+                    'ok': False,
+                    'error': 'too_many_events',
+                    'maximum': MAX_BATCH_EVENTS,
+                },
+                cors_mode='ingest',
+            )
+            return
+        if any(not isinstance(item, dict) for item in raw_events):
+            self._json_response(
+                HTTPStatus.BAD_REQUEST,
+                {'ok': False, 'error': 'event_must_be_object'},
+                cors_mode='ingest',
+            )
+            return
+
+        events = [self._prepare_ingest_event(item) for item in raw_events]
+        self._append_ingest_events(events)
+        self._json_response(
+            HTTPStatus.ACCEPTED,
+            {'ok': True, 'accepted': len(events)},
+            cors_mode='ingest',
+        )
+
+    def _prepare_ingest_event(self, payload: dict[str, Any]) -> dict[str, Any]:
+        event = dict(payload)
         header_session_id = self.headers.get('X-Debug-Session-Id')
-        if header_session_id and 'sessionId' not in payload:
-            payload['sessionId'] = header_session_id
-        elif self.server.session_id and 'sessionId' not in payload:
-            payload['sessionId'] = self.server.session_id
+        if header_session_id and 'sessionId' not in event:
+            event['sessionId'] = header_session_id
+        elif self.server.session_id and 'sessionId' not in event:
+            event['sessionId'] = self.server.session_id
+        if 'timestamp' not in event:
+            event['timestamp'] = int(time.time() * 1000)
+        return event
 
-        if 'timestamp' not in payload:
-            payload['timestamp'] = int(time.time() * 1000)
-
-        line = json.dumps(payload, ensure_ascii=True, separators=(',', ':'))
-        encoded_line = f'{line}\n'.encode('utf-8')
+    def _append_ingest_events(self, events: list[dict[str, Any]]) -> None:
+        encoded_events = [
+            f"{json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n".encode('utf-8')
+            for event in events
+        ]
         with self.server.write_lock:
             with self.server.log_file.open('ab') as file:
                 offset = file.tell()
-                file.write(encoded_line)
+                for event, encoded_line in zip(events, encoded_events):
+                    file.write(encoded_line)
+                    append_entry_to_cache(
+                        self.server,
+                        event,
+                        offset=offset,
+                        size=len(encoded_line),
+                    )
+                    offset += len(encoded_line)
                 file.flush()
-                file_size_bytes = file.tell()
-            self.server.file_size_bytes = file_size_bytes
+                self.server.file_size_bytes = file.tell()
             self.server.file_updated_at = int(time.time() * 1000)
-            append_entry_to_cache(self.server, payload, offset=offset, size=len(encoded_line))
-            write_location_state_file(self.server)
-
-        self._json_response(HTTPStatus.ACCEPTED, {'ok': True}, cors_mode='ingest')
+            schedule_location_state_file_write(self.server)
 
     def _handle_config_update(self) -> None:
         payload = self._read_json_body()
@@ -710,11 +799,16 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         return parsed
 
     def _read_json_body(self) -> Any | None:
-        content_length = int(self.headers.get('Content-Length', '0'))
+        try:
+            content_length = int(self.headers.get('Content-Length', '0'))
+        except (TypeError, ValueError):
+            return None
+        if content_length < 0 or content_length > MAX_JSON_BODY_BYTES:
+            return None
         raw_body = self.rfile.read(content_length) if content_length else b''
         try:
             return json.loads(raw_body.decode('utf-8') or '{}')
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             return None
 
     def log_message(self, format: str, *args: Any) -> None:

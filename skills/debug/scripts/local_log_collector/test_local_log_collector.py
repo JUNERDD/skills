@@ -271,7 +271,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         method: str,
         path: str,
         *,
-        payload: dict[str, object] | None = None,
+        payload: object | None = None,
         headers: dict[str, str] | None = None,
     ) -> tuple[int, dict[str, object]]:
         request_headers = {'Content-Type': 'application/json'}
@@ -291,6 +291,56 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         except error.HTTPError as exc:
             body = exc.read()
             return exc.code, json.loads(body.decode('utf-8') or '{}')
+
+    def test_batch_ingest_appends_structured_events(self) -> None:
+        events = [
+            {
+                'runId': 'run-1',
+                'correlationId': 'corr-1',
+                'sequence': 1,
+                'probeId': 'flow.start',
+                'hypothesisIds': ['H1', 'H2'],
+                'location': 'src/app.ts:1',
+                'event': 'start',
+            },
+            {
+                'runId': 'run-1',
+                'correlationId': 'corr-1',
+                'sequence': 2,
+                'probeId': 'flow.end',
+                'hypothesisIds': ['H2'],
+                'location': 'src/app.ts:2',
+                'event': 'finish',
+            },
+        ]
+
+        status, payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'events': events},
+            headers={'X-Debug-Session-Id': 'test-session'},
+        )
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['accepted'], 2)
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        self.assertEqual(state_payload['service']['batchEndpoint'], self.server.batch_endpoint_url)
+        summary = state_payload['summary']
+        self.assertEqual(summary['totalEntries'], 2)
+        self.assertEqual(summary['correlationCounts'], [{'name': 'corr-1', 'count': 2}])
+        self.assertEqual(
+            {item['name']: item['count'] for item in summary['hypothesisCounts']},
+            {'H2': 2, 'H1': 1},
+        )
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
+
+    def test_batch_ingest_rejects_oversized_batches(self) -> None:
+        events = [{'probeId': f'p{i}'} for i in range(collector_server.MAX_BATCH_EVENTS + 1)]
+        status, payload = self._request_json('POST', '/ingest/batch', payload=events)
+        self.assertEqual(status, 413)
+        self.assertEqual(payload['error'], 'too_many_events')
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
     def test_config_update_requires_dashboard_token_and_ignores_unrelated_fields(self) -> None:
         self.config_dir.mkdir(parents=True, exist_ok=True)

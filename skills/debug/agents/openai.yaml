@@ -1,4 +1,4 @@
 interface:
-  display_name: "Runtime Debug"
-  short_description: "Evidence-first debugging with root-cause reports"
-  default_prompt: "Use $debug to instrument this bug, capture runtime evidence, maintain a root-cause report during investigation, prove the fix, then clean up logs and delete the report."
+  display_name: "One-Shot Runtime Debug"
+  short_description: "Maximize root-cause coverage per reproduction"
+  default_prompt: "Use $debug to maximize first-pass root-cause coverage, add correlated structured probes, analyze one clean reproduction, prove the fix, and clean up temporary instrumentation."

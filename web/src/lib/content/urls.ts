@@ -1,5 +1,5 @@
 // Managed by scripts/sync-version.mjs from the repository-level VERSION file.
-export const COLLECTION_VERSION = "0.2.3";
+export const COLLECTION_VERSION = "0.2.5-beta";
 
 export const REPO_URL = "https://github.com/JUNERDD/skills";
 export const INSTALL_DOC_RAW =

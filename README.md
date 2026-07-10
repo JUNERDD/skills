@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.3`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.5-beta`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -34,14 +34,14 @@ If you are deciding what to install, start here:
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
-- [`multitask-coordinator`](#multitask-coordinator) - coordinate scoped subagent work with isolation and ownership boundaries
-- [`delegate-to-cursor-composer`](#delegate-to-cursor-composer) - route bounded work to Cursor Composer with reviewed packets
+- [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with delegation-first parallel subagent scheduling
+- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
-- [`debug`](#debug) - debug runtime issues with an evidence-first logging workflow
-- [`code-review`](#code-review) - write findings-first code review reports
+- [`debug`](#debug) - prove runtime root causes with high-coverage probes and an incremental investigation ledger
+- [`code-review`](#code-review) - run deep orchestrated reviews and persist code-review/v2 reports
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
-- [`receiving-code-review`](#receiving-code-review) - consume a code-review report and verify each item before changing code
+- [`receiving-code-review`](#receiving-code-review) - re-verify code-review/v2 findings, challenge errors, and fix confirmed items
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -85,7 +85,7 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
@@ -240,7 +240,7 @@ Key entry points:
 
 ### `mr`
 
-[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume with detached worktree dependency setup, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
+[`skills/mr/`](./skills/mr/) supports the `mr` Node CLI for generic Git MR/PR workflows. It covers target aliases, MR branch strategies, default detached mode, request providers or custom request commands, configuration, conflict resume with configurable detached worktree placement and dependency setup, install/update/uninstall behavior, automatic update notices, and maintenance of the TypeScript CLI implementation behind the tool.
 
 Install:
 
@@ -255,7 +255,7 @@ Best for:
 - choosing between `merge`, `rebase`, `merge-target`, `pr`, and default detached-mode flows
 - configuring CNB/GitHub/GitLab providers or a custom `mr.requestCommand`
 - understanding non-blocking update notices and the environment variables that disable them
-- handling stopped merge/rebase states by preserving CLI-owned resume paths and hydrating detached conflict worktree dependencies
+- handling stopped merge/rebase states by preserving CLI-owned resume paths, configuring detached conflict worktree placement and IDE worktree detection, and hydrating worktree dependencies
 - maintaining the TypeScript/Pastel/Ink/Zod implementation behind the CLI
 
 Key entry points:
@@ -287,7 +287,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work where an agent may use background subagents or local task decomposition. It keeps the parent agent responsible for framing, decomposition, shared contracts, delegation decisions, worker ownership boundaries, isolation choices, synthesis, verification, and user communication.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with delegation-first subagent scheduling. The parent builds a dependency graph, dispatches the maximum useful set of ready non-overlapping workers, keeps healthy workers running to completion, synthesizes evidence, and verifies the integrated result while retaining ownership of shared contracts and final judgment.
 
 Install:
 
@@ -297,30 +297,31 @@ npx skills@latest add JUNERDD/skills --skill multitask-coordinator
 
 Best for:
 
-- deciding whether complex repo work should stay local, be decomposed, or be delegated
-- assigning disjoint worker scopes in large repositories, monorepos, multi-root workspaces, dirty worktrees, or isolated worktrees and branches
-- keeping shared contracts, package exports, sequencing, and destructive migration boundaries under parent-agent ownership
-- coordinating queued independent requests, async exploration, implementation, review, or verification without duplicating work
-- preserving parent-agent ownership of final integration, validation, and user-facing status
+- maximizing useful parallelism across exploration, implementation, review, and verification
+- building a dependency graph and filling every safe ready worker slot instead of serializing by default
+- assigning disjoint write ownership in large repositories, monorepos, dirty worktrees, or isolated worktrees and branches
+- keeping healthy workers uninterrupted while the parent integrates results and unlocks dependents
+- auditing multi-agent orchestration for hidden serialization, idle capacity, or unnecessary interruption
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/multitask-coordinator/SKILL.md`](./skills/multitask-coordinator/SKILL.md)
+- Scheduler audit: [`skills/multitask-coordinator/references/scheduler-audit.md`](./skills/multitask-coordinator/references/scheduler-audit.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
 
-### `delegate-to-cursor-composer`
+### `delegate-to-cursor-sdk`
 
-[`skills/delegate-to-cursor-composer/`](./skills/delegate-to-cursor-composer/) routes bounded coding work to Cursor Composer through reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
+[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through Cursor SDK with reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
 
 Install:
 
 ```bash
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-composer
+npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 ```
 
 Best for:
 
-- dispatching bounded implementation, proposal, or inspect-only packets to Cursor Composer
+- dispatching bounded implementation, proposal, or inspect-only packets through Cursor SDK
 - using `composer-2.5-fast` consistently for Cursor and Cursor internal subagents unless explicitly overridden
 - allowing Cursor `Task()` / `taskToolCall` subagents only under an explicit packet policy
 - monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
@@ -328,11 +329,11 @@ Best for:
 
 Key entry points:
 
-- Workflow and guardrails: [`skills/delegate-to-cursor-composer/SKILL.md`](./skills/delegate-to-cursor-composer/SKILL.md)
-- Cursor internal subagent policy: [`skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-composer/references/cursor-internal-subagents.md)
-- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-composer/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-composer/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-composer/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-composer/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-composer/references/task-follow-up.md)
-- Cursor dispatch wrapper: [`skills/delegate-to-cursor-composer/scripts/cursor_delegate.py`](./skills/delegate-to-cursor-composer/scripts/cursor_delegate.py)
-- Optional runtime metadata: [`skills/delegate-to-cursor-composer/agents/openai.yaml`](./skills/delegate-to-cursor-composer/agents/openai.yaml)
+- Workflow and guardrails: [`skills/delegate-to-cursor-sdk/SKILL.md`](./skills/delegate-to-cursor-sdk/SKILL.md)
+- Cursor internal subagent policy: [`skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md)
+- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-sdk/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-sdk/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-sdk/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-sdk/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-sdk/references/task-follow-up.md)
+- Cursor dispatch wrapper: [`skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs`](./skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs)
+- Optional runtime metadata: [`skills/delegate-to-cursor-sdk/agents/openai.yaml`](./skills/delegate-to-cursor-sdk/agents/openai.yaml)
 
 ### `plan-mode`
 
@@ -361,7 +362,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky behavior, and unclear runtime failures. It is the most operational skill in the repository and includes both workflow guidance and a local log collector.
+[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It maximizes information gained per reproduction with a broad but deduplicated hypothesis set, high-coverage probes, the bundled local NDJSON collector, log summarization, and an incremental root-cause ledger.
 
 Install:
 
@@ -372,7 +373,11 @@ npx skills@latest add JUNERDD/skills --skill debug
 Key entry points:
 
 - Workflow and guardrails: [`skills/debug/SKILL.md`](./skills/debug/SKILL.md)
+- One-shot debugging: [`skills/debug/references/one-shot-debugging.md`](./skills/debug/references/one-shot-debugging.md)
 - Operator reference: [`skills/debug/references/runtime-debugging.md`](./skills/debug/references/runtime-debugging.md)
+- Root-cause report rules: [`skills/debug/references/root-cause-document.md`](./skills/debug/references/root-cause-document.md)
+- Session helper: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
+- Log summarizer: [`skills/debug/scripts/summarize_debug_log.py`](./skills/debug/scripts/summarize_debug_log.py)
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
 - Optional runtime metadata: [`skills/debug/agents/openai.yaml`](./skills/debug/agents/openai.yaml)
 
@@ -380,13 +385,14 @@ Key entry points:
 
 The `debug` skill is designed to prevent speculative fixes by forcing a prove-it loop:
 
-1. Generate precise hypotheses.
-2. Attach to or start an authoritative logging session.
-3. Add minimal temporary instrumentation.
-4. Reproduce the issue and read the recorded log file.
-5. Mark each hypothesis as `CONFIRMED`, `REJECTED`, or `INCONCLUSIVE`.
-6. Apply a fix only after the root cause is proven.
-7. Verify with fresh post-fix logs before removing instrumentation.
+1. Define the failure contract and build a causal map.
+2. Enumerate and deduplicate hypotheses; in one-shot mode, cover every plausible subsystem without an arbitrary probe cap.
+3. Start or attach a logging session with `scripts/debug_session.py`, then add high-information temporary probes.
+4. Pass the coverage gate, collect one clean reproduction, and summarize the NDJSON log before reading raw volume.
+5. Mark each hypothesis as `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`.
+6. Append the root-cause investigation ledger so rejected paths and their evidence are preserved.
+7. Apply a fix only after the root cause is proven.
+8. Verify with a separate post-fix run before removing instrumentation and stopping the collector.
 
 This keeps the skill focused on evidence, not guesswork.
 
@@ -411,8 +417,10 @@ flowchart LR
 ### `debug` Highlights
 
 - Evidence-first debugging instead of inspection-only reasoning
-- Minimal instrumentation with explicit cleanup after verification
-- Per-hypothesis logging and before/after comparison
+- One-shot / high-coverage probe mode for expensive or flaky reproductions
+- High-information instrumentation with observer-cost controls and explicit cleanup after verification
+- Per-hypothesis logging, log summarization, and before/after comparison
+- Incremental root-cause ledger entries that prevent repeated investigation loops
 - Local collector bootstrap when the host does not already provide logging
 - Browser-first log transport for frontend debugging, with explicit prohibition on app-local proxy routes unless direct delivery is proven blocked
 
@@ -459,7 +467,7 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `code-review`
 
-[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a findings-first reviewer workflow. It writes a scoped Markdown report with severity-ordered findings, test gaps, coverage notes, and a merge recommendation while keeping the agent in review mode and avoiding code changes unless the user explicitly asks for fixes.
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a deep orchestrated review. It begins with a read-only orchestration-assessment subagent that decides whether one reviewer or specialist subagents are justified, then persists a validated `code-review/v2` Markdown report with findings, test gaps, coverage ledger, and a merge recommendation. It does not edit code or Git state unless the user separately requests fixes.
 
 Install:
 
@@ -470,13 +478,16 @@ npx skills@latest add JUNERDD/skills --skill code-review
 Best for:
 
 - reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
-- surfacing bugs, user-visible regressions, security issues, and missing tests before merge
-- producing a reusable review artifact with findings, coverage gaps, and residual risk
+- deciding when parallel specialist subagents add material review value
+- surfacing bugs, regressions, security issues, contract risks, and missing tests before merge
+- producing a reusable `code-review/v2` artifact with coverage evidence and receiving handoff
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/code-review/SKILL.md`](./skills/code-review/SKILL.md)
+- Subagent orchestration: [`skills/code-review/references/subagent-orchestration.md`](./skills/code-review/references/subagent-orchestration.md)
 - Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
+- Report validator: [`skills/code-review/scripts/validate_review_report.py`](./skills/code-review/scripts/validate_review_report.py)
 - Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
 
 ### `thermo-review`
@@ -524,7 +535,7 @@ Key entry points:
 
 ### `receiving-code-review`
 
-[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and builds a disposition ledger for every finding, question, test gap, and open coverage row before deciding whether to fix, challenge, answer, or carry it forward.
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review/v2` report or equivalent PR feedback, launches a re-review assessment subagent, formally challenges incorrect or stale claims, and delegates confirmed fixes to a coding subagent. It persists a validated `receiving-code-review/v2` disposition ledger and preserves the user's Git index unless staging or publishing is explicitly requested.
 
 Install:
 
@@ -534,14 +545,17 @@ npx skills@latest add JUNERDD/skills --skill receiving-code-review
 
 Best for:
 
-- re-checking that a code-review report still matches the current diff and baseline
-- fixing confirmed correctness, security, contract, or test issues without blindly applying comments
-- answering approval-affecting questions with current evidence
-- closing or explicitly carrying forward `Not covered` review areas
+- re-verifying every `F#`, `T#`, and uncovered `A#` against the current scope before changing code
+- formally challenging incorrect, overstated, or stale review claims with evidence
+- fixing confirmed correctness, security, contract, or test issues through a coding subagent
+- preserving staged work while keeping new fixes unstaged unless publication is requested
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/receiving-code-review/SKILL.md`](./skills/receiving-code-review/SKILL.md)
+- Re-review orchestration: [`skills/receiving-code-review/references/re-review-orchestration.md`](./skills/receiving-code-review/references/re-review-orchestration.md)
+- Disposition template: [`skills/receiving-code-review/references/disposition-template.md`](./skills/receiving-code-review/references/disposition-template.md)
+- Disposition validator: [`skills/receiving-code-review/scripts/validate_disposition_report.py`](./skills/receiving-code-review/scripts/validate_disposition_report.py)
 - Optional runtime metadata: [`skills/receiving-code-review/agents/openai.yaml`](./skills/receiving-code-review/agents/openai.yaml)
 
 ### `hack-review`
@@ -663,8 +677,11 @@ When you add more skills later:
     │   ├── SKILL.md
     │   ├── agents/
     │   │   └── openai.yaml
-    │   └── references/
-    │       └── report-template.md
+    │   ├── references/
+    │   │   ├── report-template.md
+    │   │   └── subagent-orchestration.md
+    │   └── scripts/
+    │       └── validate_review_report.py
     ├── thermo-review/
     │   ├── SKILL.md
     │   ├── agents/
@@ -680,8 +697,13 @@ When you add more skills later:
     │   ├── agents/
     │   │   └── openai.yaml
     │   ├── references/
+    │   │   ├── one-shot-debugging.md
+    │   │   ├── root-cause-document.md
     │   │   └── runtime-debugging.md
     │   └── scripts/
+    │       ├── debug_session.py
+    │       ├── summarize_debug_log.py
+    │       ├── test_debug_tools.py
     │       └── local_log_collector/
     │           ├── main.py
     │           ├── collector_server.py
@@ -727,12 +749,19 @@ When you add more skills later:
     │       └── mr-cli-reference.md
     ├── multitask-coordinator/
     │   ├── SKILL.md
-    │   └── agents/
-    │       └── openai.yaml
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       └── scheduler-audit.md
     ├── receiving-code-review/
     │   ├── SKILL.md
-    │   └── agents/
-    │       └── openai.yaml
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   ├── references/
+    │   │   ├── disposition-template.md
+    │   │   └── re-review-orchestration.md
+    │   └── scripts/
+    │       └── validate_disposition_report.py
     ├── receiving-hack-review/
     │   ├── SKILL.md
     │   └── agents/

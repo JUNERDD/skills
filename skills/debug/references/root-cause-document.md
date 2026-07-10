@@ -1,107 +1,226 @@
-# Root-Cause Document
+# Investigation and Root-Cause Document
 
-Use this reference when runtime evidence identifies, changes, or verifies the likely root cause during a debug session.
+Use one evolving Markdown document to preserve the hypothesis plan, evidence, rejected paths, root cause, fix, and verification for a debug session.
 
-## Creation Rules
+## Table of contents
 
-- Follow the same report-file convention used by the project's `hack-review` and `regression-review` skills: unique random id, obvious report directory when one exists, `tmp/reviews` fallback, and no overwrites.
-- Create one Markdown document per debug session once runtime evidence identifies a leading root-cause candidate. Do this no later than the first `CONFIRMED` root cause and before applying the fix.
-- Keep updating the same document for that debug session. Do not create a new document just because a hypothesis is rejected, narrowed, or superseded.
-- Generate a fresh random id for the filename, such as 8 lowercase hex characters from `openssl rand -hex 4`, `uuidgen`, or an equivalent local source.
-- If the repo already has an obvious location for reports or review artifacts, follow that directory convention, but still append the random id immediately before `.md` unless that convention already guarantees a unique per-run filename.
-- Otherwise write to `tmp/reviews/YYYY-MM-DD-root-cause-report-<random-id>.md`.
-- Do not overwrite an existing report. If the chosen path already exists, generate a new id and choose a new path before writing.
-- Report the document path in every handoff after the file exists and until final cleanup deletes it.
-- Use absolute file links with line anchors when the environment supports clickable local links.
-- Do not include secrets, tokens, passwords, API keys, or PII. Redact sensitive runtime values and state what was redacted.
+- Creation timing
+- File placement and retention
+- Update rules
+- Status model
+- Document template
+- Self-check
 
-## Update Rules
+## Creation timing
 
-- Update the document after every log-analysis pass that changes hypothesis status or the leading root cause.
-- When the root cause changes, replace `Current Root Cause` with the new evidence-backed cause and move the previous cause to `Superseded or Rejected Causes` with the evidence that displaced it.
-- When evidence is still incomplete, mark the document status as `Working theory` or `Incomplete` instead of presenting the cause as proven.
-- After applying the fix, update `Fix and Verification` before asking for the verification reproduction.
-- After verification, record whether the before/after evidence proves the fix. If verification fails, mark the document status as `Superseded`, `Still failing`, or `Incomplete`, preserve the failed-fix evidence, and continue the investigation in the same document.
-- Before successful final cleanup deletes this document, record that temporary instrumentation and collector-owned artifacts were removed, then state that the root-cause document is scheduled for deletion. If the user explicitly asks to keep evidence, record that retention instead.
-- After recording the final cleanup status, delete the root-cause Markdown file and verify the path no longer exists unless the user explicitly asked to keep evidence.
+- In one-shot mode, create the document after the causal map and initial hypothesis-probe matrix are ready, before adding probes.
+- In standard mode, create it no later than the first leading evidence-backed root-cause candidate and before applying a fix.
+- Create one document per session. Update the same file even when the leading theory changes.
+- Never overwrite an unrelated existing report.
 
-## Document Shape
+Creating the document before reproduction in one-shot mode keeps a large matrix out of chat context and preserves the plan if the conversation compacts.
 
-Use this shape by default:
+## File placement and retention
 
-```md
-# Root-Cause Analysis
+Prefer this order:
+
+1. Use an established incident, RCA, or engineering-report directory when the user wants durable evidence.
+2. Otherwise create an ephemeral file at `.debug-logs/<SESSION_ID>.root-cause.md`.
+3. Keep the path inside `workspaceRoot` and use a `.md` suffix.
+
+Use a unique session ID or random suffix when needed. Do not infer cleanup from Git status.
+
+Retention policy:
+
+- Keep the document throughout investigation, reruns, failed verification, and intermediate log clears.
+- After success, retain it when the user asked for evidence or the repository has an established durable RCA convention.
+- Otherwise update it with final verification and cleanup status, then delete it with `debug_session.py stop --delete-root-cause-document <PATH>` or delete it separately and verify removal.
+- Never delete a document from an incomplete or failed investigation unless the user explicitly requests deletion.
+
+## Update rules
+
+Before every update, read the current document.
+
+Append an investigation-ledger row for each of these events:
+
+- Initial plan
+- Reproduction analysis
+- Targeted rerun
+- Root-cause change
+- Fix decision
+- Failed verification
+- Successful verification
+- Cleanup or retention decision
+
+Preserve prior hypotheses and evidence. When a theory is displaced, move it to `Superseded or Rejected Causes` with the evidence that displaced it. Do not retry a rejected path without new contradictory evidence.
+
+Separate verified facts from inferences. A root cause requires evidence for:
+
+1. Originating invalid state, decision, ordering, or external result
+2. Propagation through one or more boundaries
+3. The observed symptom
+
+Record enabling conditions and downstream symptoms separately from the root cause.
+
+## Status model
+
+Use these document statuses:
+
+- `Planning`
+- `Instrumented`
+- `Awaiting reproduction`
+- `Analyzing`
+- `Working theory`
+- `Confirmed root cause`
+- `Fix applied; awaiting verification`
+- `Fixed and verified`
+- `Still failing`
+- `Incomplete`
+
+Use these hypothesis statuses:
+
+- `PENDING`
+- `CONFIRMED`
+- `REJECTED`
+- `INCONCLUSIVE`
+- `NOT_REACHED`
+- `SUPERSEDED`
+
+`NOT_REACHED` means enclosing evidence proves the flow terminated or branched before the hypothesized path. A missing probe without enclosing evidence remains `INCONCLUSIVE`.
+
+## Document template
+
+````md
+# Root-Cause Investigation
 
 ## Scope
 
 - Debug date: `YYYY-MM-DD`
-- Issue: `[short user-visible or runtime symptom]`
-- Workspace: `[absolute workspace path]`
-- Debug session: `[session id, log file, dashboard URL if available]`
-- Status: `[Working theory | Confirmed root cause | Fixed and verified | Still failing | Incomplete]`
-- Last updated: `YYYY-MM-DD HH:MM TZ`
-- Assumptions: `[runtime setup, reproduction scope, credentials, or environment details inferred]`
+- Issue: `[precise failure contract]`
+- Workspace: `[absolute path]`
+- Session ID: `[session]`
+- Ready file: `[path]`
+- Evidence file: `[NDJSON path]`
+- Mode: `[one-shot | standard]`
+- Status: `[status]`
+- Last updated: `[timestamp and timezone]`
+- Reproduction cost: `[low | medium | high | single opportunity]`
+- Assumptions and constraints: `[explicit list]`
+
+## Failure Contract
+
+- Expected: `[observable behavior]`
+- Observed: `[observable failure]`
+- Trigger: `[smallest realistic flow]`
+- Scope and frequency: `[details]`
+- Last known good boundary: `[version/config/date or unknown]`
+
+## Causal Map
+
+```text
+[input] -> [boundary] -> [state transition] -> [boundary] -> [symptom]
+```
+
+| Boundary | Input/invariant | Output/invariant | Probe IDs |
+| --- | --- | --- | --- |
+| `[name]` | `[expected]` | `[expected]` | `[ids]` |
+
+## Coverage Summary
+
+- Hypotheses: `[count]`
+- Probes: `[count]`
+- Shared probes: `[count]`
+- Hypotheses mapped: `[percentage]`
+- Causal boundaries covered: `[count/total]`
+- Hot-path controls: `[count and types]`
+- Residual ambiguities: `[list]`
+
+## Hypothesis-Probe Matrix
+
+| ID | Mechanism | Boundary | Confirmed by | Rejected by | Probe IDs | Expected order | Volume control | Priority | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `H-...` | `[specific mechanism]` | `[boundary]` | `[observation]` | `[observation]` | `[probe ids]` | `[sequence]` | `[control]` | `[high/medium/low]` | `PENDING` |
 
 ## Current Root Cause
 
-Root cause: `[one precise sentence naming where the invalid state or failure originates]`
-Confidence: `[high | medium | low]`
-Affected surface: `[feature, route, command, job, API, component, service, etc.]`
+- Root cause: `[one precise sentence or Not proven yet]`
+- Confidence: `[high | medium | low]`
+- Origin: `[first invalid boundary/location]`
+- Enabling conditions: `[conditions that make the bug possible]`
+- Downstream symptoms: `[effects, not causes]`
 
 Causal chain:
-1. `[source condition or invalid input/state]`
-2. `[where the system propagates or transforms it]`
-3. `[where the observed symptom appears]`
+
+1. `[originating condition with probe evidence]`
+2. `[propagation with probe evidence]`
+3. `[reported symptom with probe evidence]`
 
 Key evidence:
-- `[log entry, run id, hypothesis id, source location, or targeted command result]`
+
+- `[run, correlation, sequence, probeId, location, selected values]`
 
 Look here first:
-- `[primary code path](/abs/path/file.ts#L10)`
-- `[secondary code path](/abs/path/file.ts#L42)`
 
-## Hypothesis Ledger
-
-| ID | Hypothesis | Status | Evidence | Disposition |
-| --- | --- | --- | --- | --- |
-| `A` | `[specific hypothesis]` | `[CONFIRMED | REJECTED | INCONCLUSIVE | SUPERSEDED]` | `[log id, command, file link, or trace]` | `[why this changes the investigation]` |
+- `[primary code path](/absolute/path/file.ts#L10)`
+- `[secondary code path](/absolute/path/file.ts#L42)`
 
 ## Evidence Timeline
 
-| Run | Evidence | Interpretation |
-| --- | --- | --- |
-| `[initial | verification | rerun id]` | `[log entry, command result, screenshot, or output]` | `[what this proves or rules out]` |
+| Run | Correlation | Sequence/time | Probe | Evidence | Interpretation |
+| --- | --- | --- | --- | --- | --- |
+| `initial` | `[id]` | `[seq/time]` | `[probeId]` | `[bounded values]` | `[what this proves]` |
+
+## Investigation Ledger
+
+| Attempt | Trigger | Evidence reviewed | Decision | Blind spot closed / next step | Do not repeat unless |
+| --- | --- | --- | --- | --- | --- |
+| `1` | `initial plan` | `[files/map]` | `[matrix created]` | `[coverage]` | `[new evidence condition]` |
 
 ## Fix and Verification
 
-- Fix applied: `[file/function and behavior changed, or Not applied yet]`
+- Fix applied: `[file/function/behavior or Not applied]`
+- Why this fixes the origin: `[causal explanation]`
+- Verification run: `[runId]`
 - Verification status: `[Not run | Passed | Failed | Blocked]`
-- Before evidence: `[pre-fix log or observation]`
-- After evidence: `[post-fix log or observation]`
-- Cleanup status: `[temporary logs removed, collector artifacts deleted, root-cause document scheduled for deletion, or retained by request]`
+- Before evidence: `[probe evidence]`
+- After evidence: `[same probe evidence]`
+- Unchanged invariants: `[proof no adjacent regression]`
 
 ## Superseded or Rejected Causes
 
-- `[previous root-cause theory]` - `[why it was rejected or superseded]` - `[evidence]`
+- `[theory]` — `[status]` — `[evidence that rejected/displaced it]`
 
-## Open Questions and Next Steps
+## Cleanup and Retention
 
-- `[remaining uncertainty, blocked verification, or follow-up]`
+- Temporary probes: `[present | removed and verified]`
+- Location state: `[active count | synced empty]`
+- Collector artifacts: `[present | deleted | retained by request]`
+- Investigation document: `[ephemeral; scheduled for deletion | retained at path by request/convention]`
 
-## Document Self-Check
+## Open Questions
 
-- `[yes | no]` Every `CONFIRMED` root-cause statement cites runtime evidence.
-- `[yes | no]` Every rejected or superseded cause explains what evidence displaced it.
-- `[yes | no]` The current status matches the latest verification result.
-- `[yes | no]` Temporary instrumentation, collector artifacts, and root-cause document retention/deletion are accounted for.
-- `[yes | no]` Secrets, tokens, passwords, API keys, and PII are absent or redacted.
-```
+- `[remaining uncertainty or none]`
 
-## Writing Rules
+## Self-Check
 
-- Start with the current status and root cause, not a chronology dump.
-- Keep the causal chain concrete enough that another engineer can reproduce the reasoning without reading the entire chat.
-- Separate verified runtime facts from inferred consequences.
-- Preserve enough rejected-hypothesis evidence to explain why the investigation changed direction.
-- Prefer concise tables for ledgers and timelines; use short cards or bullets for causal explanation.
-- Treat the document as active-session evidence. Keep it through intermediate log clears and incomplete investigations, but delete it during final successful cleanup unless the user explicitly asks to keep evidence.
+- `[yes/no]` Every material hypothesis has confirming and falsifying evidence definitions.
+- `[yes/no]` Missing probes were interpreted only with enclosing sentinels and suppression metadata.
+- `[yes/no]` The root cause cites origin, propagation, and symptom evidence.
+- `[yes/no]` Rejected or superseded paths retain their exclusion evidence.
+- `[yes/no]` Every analysis/verification pass has an append-only ledger row.
+- `[yes/no]` The fix addresses the origin rather than only the symptom.
+- `[yes/no]` Before/after verification uses the same relevant probe IDs.
+- `[yes/no]` Temporary instrumentation and artifacts are accounted for.
+- `[yes/no]` Secrets and unnecessary PII are absent or redacted.
+````
+
+## Self-check
+
+Before claiming success, verify:
+
+- The current status matches the latest evidence.
+- The earliest invalid state or ordering is identified.
+- At least one evidence chain links origin to symptom.
+- Alternative causes at adjacent boundaries are rejected or explicitly unresolved.
+- The verification run completed the same flow.
+- Cleanup did not delete externally owned artifacts.

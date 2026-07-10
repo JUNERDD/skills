@@ -14,7 +14,7 @@ Use this reference when the route is `hierarchical_orchestration`. A workstream 
 # Workstream Contract
 
 ## Role
-You are a bounded workstream orchestrator subagent. Own this workstream only. You may create a local plan, dispatch Cursor Composer if authorized, allow Cursor internal subagents only within this contract, review output, run bounded follow-up loops, and report evidence. Do not change global scope, cross-workstream interfaces, commit, push, deploy, or claim acceptance.
+You are a bounded workstream orchestrator subagent. Own this workstream only. You may create a local plan, dispatch Cursor SDK if authorized, allow Cursor internal subagents only within this contract, review output, run bounded follow-up loops, and report evidence. Do not change global scope, cross-workstream interfaces, commit, push, deploy, or claim acceptance.
 
 ## Workstream ID
 <stable id>
@@ -43,12 +43,15 @@ You are a bounded workstream orchestrator subagent. Own this workstream only. Yo
 
 ## Allowed Delegations
 - Support subagents: <allowed | not allowed; allowed purposes>
-- Cursor inspect-only mode: <allowed | not allowed>
-- Cursor proposal mode: <allowed | not allowed>
-- Cursor apply mode: <allowed | not allowed>
-- Cursor model: composer-2.5-fast unless the upstream contract quotes an explicit user Cursor-model instruction
+- Cursor SDK inspect-only mode: <allowed | not allowed>
+- Cursor SDK proposal mode: <allowed | not allowed>
+- Cursor SDK apply mode: <allowed | not allowed>
+- Cursor SDK runtime: <local | cloud>
+- Cursor SDK conversation mode: <plan | agent>
+- Cursor model: composer-2.5 fast=true unless the upstream contract quotes an explicit user Cursor-model instruction
 - Cursor internal subagents: <disabled | read-only-analysis | verification | bounded-implementation>
-- Cursor internal subagent model: composer-2.5-fast unless the upstream contract quotes an explicit user Cursor-model instruction
+- Cursor internal subagent model: composer-2.5 fast=true unless the upstream contract quotes an explicit user Cursor-model instruction
+- Authorization: <authorized | workstream must request upstream/user authorization before dispatch>
 - Max Cursor runs: <number>
 - Max follow-up loops: <number>
 
@@ -64,7 +67,7 @@ Create an `## Approved Local Plan` before Cursor apply-mode dispatch. The local 
 ```
 
 ## Escalation Conditions
-Stop and report upstream if implementation requires locked files, conflicting contracts, dependencies, migrations, public API changes, security or privacy decisions, destructive commands, credentials, or scope expansion.
+Stop and report upstream if implementation requires locked files, conflicting contracts, dependencies, migrations, public API changes, security or privacy decisions, destructive commands, credentials, authorization changes, billing changes, deployment, or scope expansion.
 ````
 
 ## Completion Report Template
@@ -78,8 +81,8 @@ Stop and report upstream if implementation requires locked files, conflicting co
 ## Scope Delivered
 - <item>
 
-## Cursor Runs
-- <mode, model, task packet, status path, result>
+## Cursor SDK Runs
+- <runtime, mode, SDK conversation mode, model, task packet, status path, result, authorization state>
 
 ## Internal Subagents
 - <description, model requested, scope, result, files read/touched>

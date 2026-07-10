@@ -1,230 +1,145 @@
 ---
 name: multitask-coordinator
-description: Coordinate non-trivial multi-step work with async/background subagents when delegation is allowed. Use for Cursor-style multitask workflows, queued independent requests, long-running coding tasks, large repositories, monorepos or multi-root workspaces, dirty worktrees, isolated worktree or branch execution, independent exploration or implementation slices, atomic migrations, review passes, and verification work where the parent agent must decide whether to delegate, define worker ownership boundaries, avoid duplicate foreground/background work, synthesize outputs, handle blockers, and still handle trivial requests directly.
+description: Coordinate non-trivial multi-step work with delegation-first subagent scheduling. Use when work can benefit from parallel exploration, implementation, review, verification, queued independent requests, large repositories or monorepos, migrations, dirty worktrees, isolated worktrees or branches; when the user asks to maximize subagent delegation or keep running workers uninterrupted; or when auditing multi-agent orchestration. After triggering, build a dependency graph, dispatch the maximum useful set of ready non-overlapping workers allowed by tools, permissions, isolation, and integration capacity, keep healthy workers running to completion, synthesize evidence, and verify the integrated result. Handle only truly trivial or non-delegable work directly.
 ---
 
 # Multitask Coordinator
 
-Use the parent agent as the coordinator. Keep responsibility for task framing, decomposition, delegation decisions, worker prompts, shared contracts, integration, verification, and user communication with the parent. Use background subagents only when the current system, developer, user, and tool constraints allow delegation.
+Use the parent agent as scheduler, contract owner, integrator, and final verifier. Delegate execution aggressively without delegating final responsibility. If subagents are unavailable or prohibited, apply the same dependency and ownership model locally.
 
-If subagents are unavailable or not allowed, apply the same workflow locally as a task-decomposition checklist.
+## Core Invariants
 
-## Operating Model
+1. **Dispatch first.** Before deep foreground execution, identify ready independent work and dispatch the maximum useful set immediately.
+2. **Maximize useful parallelism.** Do not use an arbitrary zero-or-one-worker default. Set effective concurrency to the minimum of available worker slots, ready independent tasks, safe ownership or isolation capacity, and the parent's ability to review and integrate results. Do not leave a safe useful slot idle merely to minimize worker count. If capacity is not exposed, dispatch ready nodes until the tool reports saturation, then retain the remainder in the ready queue.
+3. **Do not interrupt healthy workers.** Let a healthy worker reach a terminal result. Do not cancel, terminate, restart, reassign, preempt, or send unsolicited follow-up messages.
+4. **Keep one owner per write boundary.** Prevent overlapping edits to shared files, contracts, schemas, lockfiles, generated artifacts, global configuration, or public APIs unless workers use isolated branches or worktrees and the parent owns the merge plan.
+5. **Do not duplicate delegated work.** The parent may inspect interfaces, prepare integration, or verify results, but must not independently redo a healthy worker's assigned task.
+6. **Require evidence.** Treat worker summaries as claims until supported by diffs, changed paths, logs, test output, screenshots, or concrete artifacts.
+7. **Retain final ownership.** The parent owns objective interpretation, shared contracts, sequencing, conflict resolution, integration, validation, and user communication.
 
-Treat multitask as a way to reduce latency or increase coverage, not as a way to outsource ownership.
+## Scheduling Workflow
 
-- Restate the objective, completion criteria, non-goals, validation requirements, and rollback boundary when they affect implementation choices.
-- Keep the parent as owner of shared contracts, package exports, public APIs, cross-worker sequencing, deletion of old entrypoints, and final acceptance.
-- Delegate only bounded leaf work that can finish independently and return evidence.
-- Keep workers focused on exploration, isolated implementation, review, or verification. Do not use workers to decide product tradeoffs, compatibility policy, rollout strategy, or irreversible architecture boundaries unless the user explicitly asked for proposals.
-- Treat the task as incomplete until the parent has integrated outputs and run or explicitly skipped the agreed validation.
+1. **Frame the task.** Define the objective, acceptance criteria, non-goals, constraints, validation, and rollback boundary when relevant.
+2. **Read local rules.** Inspect applicable repository instructions, package scripts, protected paths, test guidance, and `git status --short`. Treat unrelated existing changes as user-owned.
+3. **Build a task graph.** Represent work as nodes with dependencies, read and write scope, expected evidence, and completion criteria. Keep product tradeoffs, compatibility and rollout policy, irreversible architecture choices, and final acceptance parent-owned; mark shared contracts parent-owned unless one worker is explicitly the sole owner. Workers may produce proposals when requested, but the parent decides.
+4. **Classify nodes.** Mark each node as parent-only, delegable read-only, delegable write, review, or verification. A node is ready only when its dependencies and required contracts are stable.
+5. **Dispatch ready nodes.** Fill every useful safe worker slot. Start critical-path, long-running, uncertainty-reducing, and dependency-unblocking nodes first; then backfill with other ready nodes.
+6. **Continue event-driven scheduling.** When any worker completes or a dependency becomes ready, dispatch the next useful node immediately. Do not wait for an entire wave unless a real consistency barrier requires it. Rebalance queued or unassigned work only; never load-balance by preempting a healthy running worker.
+7. **Work the coordinator path.** While workers run, refine shared contracts, prepare integration and validation, inspect non-overlapping interfaces, and resolve coordinator-only decisions.
+8. **Integrate incrementally.** Review completed evidence and artifacts as they arrive. Unlock dependent work without waiting for unrelated workers.
+9. **Verify the whole result.** Run the narrowest credible repository-specific checks, then broader checks when risk warrants them. State any skipped validation and residual risk.
 
-For atomic or destructive migrations, prefer workers for audits, isolated implementation slices, or review passes. Do not let workers independently remove old paths before the parent has mapped every in-scope call site and assigned one owner for the replacement contract.
+## Delegation Rules
 
-## Dispatch Decision
+Delegate every bounded leaf whose expected latency, coverage, or risk-reduction benefit exceeds its dispatch, context, synthesis, and merge cost.
 
-Handle work directly when:
+Handle a node directly only when one of these conditions applies:
 
-- The task is one command, one known file read, one small edit, or one direct answer.
-- The next step depends on immediate user interaction, approval, credentials, or a continuous single-context exchange.
-- The task touches a sensitive or externally visible surface where the parent must stay in the loop.
-- The next critical-path step is defining or changing a shared contract that other work depends on.
-- Delegation tools are unavailable and local decomposition is sufficient.
+- It is a truly small single operation and dispatch overhead would exceed the work.
+- It requires immediate user interaction, credentials, approval, or a continuous single-context exchange.
+- Delegation is unavailable or prohibited by higher-priority instructions or tools.
+- It changes a shared contract, public API, destructive boundary, or sensitive external surface that the parent must control.
+- No safe independent ownership boundary exists.
 
-Delegate only when all are true:
+Even when the parent keeps a central contract or destructive step, delegate adjacent audits, call-site discovery, isolated consumer updates, review, or verification when useful.
 
-- Delegation is allowed and the task is non-trivial.
-- The worker can receive a clear objective, scope, constraints, ownership boundary, expected output, and validation expectation.
-- The parent has useful non-overlapping work to do while the worker runs, or the worker result can arrive later without blocking the immediate critical path.
-- The result can be reviewed or verified from evidence, changed files, commands, logs, or concrete artifacts.
+When decomposition is uncertain, dispatch one explorer per distinct uncertainty domain up to effective concurrency, then fan out implementation as soon as the map stabilizes. Do not use multiple generic explorers that repeat the same investigation.
 
-Prefer zero or one worker unless parallelism clearly reduces risk or latency. Use two to four workers for large independent boundaries. Avoid five or more workers unless there is a written plan, disjoint ownership, and a clear synthesis path.
-
-When the user has queued or bundled several independent requests, convert the queue into parallel work packets only after identifying dependencies. Preserve order for dependent tasks and parallelize only independent ones.
-
-Before any dispatch, explicitly choose the parent's immediate local task. Do not delegate the work that blocks the parent's next step.
+Use redundant workers only for intentionally independent hypotheses, high-risk review, or verification. Do not assign duplicate implementation merely to occupy worker slots.
 
 ## Worker Shapes
 
-Use an explorer for read-only questions about code, requirements, contracts, failure modes, or likely implementation boundaries.
+- **Explorer:** Read-only mapping of requirements, code paths, dependencies, failure modes, or ownership boundaries.
+- **Contract owner:** Sole owner of a shared type, schema, API, migration boundary, or cross-worker interface.
+- **Implementation worker:** Exclusive ownership of one coherent package, feature, layer, adapter, or isolated branch or worktree.
+- **Reviewer:** Read-only independent scrutiny for correctness, regressions, security, accessibility, consistency, or test gaps.
+- **Verifier:** Runs or designs targeted validation and returns reproducible evidence.
 
-Use one coherent worker when:
+Prefer one coherent worker over microtasks when a continuous context or single design owner is necessary. Split work when boundaries are independent and synthesis cost is lower than the latency or coverage gain.
 
-- The task needs one continuous context, one consistent design, or one shared file ownership boundary.
-- The conclusions are tightly coupled and splitting would cause duplicate research, conflicting changes, or semantic drift.
-- One owner should deliver a complete plan, patch, or verification report.
+## Healthy Worker Continuity
 
-Use multiple sibling workers when:
+Treat a worker as healthy when it has not reported an error or blocker, has not exceeded a harness-defined or pre-dispatch task-specific stall or timeout policy, has no confirmed scope or ownership violation, and is not creating a safety or destructive-action risk. Normal queueing or a long-running bounded task is not an exception by itself. Do not invent a retrospective timeout merely because execution is slower than expected.
 
-- The subtasks are independent, have clear boundaries, and can be synthesized afterward.
-- Multiple approaches, hypotheses, review areas, or non-overlapping modules need parallel coverage.
-- Each worker can proceed from its prompt and assigned artifacts without relying on another worker.
+While a worker is healthy:
 
-Use proposal-only workers when multiple implementation directions are useful but the write boundaries would overlap. Use isolated worktrees when competing patches are valuable and available.
+- Do not cancel, stop, restart, reassign, or preempt it.
+- Do not send unsolicited follow-up messages; queue noncritical context until completion.
+- Do not send instructions that change its objective, scope, ownership, or validation contract.
+- Do not duplicate its task in the foreground or give the same task to another implementation worker.
+- Do not discard it merely because another result arrived first; use the result as additional evidence when it completes.
+- Use only non-disruptive status observation when the harness supports it.
 
-Use review-only workers after a large change when independent scrutiny can find regressions without touching files.
+Intervene only when at least one condition is present:
 
-Use implementation workers only after the parent has assigned exclusive write ownership or an isolated execution environment.
+- The worker reports failure, exception, blocker, or a required decision.
+- The worker exceeds a platform-defined or pre-dispatch no-progress or timeout threshold.
+- A confirmed scope, ownership, contract, safety, or destructive-action conflict appears.
+- A user, system, or developer instruction changes and makes continuation invalid.
+- A hard resource limit or tool requirement forces intervention.
 
-## Before Dispatch
-
-1. Read current instructions and workspace rules.
-   - Check applicable repository instructions such as `AGENTS.md`, `CLAUDE.md`, package scripts, test guidance, protected files, and style rules.
-   - Summarize only the rules each worker must follow.
-
-2. Map the work.
-   - Define success criteria, affected systems, likely owner files, shared contracts, and verification commands.
-   - Check the dirty worktree before assigning write scopes. Treat existing changes as user-owned unless proven otherwise.
-   - Decide the parent's immediate next local task before delegating.
-   - Mark shared files and contracts as parent-owned unless one worker is explicitly assigned as the sole owner.
-
-3. Choose the isolation model.
-   - Prefer an isolated worktree, branch, remote machine, or tool-native background workspace when multiple workers will write code, when patches may compete, or when generated artifacts and dependency changes are possible.
-   - Use a shared workspace only for read-only workers, one write worker, or tightly controlled disjoint edits.
-   - If isolation is unavailable, reduce worker count and make ownership boundaries stricter.
-
-4. Dispatch the smallest useful worker set.
-   - Give each worker a disjoint objective and ownership boundary.
-   - Make edit ownership explicit for implementation workers.
-   - Ask for evidence, paths, command results, blockers, and residual risks, not only conclusions.
+Use the least disruptive response: collect status, provide one narrow correction or missing fact, pause dependent work, and cancel only when continuation is unsafe, invalid, or unable to recover. Restart only after identifying the cause and issuing a materially improved prompt.
 
 ## Ownership And Isolation
 
-Do not let sibling workers edit the same file, shared helper, schema, generated artifact, lockfile, environment file, global config, branch strategy, or public contract. When a shared contract must change, assign exactly one owner for the contract and only then assign consumer updates.
+- Assign exactly one writer to each shared file or contract in a shared workspace.
+- Use isolated worktrees, branches, remote workspaces, or tool-native sandboxes for competing patches, overlapping modules, dependency changes, generated artifacts, or broad migrations.
+- If isolation is unavailable, reduce write concurrency rather than weakening ownership boundaries. Keep overlapping workers read-only.
+- Pass relevant dirty-worktree context to every write worker and require preservation of unrelated changes.
+- For multi-root or cross-repository work, scope workers by root, package, app, or service. Keep compatibility, release order, and integrated validation with the parent.
+- Review diffs before adopting or merging worker output.
 
-For dirty worktrees, pass the relevant `git status --short` context to workers and instruct them to preserve unrelated changes. If the dirty state makes ownership ambiguous, keep edits local or ask the user.
+## Worker Prompt Contract
 
-For isolated worktrees or branches:
-
-- Assign one objective per worktree or branch.
-- Name the expected base branch, target branch, and handoff artifact if the tool exposes them.
-- Keep parent-owned contracts out of worker write scopes unless one worker is explicitly the sole owner.
-- Review diffs before moving work into the foreground or integrating patches.
-
-For multi-root workspaces or cross-repo changes:
-
-- Let the parent own cross-root contracts, version compatibility, release order, and final validation.
-- Scope workers by root, package, app, or service boundary.
-- Verify the integrated behavior across every touched root, not only each worker's local boundary.
-
-## Large Repository Patterns
-
-For large applications or monorepos, define worker scopes by ownership boundary, not by arbitrary file count:
-
-- Package or app boundary, such as `web`, `web-extension`, or one package under `packages/*`.
-- Feature boundary, such as one chat surface, preview system, billing flow, or upload pipeline.
-- Layer boundary, such as schema/contract, runtime/store, UI consumer, server API, or verification.
-- Read-only review boundary, such as regression risk, duplication search, accessibility, or test coverage.
-
-For one-shot migrations, use this default split:
-
-- Parent: shared API/contract, execution order, integration, old-entry deletion, final validation.
-- Explorer: call-site and risk audit.
-- Worker: one package, feature boundary, or adapter boundary with exclusive write ownership.
-- Reviewer: focused regression or consistency pass after integration.
-
-For full-stack feature work, use this default split:
-
-- Parent: product interpretation, shared types/API contract, integration order, final acceptance.
-- Worker A: backend/API or data boundary.
-- Worker B: frontend/UI consumer boundary.
-- Worker C, optional: tests, docs, migration audit, or regression review.
-
-## Worker Lifecycle
-
-Dispatch:
-
-- Send the smallest prompt that contains enough context, rules, scope, and validation.
-- State whether the worker may edit files or must stay read-only.
-- State whether the worker is running in an isolated worktree/branch or the shared workspace.
-
-Monitor:
-
-- Keep the parent on adjacent non-overlapping work: refine requirements, inspect interfaces, prepare validation, or organize synthesis questions.
-- Do not redo a delegated investigation or implementation in the foreground.
-- Wait only when the next critical-path step requires the worker result, the system requires waiting, or the user asks for it.
-
-Follow up:
-
-- Send a narrow follow-up when evidence is missing, scope drift appears, or the worker hits a blocker that does not require a user decision.
-- If a worker uncovers a contract conflict, pause dependent implementation and resolve the contract in the parent before continuing.
-
-Collect:
-
-- Require changed paths, evidence, commands run, command results, blockers, and residual risks.
-- Prefer raw diffs, logs, screenshots, test output, or concrete artifacts over summary-only claims.
-
-Integrate:
-
-- Review changed files and artifacts, not just worker summaries.
-- Merge or adopt worker output only after checking ownership boundaries and contract consistency.
-- Resolve conflicts locally in the parent or assign one focused follow-up worker.
-
-Close:
-
-- Run the narrowest credible verification that matches the risk.
-- State what was delegated, what was adopted, what verification ran, and what risk remains.
-
-## Prompt Template
-
-Use this structure for worker prompts:
+Give each worker the smallest self-contained prompt that preserves correctness:
 
 ```text
 Objective:
 Complete only this bounded result: ...
 
-Context:
-- Relevant user request and task-local facts: ...
-- Repository rules you must follow: ...
-- Current worktree or branch context: ...
+Done when:
+- Observable acceptance criteria: ...
+
+Dependencies and context:
+- Stable inputs or contracts: ...
+- Repository rules that apply: ...
+- Workspace, branch, worktree, and dirty-state context: ...
 
 Scope:
 - You may read: ...
 - You may edit: ...
 - Do not edit: ...
 
-Constraints:
-- Preserve unrelated changes.
-- Do not change shared contracts unless explicitly assigned.
-- Report conflicts instead of resolving out of scope.
+Coordination constraints:
+- You are not alone in this codebase. Do not revert or overwrite edits you did not make. Adjust around existing changes and report conflicts.
+- Do not change shared contracts unless you are their explicit sole owner.
+- Report out-of-scope conflicts instead of resolving them.
 
 Validation:
 - Run: ...
-- If you cannot run validation, explain why and name the residual risk.
+- If validation cannot run, explain why and identify the residual risk.
 
 Output:
-- Changed paths, if any.
-- Evidence and command results.
-- Blockers.
-- Residual risks.
+- Status: COMPLETED, BLOCKED, or FAILED.
+- Summary and changed paths.
+- Evidence and exact command results.
+- Blockers, assumptions, and residual risks.
 ```
 
-For implementation workers, include this exact coordination warning: "You are not alone in this codebase. Do not revert or overwrite edits you did not make. Adjust your work around existing changes and report conflicts."
+## Collection, Synthesis, And Closeout
 
-## Synthesis And Verification
-
-For one worker, check whether the evidence covers the objective and minimally verify critical claims.
+For each completed worker, inspect the returned artifacts and evidence rather than relying on the summary alone. Reject or follow up on unsupported critical claims.
 
 For multiple workers, synthesize by:
 
-- Agreement: conclusions or changes that reinforce each other.
-- Conflict: incompatible facts, edits, or recommendations.
-- Coverage gap: required area nobody checked.
-- Blocker: missing permission, context, dependency, or decision.
-- Residual risk: what remains unverified.
+- **Agreement:** mutually reinforcing findings or compatible changes.
+- **Conflict:** incompatible facts, contracts, or edits that require a named owner.
+- **Coverage gap:** required work no worker completed.
+- **Blocker:** missing permission, input, dependency, or decision.
+- **Residual risk:** behavior that remains unverified.
 
-When results conflict, locate the source of disagreement before editing. Use a narrow local check or focused follow-up worker only when it materially reduces uncertainty.
+Send a focused follow-up only after completion or when an intervention condition exists. Resolve shared-contract conflicts in the parent or through one explicitly assigned owner. Run final integrated validation and report what was delegated, adopted, rejected, verified, and left at risk.
 
-Prefer repository-specific verification commands over generic ones. If verification is impossible or intentionally skipped, state why and name the residual risk.
+## Performance Audit
 
-## Guardrails
-
-- Treat subagents as extra attention, not replacement ownership.
-- Do not delegate trivial requests.
-- Do not assign the same work to both the parent and a worker.
-- Do not split shared contract design across sibling workers.
-- Do not let sibling workers write overlapping paths unless each uses an isolated worktree or branch and the parent plans the merge.
-- Do not create vague worker prompts; vague prompts produce duplication, conflict, and unverifiable output.
-- Do not over-split work. Use one coherent worker when synthesis cost would exceed parallel benefit.
-- Do not accept worker output as fact without review. Verify critical behavior, patches, and test claims.
-- Stop and ask the user when progress requires credentials, production permissions, destructive actions, or product tradeoffs.
+When the user asks to evaluate the scheduler, or when orchestration shows avoidable delay, conflict, retries, or idle capacity, read [references/scheduler-audit.md](references/scheduler-audit.md). Use its metrics, diagnostic tests, and optimization loop to identify hidden serialization, poor granularity, context waste, merge risk, unnecessary interruption, and verification gaps.

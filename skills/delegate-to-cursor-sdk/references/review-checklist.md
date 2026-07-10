@@ -5,9 +5,10 @@ Use this reference whenever downstream output returns from Cursor, a support sub
 ## Routing Review
 
 - The selected mode is the lightest safe route.
-- The routing decision includes risk level, risk gates, workspace strategy, Cursor mode, Cursor model, internal subagent policy, and live monitor choice.
+- The routing decision includes risk level, risk gates, workspace strategy, Cursor SDK runtime, Cursor mode, SDK conversation mode, Cursor model, internal subagent policy, authorization state, and live monitor choice.
 - Any subagent used has a bounded scope and cannot approve quality.
-- Cursor model is `composer-2.5-fast` unless an explicit user Cursor-model instruction is recorded.
+- Cursor model is `composer-2.5 fast=true` unless an explicit user Cursor-model instruction is recorded.
+- Authorization was handled through `CURSOR_API_KEY`, a named env var, or the wrapper's hidden prompt; the key was not copied into chat, task packets, prompts, or logs.
 
 ## Task Packet Review
 
@@ -23,21 +24,22 @@ Use this reference whenever downstream output returns from Cursor, a support sub
 - Verification commands are stated.
 - Cursor internal subagent policy is present and bounded.
 
-## Cursor Output Review
+## Cursor SDK Output Review
 
 - Compare output against the authority section, not Cursor's interpretation.
 - Inspect the diff; do not rely only on summaries.
 - Confirm no unrelated files, generated artifacts, lockfiles, or formatting churn were introduced without authorization.
 - Confirm no secrets, credentials, production data, or external service changes were used.
 - Confirm no commits, pushes, deployments, billing changes, or destructive commands occurred.
-- Confirm status metadata agrees with routing: planning source, mode, model, internal subagent model, and unsafe override reasons.
+- Confirm status metadata agrees with routing: implementation `@cursor/sdk`, runtime, mode, SDK conversation mode, model, sandbox state, authorization state, and unsafe override reasons.
+- For cloud runs, inspect any branch/PR metadata before claiming implementation is ready.
 
 ## Verification Review
 
 - Run or inspect required verification.
 - If verification was not run, require a concrete reason.
 - Treat passing tests as evidence, not complete proof.
-- For failures, classify whether the issue is in scope, out of scope, environmental, or blocking.
+- For failures, classify whether the issue is in scope, out of scope, environmental, authorization-related, or blocking.
 
 ## Workstream Review
 
@@ -54,7 +56,8 @@ Use a bounded follow-up packet only when all are true:
 - allowed files or behaviors are narrow;
 - no new product scope or architecture is introduced;
 - the follow-up packet has `# Cursor Follow-up Task Packet` as its sole authority heading;
-- maximum loop count has not been exceeded.
+- maximum loop count has not been exceeded;
+- Cursor SDK authorization remains available.
 
 ## Verdict Template
 
@@ -62,6 +65,7 @@ Use a bounded follow-up packet only when all are true:
 ## Upstream Review Verdict
 Verdict: <accepted | accepted with notes | needs bounded follow-up | blocked>
 Reason: <one paragraph>
+Authorization: <authorized | blocked pending user authorization | not needed>
 Verification: <commands and results>
 Remaining risks: <none or list>
 User decisions needed: <none or list>

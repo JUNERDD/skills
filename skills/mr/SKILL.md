@@ -1,6 +1,6 @@
 ---
 name: mr
-description: Use and maintain the `mr` Node CLI for generic Git MR/PR branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), automatic update notices (`MR_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the upstream `JUNERDD/mr` implementation behind this CLI.
+description: Use and maintain the `mr` Node CLI for generic Git MR/PR branch workflows. Use when the user asks to create, preview, configure, troubleshoot, install, update, uninstall, or explain MR/PR flows with `mr`, `mrm`, `mrt`, or `mrp`; when handling branches named like `mr/target/current`, strategy flags `--merge`, `--rebase`, `--merge-target`, `--pr`, default detached mode (`--detached`, `--no-detached`, `MR_DETACHED`, `mr.detached`), detached conflict worktree placement (`MR_WORKTREE_DIR`, `mr.worktreeDir`), request providers or commands (`MR_REQUEST_PROVIDER`, `mr.requestProvider`, `MR_REQUEST_COMMAND`, `mr.requestCommand`, CNB/GitHub/GitLab), automatic update notices (`MR_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`), conflict resume, `--rm-mr`, `--dry-run`, diagnostics flags, or the upstream `JUNERDD/mr` implementation behind this CLI.
 ---
 
 # MR Git Merge Request
@@ -56,6 +56,8 @@ mr --config --strategy rebase
 mr --config --request-provider github
 mr --config --request-provider none
 mr --config --request-command 'gh pr create --fill --head "$MR_SOURCE_BRANCH" --base "$MR_TARGET_BRANCH"'
+git config mr.worktreeDir .mr-worktrees
+git config --global mr.worktreeDir .mr-worktrees
 mr --config --global --strategy pr
 mr --config --detached
 mr --config --no-detached
@@ -67,11 +69,12 @@ mr --uninstall
 mr --version
 ```
 
-Update-notice controls:
+Environment controls:
 
 ```sh
 MR_NO_UPDATE_CHECK=1 mr test
 NO_UPDATE_NOTIFIER=1 mr test
+MR_WORKTREE_DIR=.mr-worktrees mr test
 ```
 
 ## Operating Workflow
@@ -109,6 +112,8 @@ Strategy precedence is: command flag, `MR_STRATEGY`, local `git config mr.strate
 
 Detached mode is orthogonal to strategy. Precedence is: `--detached` / `--no-detached`, `MR_DETACHED`, local `git config mr.detached`, global `git config --global mr.detached`, built-in `true`.
 
+Detached conflict worktree root precedence is: `MR_WORKTREE_DIR`, local `git config mr.worktreeDir`, global `git config --global mr.worktreeDir`, built-in system temporary directory. Relative paths resolve from the repository root. To make conflict worktrees easier for VS Code/Cursor Source Control to find, prefer `git config mr.worktreeDir .mr-worktrees`; also check that VS Code `git.detectWorktrees` is enabled for externally-created worktrees. Current `mr` writes the nested directory to local `.git/info/exclude` so the main repository does not show `.mr-worktrees/` as untracked.
+
 Request command/provider precedence is: `MR_REQUEST_COMMAND`, local `mr.requestCommand`, global `mr.requestCommand`, `MR_REQUEST_PROVIDER`, local `mr.requestProvider`, global `mr.requestProvider`, built-in `auto`. Custom request commands run through `sh -c` with `MR_SOURCE_BRANCH`, `MR_HEAD_BRANCH`, `MR_TARGET_BRANCH`, and `MR_BASE_BRANCH`.
 
 Provider values are `auto`, `none`, `cnb`, `github`, and `gitlab`. `auto` detects CNB/GitHub/GitLab from `origin` only when the matching CLI is available (`git cnb`, `gh`, or `glab`). `none` disables request creation and leaves only pushed branches plus manual instructions.
@@ -134,6 +139,7 @@ When `mr` stops for a merge or rebase conflict:
 
 - Preserve the branch or worktree state where the CLI stopped.
 - Run only read-only inspection unless the user explicitly asks you to resolve conflicts: `git status --short --branch`, `git branch --show-current`, `git rev-parse -q --verify MERGE_HEAD`, `git rev-parse -q --verify REBASE_HEAD`, and `git worktree list --porcelain`.
+- If the user expects the conflict worktree to appear in the IDE Source Control panel and it does not, check `mr --config --show`, `git config --get mr.worktreeDir`, `git worktree list --porcelain`, and VS Code `git.detectWorktrees`. For future runs, suggest `git config mr.worktreeDir .mr-worktrees` from the main repo plus enabling `git.detectWorktrees` so externally-created worktrees are scanned.
 - For detached conflict worktrees, make the reported worktree usable before asking the user to resolve or before resolving there yourself: install project dependencies inside that worktree using the repo's locked package-manager command (`npm ci`, `corepack pnpm install --frozen-lockfile`, `corepack yarn install --immutable` or Yarn classic `yarn install --frozen-lockfile`, `bun install --frozen-lockfile`). Do not install in the main repo as a substitute, do not modify lockfiles, and stop if private registry credentials or system dependencies are missing.
 - Tell the user to resolve conflicts, run `git add <files>`, and then either ask you to continue or rerun the command shown by the CLI.
 - Do not run `git add`, `git commit`, `git rebase --continue`, `git merge --continue`, aborts, resets, branch switches, pushes, or request commands unless the user explicitly asks for that exact operation.
@@ -146,7 +152,7 @@ After the user says conflict resolution is staged and asks you to continue, insp
 - Inline default merge or rebase resume: `mr <target> --no-detached` or the matching alias plus `--no-detached`, unless `mr.detached=false` was the original source of inline mode.
 - Inline merge-target resume: `mr <target> --no-detached --merge-target` or the matching alias plus both flags.
 
-Detached conflicts happen in a temporary worktree under `$TMPDIR/mr-worktrees/`. The main repo stays on the business branch. The user should install dependencies in the reported worktree when needed, resolve conflicts inside that worktree, run `git add <files>` there, then rerun the matching detached command from the main repo. The CLI resumes, pushes, handles the request, and removes the worktree.
+Detached conflicts happen in the reported detached worktree: by default under `$TMPDIR/mr-worktrees/`, or under the configured `MR_WORKTREE_DIR` / `mr.worktreeDir` root. The main repo stays on the business branch. The user should install dependencies in the reported worktree when needed, resolve conflicts inside that worktree, run `git add <files>` there, then rerun the matching detached command from the main repo. The CLI resumes, pushes, handles the request, and removes the worktree.
 
 ## Maintaining The Project
 

@@ -1,4 +1,4 @@
 interface:
-  display_name: "Code Review"
-  short_description: "Findings-first review report"
-  default_prompt: "Use $code-review to perform a scoped code review and write a Markdown report with severity-ordered findings, test gaps, coverage notes, and a merge recommendation."
+  display_name: "Deep Code Review"
+  short_description: "Orchestrated, evidence-first code review"
+  default_prompt: "Use $code-review to assess the change scope with a subagent, run the justified deep-review plan, and persist a validated code-review/v2 report without changing code or Git state."
