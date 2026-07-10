@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a receiving-code-review/v2 resolution report and its source linkage."""
+"""Validate the canonical receiving-code-review resolution report and source linkage."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ REQUIRED_HEADINGS = [
     "Implementation Plan and Delegation",
     "Code Changes",
     "Verification",
-    "Review Refresh",
+    "Post-Implementation Review",
     "Residual Risks",
     "Final State",
     "Resolution Self-Check",
@@ -146,8 +146,8 @@ def main() -> int:
     if len(positions) == len(REQUIRED_HEADINGS) and positions != sorted(positions):
         errors.append("required headings are not in the contract order")
 
-    if field(text, "Schema") != "receiving-code-review/v2":
-        errors.append("Schema must be receiving-code-review/v2")
+    if field(text, "Report type") != "receiving-code-review":
+        errors.append("Report type must be receiving-code-review")
 
     resolution_id = field(text, "Resolution ID")
     if not resolution_id or not re.fullmatch(r"rr-\d{8}-[a-z0-9]{6,32}", resolution_id):
@@ -206,8 +206,8 @@ def main() -> int:
             errors.append(f"source report not found: {args.source_report}")
         else:
             source_text = args.source_report.read_text(encoding="utf-8")
-            if field(source_text, "Schema") != "code-review/v2":
-                errors.append("--source-report must have Schema code-review/v2")
+            if field(source_text, "Report type") != "code-review":
+                errors.append("--source-report must have Report type code-review")
             source_report_id = field(source_text, "Report ID")
             linked_source_id = field(text, "Source report ID")
             if source_report_id and linked_source_id != source_report_id:
@@ -319,7 +319,7 @@ def main() -> int:
         if coding_subagent != "Not required":
             errors.append("Coding subagent must be Not required when there are no actionable items")
 
-    verification_rows = markdown_rows(section(text, "Verification", "Review Refresh"))
+    verification_rows = markdown_rows(section(text, "Verification", "Post-Implementation Review"))
     verified_ids = {
         row[0]
         for row in verification_rows
@@ -346,9 +346,9 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    source_count = len(source_expected) if args.source_report else "unstructured"
+    source_count = len(source_expected) if args.source_report else "normalized-input"
     print(
-        "Valid receiving-code-review/v2 resolution report: "
+        "Valid receiving-code-review resolution report: "
         f"{len(ledger)} dispositions, {len(challenge_cards)} challenges, "
         f"{len(actionable)} actionable items, source_items={source_count}."
     )

@@ -707,26 +707,26 @@ export const SKILLS: SkillDetail[] = [
     slug: "code-review",
     title: "code-review",
     category: "Code review",
-    blurb: "Run deep orchestrated reviews and persist code-review/v2 reports.",
+    blurb: "Run deep orchestrated reviews and persist canonical code-review reports.",
     lead:
-      "A deep review workflow that starts with a read-only orchestration assessment, launches specialist subagents when justified, and writes a validated code-review/v2 report without editing code unless asked.",
+      "A deep review workflow that starts with a read-only orchestration assessment, launches specialist subagents when justified, and writes a validated code-review report without editing code unless asked.",
     overview:
-      "Use this skill when a user asks for `/code-review`, a PR review, diff review, branch review, staged-change review, or safety check before merge. It begins with one read-only orchestration-assessment subagent that decides whether a single reviewer or parallel specialists are justified by scope and risk, then prioritizes correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. The coordinator synthesizes findings into a validated `code-review/v2` Markdown report with coverage ledger and receiving handoff, and does not edit code or Git state unless the user separately requests fixes.",
+      "Use this skill when a user asks for `/code-review`, a PR review, diff review, branch review, staged-change review, or safety check before merge. It begins with one read-only orchestration-assessment subagent that decides whether a single reviewer or parallel specialists are justified by scope and risk, then prioritizes correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. The coordinator synthesizes findings into a validated canonical `code-review` Markdown report with coverage ledger and receiving handoff, and does not edit code or Git state unless the user separately requests fixes.",
     bestFor: [
       "Reviewing PRs, branch diffs, staged changes, working trees, focused files, or pasted code.",
       "Deciding when parallel specialist subagents add material review value.",
       "Surfacing correctness bugs, release-blocking regressions, security issues, contract risks, and missing tests.",
-      "Producing a reusable `code-review/v2` artifact with coverage evidence and receiving handoff.",
+      "Producing a reusable `code-review` artifact with coverage evidence and receiving handoff.",
     ],
     workflow: [
       "Resolve scope, baseline, target, and a minimal diff inventory without forming findings first.",
       "Launch the read-only orchestration-assessment subagent and follow its single-reviewer or specialist plan.",
       "Trace changed control, data, security, persistence, integration, and test paths beyond the diff when risk can propagate.",
       "Independently verify, de-duplicate, and classify every specialist candidate before assigning final IDs.",
-      "Write a `code-review/v2` Markdown report from the template, then validate it with `scripts/validate_review_report.py`.",
+      "Write a canonical `code-review` Markdown report from the template, then validate it with `scripts/validate_review_report.py`.",
     ],
     outputs: [
-      "A validated `code-review/v2` Markdown report.",
+      "A validated canonical `code-review` Markdown report.",
       "A short terminal summary with recommendation, completion, severity counts, and orchestration mode.",
       "A complete findings index, test gaps, review coverage ledger, and receiving handoff.",
     ],
@@ -751,7 +751,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Report template",
         path: "skills/code-review/references/report-template.md",
-        description: "Canonical code-review/v2 sections and coverage ledger shape.",
+        description: "Canonical code-review report sections and coverage ledger shape.",
       },
       {
         label: "Report validator",
@@ -867,11 +867,11 @@ export const SKILLS: SkillDetail[] = [
     slug: "receiving-code-review",
     title: "receiving-code-review",
     category: "Code review follow-up",
-    blurb: "Re-verify code-review/v2 findings, challenge errors, and fix confirmed items.",
+    blurb: "Re-verify code-review findings, challenge errors, and fix confirmed items.",
     lead:
-      "A response workflow that re-reviews every code-review/v2 claim, formally challenges incorrect or stale findings, and delegates confirmed fixes to a coding subagent while preserving the Git index.",
+      "A response workflow that re-reviews every code-review claim, formally challenges incorrect or stale findings, and delegates confirmed fixes to a coding subagent while preserving the Git index.",
     overview:
-      "Use this skill after a `code-review/v2` report or equivalent PR feedback. It launches a re-review assessment subagent, builds a complete disposition ledger for every finding, test gap, uncovered area, and intake mismatch, formally challenges incorrect or stale claims with evidence, and implements confirmed actions through a coding subagent. The companion `receiving-code-review/v2` resolution report is validated before completion, and staged work stays untouched unless staging or publishing is explicitly requested.",
+      "Use this skill after a `code-review` report or equivalent PR feedback. It launches a re-review assessment subagent, builds a complete disposition ledger for every finding, test gap, uncovered area, and intake mismatch, formally challenges incorrect or stale claims with evidence, and implements confirmed actions through a coding subagent. The companion `receiving-code-review` resolution report is validated before completion, and staged work stays untouched unless staging or publishing is explicitly requested.",
     bestFor: [
       "Re-verifying every `F#`, `T#`, and uncovered `A#` against the current scope before changing code.",
       "Formally challenging incorrect, overstated, or stale review claims with evidence.",
@@ -883,10 +883,10 @@ export const SKILLS: SkillDetail[] = [
       "Capture current Git state and scope identity, then launch the re-review assessment subagent.",
       "Verify each item, create formal challenge cards where needed, and assign final dispositions.",
       "Delegate confirmed fix or test work to a coding subagent with explicit ownership and a no-staging rule.",
-      "Write and validate a `receiving-code-review/v2` resolution report; refresh `code-review` when material risk changes.",
+      "Write and validate a `receiving-code-review` resolution report; run post-implementation `code-review` when material risk changes.",
     ],
     outputs: [
-      "A validated `receiving-code-review/v2` disposition ledger and resolution report.",
+      "A validated `receiving-code-review` disposition ledger and resolution report.",
       "Formal challenge cards for disputed source claims.",
       "Scoped unstaged fixes for confirmed review findings, plus verification evidence.",
     ],
@@ -911,7 +911,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Disposition template",
         path: "skills/receiving-code-review/references/disposition-template.md",
-        description: "Canonical receiving-code-review/v2 resolution report shape.",
+        description: "Canonical receiving-code-review resolution report shape.",
       },
       {
         label: "Disposition validator",

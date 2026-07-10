@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the structural contract of a code-review/v2 Markdown report."""
+"""Validate the canonical structural contract of a code-review Markdown report."""
 
 from __future__ import annotations
 
@@ -105,8 +105,8 @@ def main() -> int:
     if len(heading_positions) == len(REQUIRED_HEADINGS) and heading_positions != sorted(heading_positions):
         errors.append("required headings are not in the contract order")
 
-    if field(text, "Schema") != "code-review/v2":
-        errors.append("Schema must be code-review/v2")
+    if field(text, "Report type") != "code-review":
+        errors.append("Report type must be code-review")
 
     report_id = field(text, "Report ID")
     if not report_id or not re.fullmatch(r"cr-\d{8}-[a-z0-9]{6,32}", report_id):
@@ -271,7 +271,7 @@ def main() -> int:
         return 1
 
     print(
-        "Valid code-review/v2 report: "
+        "Valid code-review report: "
         f"{len(indexed)} findings, {len(tests)} test gaps, {len(areas)} coverage areas, "
         f"recommendation={recommendation}."
     )

@@ -12,26 +12,26 @@
 8. [Implementation Plan and Delegation](#implementation-plan-and-delegation)
 9. [Code Changes](#code-changes)
 10. [Verification](#verification)
-11. [Review Refresh](#review-refresh)
+11. [Post-Implementation Review](#post-implementation-review)
 12. [Residual Risks](#residual-risks)
 13. [Final State](#final-state)
 14. [Resolution Self-Check](#resolution-self-check)
 
 ## Report Contract
 
-- Schema: `receiving-code-review/v2`
+- Report type: `receiving-code-review`
 - Resolution ID: `rr-YYYYMMDD-<random-id>`
 - Generated at: `YYYY-MM-DDTHH:MM:SSZ`
 - Resolution path: `[absolute or repository-relative path]`
 - Source skill: `receiving-code-review`
-- Lifecycle: `[Re-reviewing | Implementation in progress | Verification in progress | Resolved | Partially resolved]`
+- Status: `[Re-reviewing | Implementation in progress | Verification in progress | Resolved | Partially resolved]`
 - Git index mutation by this workflow: `None`
 
-This report is a companion to the immutable source review. It records current evidence, challenges, dispositions, implementation, and verification without rewriting the original claim history.
+This report records current evidence, challenges, dispositions, implementation, and verification while leaving the supplied review artifact unchanged. Link the two artifacts by Report ID when the source is a canonical `code-review` report.
 
 ## Source Review
 
-- Source schema: `[code-review/v2 | legacy/unstructured]`
+- Source type: `[code-review report | PR feedback | review notes]`
 - Source report ID: `[cr-YYYYMMDD-<id> | synthetic-source-<id>]`
 - Source report path: `[path | Not available]`
 - Source recommendation: `[Block | Changes requested | Discuss | Pass with caveat | Pass | Not stated]`
@@ -146,7 +146,7 @@ Verdict effect:
 - Allowed files or surfaces: `[paths/surfaces | Not applicable]`
 - Prohibited scope: `[unrelated refactors, staging, commit, etc.]`
 - Regression/security/contract risk assessment: `[risks and why plan is scoped]`
-- Required verification: `[focused tests, runtime checks, review refresh]`
+- Required verification: `[focused tests, runtime checks, post-implementation review]`
 - Staging rule: `Preserve pre-existing staged state; leave new changes unstaged.`
 
 ### Coding Assignments
@@ -186,14 +186,14 @@ If no code or tests changed, write `None.`
 - Final unstaged changed paths: `[paths | None]`
 - Final untracked paths: `[paths | None]`
 
-## Review Refresh
+## Post-Implementation Review
 
-- Refresh required: `[yes | no - reason]`
-- Refreshed report ID: `[cr-YYYYMMDD-<id> | None]`
-- Refreshed report path: `[path | None]`
-- Refreshed recommendation: `[Block | Changes requested | Discuss | Pass with caveat | Pass | Not applicable]`
-- Refreshed scope fingerprint: `[sha256:<digest> | None]`
-- Remaining review items after refresh: `[IDs | None]`
+- Post-implementation review required: `[yes | no - reason]`
+- Post-review report ID: `[cr-YYYYMMDD-<id> | None]`
+- Post-review report path: `[path | None]`
+- Post-review recommendation: `[Block | Changes requested | Discuss | Pass with caveat | Pass | Not applicable]`
+- Post-review scope fingerprint: `[sha256:<digest> | None]`
+- Remaining review items after post-review: `[IDs | None]`
 
 ## Residual Risks
 
@@ -212,7 +212,7 @@ If none exist, write `None.`
 - Verified item IDs: `[IDs | None]`
 - Carried-forward item IDs: `[IDs | None]`
 - Open item IDs: `[IDs | None]`
-- Final source recommendation effect: `[unchanged | strengthened | weakened | superseded by refreshed report]`
+- Final source recommendation effect: `[unchanged | strengthened | weakened | superseded by post-review report]`
 - Git index mutation by this workflow: `None`
 
 ## Resolution Self-Check
@@ -222,6 +222,6 @@ If none exist, write `None.`
 - `[yes | no]` Every `Fix required` or `Test required` item was assigned to a coding subagent or unavailable fallback is disclosed.
 - `[yes | no]` Every implemented item has coordinator verification.
 - `[yes | no]` Scope drift and source inconsistencies are explicit.
-- `[yes | no]` A material code change has a linked refreshed review, or a reason refresh was unnecessary.
+- `[yes | no]` A material code change has a linked post-implementation review, or a reason that review was unnecessary.
 - `[yes | no]` Pre-existing staged state is unchanged and new changes remain unstaged.
 - `[yes | no]` `python scripts/validate_disposition_report.py <resolution> --source-report <source>` passes.

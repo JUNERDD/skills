@@ -20,16 +20,16 @@
 
 ## Report Contract
 
-- Schema: `code-review/v2`
+- Report type: `code-review`
 - Report ID: `cr-YYYYMMDD-<random-id>`
 - Generated at: `YYYY-MM-DDTHH:MM:SSZ`
 - Report path: `[absolute or repository-relative path]`
 - Source skill: `code-review`
-- Lifecycle: `[Review complete | Review incomplete]`
+- Status: `[Review complete | Review incomplete]`
 - Git mutation during review: `None`
 - Scope fingerprint: `[sha256:<digest> | Unavailable - reason]`
 
-The published source review is immutable. Corrections, challenges, implementation, and verification belong in a companion `receiving-code-review/v2` resolution report that references this report ID.
+Treat this completed report as the fixed review input for downstream work. Do not rewrite it during receiving or implementation; record dispositions, challenges, code changes, and verification in a separate `receiving-code-review` resolution report that references this Report ID.
 
 ## Scope
 

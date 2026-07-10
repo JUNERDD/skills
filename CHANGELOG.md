@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.6] - 2026-07-10
+
+### Changed
+
+- Canonicalized code-review and receiving-code-review report contracts around Report type instead of Schema code-review/v2 and receiving-code-review/v2.
+- Renamed receiving-code-review Review Refresh to Post-Implementation Review and updated validators, templates, and catalog copy to match.
+
 ## [0.2.5-beta] - 2026-07-10
 
 ### Changed

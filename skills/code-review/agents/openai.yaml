@@ -1,4 +1,4 @@
 interface:
   display_name: "Deep Code Review"
   short_description: "Orchestrated, evidence-first code review"
-  default_prompt: "Use $code-review to assess the change scope with a subagent, run the justified deep-review plan, and persist a validated code-review/v2 report without changing code or Git state."
+  default_prompt: "Use $code-review to assess the change scope with a subagent, run the justified deep-review plan, and persist a validated code-review report without changing code or Git state."

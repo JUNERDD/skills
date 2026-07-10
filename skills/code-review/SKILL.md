@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Perform a deep, scoped review of a working tree, staged diff, commit range, branch diff, pull request, focused file set, or pasted code. Use for `/code-review`, PR or diff review, merge-safety assessment, and refreshed review reports. Begin with a read-only orchestration-assessment subagent that decides whether one reviewer or multiple specialist subagents are justified by the change scope and risk. Prioritize correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. Persist a versioned Markdown report and do not edit code or Git state unless the user separately requests fixes.
+description: Perform a deep, scoped review of a working tree, staged diff, commit range, branch diff, pull request, focused file set, or pasted code. Use for `/code-review`, PR or diff review, and merge-safety assessment. Begin with a read-only orchestration-assessment subagent that decides whether one reviewer or multiple specialist subagents are justified by the change scope and risk. Prioritize correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. Persist the canonical Markdown review report and do not edit code or Git state unless the user separately requests fixes.
 ---
 
 # Code Review
@@ -118,11 +118,11 @@ Downgrade an unproven suspected blocker rather than retaining a hand-wavy `Block
 
 ## Persistence and Handoff
 
-- Always write a fresh Markdown report with schema `code-review/v2`.
+- Always write a fresh Markdown report using the canonical `code-review` report contract.
 - Generate a unique report ID and filename. Follow an existing repository report convention; otherwise use `tmp/reviews/YYYY-MM-DD-code-review-report-<random-id>.md`.
 - Never overwrite an existing report.
 - Persist scope identity, scope fingerprint, orchestration decision, specialist assignments, candidate adjudication, findings, test gaps, coverage, evidence, and a `Receiving Handoff` section.
-- Keep the source review immutable after publication. Later implementation or disputes belong in a companion `receiving-code-review/v2` resolution report.
+- Treat the completed review report as a fixed input artifact. Do not rewrite it during receiving or implementation; record later dispositions and code changes in a separate `receiving-code-review` resolution report linked by Report ID.
 - Run the validator and fix every error before claiming the report is complete.
 
 ## Workflow
@@ -137,7 +137,7 @@ Downgrade an unproven suspected blocker rather than retaining a hand-wavy `Block
 8. Independently verify, de-duplicate, challenge, and classify every candidate.
 9. Assign final `F#`, `T#`, and `A#` IDs.
 10. Derive the recommendation from unresolved items and coverage.
-11. Write the versioned report from the template.
+11. Write the canonical report from the template.
 12. Run `scripts/validate_review_report.py` and correct all failures.
 13. Return a short summary with report path, recommendation, completion, severity counts, orchestration mode, and top risks.
 
