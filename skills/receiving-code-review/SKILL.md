@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: Consume a code-review/v2 Markdown report, PR feedback, or equivalent review comments; re-verify every finding, question, test gap, and uncovered area; formally challenge incorrect or stale review claims with arguments and evidence; and implement confirmed actions through a coding subagent. Use after code review when Codex must decide what still applies, produce a complete disposition ledger, fix proven issues, close coverage gaps, verify changes, and persist a receiving-code-review/v2 resolution report. Begin with a re-review assessment subagent that decides whether multiple specialist subagents are warranted by both the change scope and review results. Preserve the user's Git index unless staging or publishing is explicitly requested.
+description: Consume a code-review Markdown report, PR feedback, or equivalent review comments; re-verify every finding, question, test gap, and uncovered area; formally challenge incorrect or stale review claims with arguments and evidence; and implement confirmed actions through a coding subagent. Use after code review when Codex must decide what still applies, produce a complete disposition ledger, fix proven issues, close coverage gaps, verify changes, and persist the canonical receiving-code-review resolution report. Begin with a re-review assessment subagent that decides whether multiple specialist subagents are warranted by both the change scope and review results. Preserve the user's Git index unless staging or publishing is explicitly requested.
 ---
 
 # Receiving Code Review
@@ -14,8 +14,8 @@ The coordinating agent owns intake integrity, final dispositions, implementation
 ## Required Resources
 
 - Read [references/re-review-orchestration.md](references/re-review-orchestration.md) before delegating re-review or coding.
-- Write the companion resolution report from [references/disposition-template.md](references/disposition-template.md).
-- Validate it with `python scripts/validate_disposition_report.py <resolution-report> --source-report <source-report>` when a source `code-review/v2` report exists.
+- Write the resolution report from [references/disposition-template.md](references/disposition-template.md).
+- Validate it with `python scripts/validate_disposition_report.py <resolution-report> --source-report <source-report>` when a canonical `code-review` report is available.
 
 ## Hard Gates
 
@@ -29,7 +29,7 @@ The coordinating agent owns intake integrity, final dispositions, implementation
 
 ## Source Artifact and Scope Integrity
 
-Prefer a `code-review/v2` source report. Treat it as immutable.
+Use the canonical `code-review` report when available. Treat the supplied review artifact as fixed input evidence during receiving.
 
 1. Read the complete report, including contract, scope, orchestration, index, severity cards, test gaps, coverage ledger, candidate adjudication, evidence, handoff, and self-check.
 2. Recompute or inspect the current scope fingerprint, baseline, target, changed paths, and Git state.
@@ -39,8 +39,8 @@ Prefer a `code-review/v2` source report. Treat it as immutable.
    - every `A#` area marked `Not covered`
    - every intake mismatch as a new `I#` integrity item
 4. Verify that the index, cards, test gaps, coverage rows, and handoff agree.
-5. If the source is stale or inconsistent, do not blindly implement it. Re-review the affected surfaces, create `I#` items, and regenerate the source review only when necessary.
-6. For legacy reports without the v2 contract or for unstructured PR comments, normalize each material claim into stable IDs and record the source schema as `legacy/unstructured`.
+5. If the source is stale or inconsistent, do not blindly implement it. Re-review the affected surfaces, create `I#` items, and run `code-review` again only when the current risk surface needs a new review.
+6. For PR feedback or review notes that are not already in the canonical report structure, normalize each material claim into stable IDs and record the actual source type.
 
 ## Re-Review Orchestration
 
@@ -113,13 +113,13 @@ Treat the index as user-owned state.
 - Avoid tools that stage as a side effect.
 - If a coding subagent mutates the index, stop, inspect the before/after state, undo only its known changes without disturbing prior staged work, and disclose the incident.
 
-## Persistence and Review Refresh
+## Persistence and Post-Implementation Review
 
-- Write a fresh companion report with schema `receiving-code-review/v2`; never overwrite the source review.
+- Write a fresh resolution report using the canonical `receiving-code-review` report contract; never overwrite the supplied review artifact.
 - Follow a repository convention or use `tmp/reviews/YYYY-MM-DD-code-review-resolution-<source-report-id>-<random-id>.md`.
 - Persist source identity, scope match, re-review orchestration, complete disposition ledger, challenge cards, coding delegation, patch mapping, verification, residual risk, and final Git state.
 - Run the disposition validator and fix all structural errors.
-- After material behavior, security, contract, migration, or test changes, refresh `code-review` against the correct current scope. Link the refreshed report from the resolution report.
+- After material behavior, security, contract, migration, or test changes, run `code-review` again against the correct current scope when an independent post-implementation review would materially improve confidence. Link that report from the resolution report.
 - Do not claim resolution while any source item lacks a disposition or any implemented item lacks targeted verification.
 
 ## Workflow
@@ -136,8 +136,8 @@ Treat the index as user-owned state.
 10. Present the scoped implementation and verification plan.
 11. Launch the coding subagent when code or tests must change.
 12. Inspect the patch and run focused independent verification.
-13. Refresh `code-review` when changes materially alter the reviewed risk surface.
-14. Write and validate the `receiving-code-review/v2` resolution report.
+13. Run a post-implementation `code-review` when changes materially alter the reviewed risk surface.
+14. Write and validate the canonical `receiving-code-review` resolution report.
 15. Return a short summary with source report, resolution report, re-review mode, challenged items, implemented items, verification, residual risks, and unstaged Git status.
 
 ## Completion Gate
@@ -149,6 +149,6 @@ Do not claim completion until:
 - every challenge has a claim, counterclaim, argument, evidence, limits, and settlement criterion
 - every actionable code/test item was delegated to a coding subagent or the unavailable fallback is disclosed
 - every changed surface has targeted verification
-- any material refreshed review is linked
+- any required post-implementation review is linked
 - the resolution validator passes
 - pre-existing staged work remains unchanged

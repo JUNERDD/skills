@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.5-beta`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.6`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -38,10 +38,10 @@ If you are deciding what to install, start here:
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - prove runtime root causes with high-coverage probes and an incremental investigation ledger
-- [`code-review`](#code-review) - run deep orchestrated reviews and persist code-review/v2 reports
+- [`code-review`](#code-review) - run deep orchestrated reviews and persist canonical code-review reports
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
-- [`receiving-code-review`](#receiving-code-review) - re-verify code-review/v2 findings, challenge errors, and fix confirmed items
+- [`receiving-code-review`](#receiving-code-review) - re-verify code-review findings, challenge errors, and fix confirmed items
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -467,7 +467,7 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `code-review`
 
-[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a deep orchestrated review. It begins with a read-only orchestration-assessment subagent that decides whether one reviewer or specialist subagents are justified, then persists a validated `code-review/v2` Markdown report with findings, test gaps, coverage ledger, and a merge recommendation. It does not edit code or Git state unless the user separately requests fixes.
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a deep orchestrated review. It begins with a read-only orchestration-assessment subagent that decides whether one reviewer or specialist subagents are justified, then persists a validated canonical `code-review` Markdown report with findings, test gaps, coverage ledger, and a merge recommendation. It does not edit code or Git state unless the user separately requests fixes.
 
 Install:
 
@@ -480,7 +480,7 @@ Best for:
 - reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
 - deciding when parallel specialist subagents add material review value
 - surfacing bugs, regressions, security issues, contract risks, and missing tests before merge
-- producing a reusable `code-review/v2` artifact with coverage evidence and receiving handoff
+- producing a reusable `code-review` artifact with coverage evidence and receiving handoff
 
 Key entry points:
 
@@ -535,7 +535,7 @@ Key entry points:
 
 ### `receiving-code-review`
 
-[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review/v2` report or equivalent PR feedback, launches a re-review assessment subagent, formally challenges incorrect or stale claims, and delegates confirmed fixes to a coding subagent. It persists a validated `receiving-code-review/v2` disposition ledger and preserves the user's Git index unless staging or publishing is explicitly requested.
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback, launches a re-review assessment subagent, formally challenges incorrect or stale claims, and delegates confirmed fixes to a coding subagent. It persists a validated `receiving-code-review` disposition ledger and preserves the user's Git index unless staging or publishing is explicitly requested.
 
 Install:
 

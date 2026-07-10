@@ -179,7 +179,7 @@ A specialist conclusion is input evidence, not an authority. The final report mu
 
 ## Fallbacks and Failure Handling
 
-- If subagents are unavailable, use the assessor schema in the coordinator and record the fallback in the report.
+- If subagents are unavailable, use the assessor output contract in the coordinator and record the fallback in the report.
 - If one specialist fails or returns incomplete output, retry once with a narrower assignment when practical. Otherwise mark its surfaces `Not covered`.
 - If specialists conflict on a high-severity claim, run an independent focused verifier when available. If uncertainty remains approval-affecting, classify it as `Question` or lower confidence rather than forcing certainty.
 - If a specialist edits files or Git state, stop using its result, inspect the mutation, restore only changes known to belong to that specialist without disturbing user state, and disclose the incident.

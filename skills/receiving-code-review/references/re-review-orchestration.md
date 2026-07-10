@@ -21,7 +21,7 @@ The re-review assessor is always first. Re-review specialists remain read-only. 
 
 Give the assessor:
 
-- source report ID, schema, scope fingerprint, baseline, target, and completion status
+- source report ID or source identifier, source type, scope fingerprint, baseline, target, and completion status
 - current scope identity and any drift
 - complete `F#`, `T#`, unresolved `A#`, and `I#` inventory
 - severity distribution and source recommendation
@@ -163,7 +163,7 @@ The coordinator must turn a material challenge into a `C#` card only after indep
 
 Use these rules:
 
-1. Quote or accurately restate the source claim; do not attack a weaker version.
+1. Quote or accurately restate the source claim; do not attack a weaker restatement.
 2. Separate factual contradiction from different risk tolerance or product judgment.
 3. Prefer direct current evidence over assumptions and stale report text.
 4. Prefer behavioral, contract, or targeted test evidence over lint or broad green CI.
@@ -229,5 +229,5 @@ The coordinator must inspect the patch, compare it with item boundaries, run the
 - If a verifier fails, retry once with a narrower item set when practical; otherwise mark owned items `Unverifiable` or reassign them.
 - If verifiers conflict, seek stronger evidence or a focused independent verifier. Do not average conclusions.
 - If coding agents would edit shared files, use one agent or a serial plan.
-- If a coding agent finds a new material defect, stop expanding implementation scope automatically. Record it as a provisional `D#-N#` candidate and refresh `code-review` so it receives a canonical `F#`, `T#`, or `A#`; use `I#` only for source/intake integrity problems. Do not implement the new candidate until it is explicitly admitted to the actionable set.
+- If a coding agent finds a new material defect, stop expanding implementation scope automatically. Record it as a provisional `D#-N#` candidate and run `code-review` again so it receives a canonical `F#`, `T#`, or `A#`; use `I#` only for source/intake integrity problems. Do not implement the new candidate until it is explicitly admitted to the actionable set.
 - If any agent mutates the Git index, stop, inspect exactly what changed, restore only known agent mutations without disturbing prior staged work, and record the incident.

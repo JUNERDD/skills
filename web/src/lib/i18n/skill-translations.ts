@@ -417,26 +417,26 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
     },
     "code-review": {
       category: "代码审查",
-      blurb: "执行深度编排审查并持久化 code-review/v2 报告。",
+      blurb: "执行深度编排审查并持久化标准 code-review 报告。",
       lead:
-        "一个深度审查工作流：先做只读编排评估，在有必要时启动 specialist subagents，并写出经验证的 code-review/v2 报告；除非被要求，否则不改代码。",
+        "一个深度审查工作流：先做只读编排评估，在有必要时启动 specialist subagents，并写出经验证的 code-review 报告；除非被要求，否则不改代码。",
       overview:
-        "当用户请求 `/code-review`、PR review、diff review、branch review、staged-change review 或 merge 前安全检查时使用此 skill。它先启动一个只读 orchestration-assessment subagent，根据范围与风险决定单 reviewer 还是并行 specialists，再优先关注正确性、回归、安全、隐私、契约、数据、并发、迁移和测试。协调者把 findings 综合为经验证的 `code-review/v2` Markdown 报告（含 coverage ledger 与 receiving handoff）；除非用户另行要求修复，否则不改代码或 Git 状态。",
+        "当用户请求 `/code-review`、PR review、diff review、branch review、staged-change review 或 merge 前安全检查时使用此 skill。它先启动一个只读 orchestration-assessment subagent，根据范围与风险决定单 reviewer 还是并行 specialists，再优先关注正确性、回归、安全、隐私、契约、数据、并发、迁移和测试。协调者把 findings 综合为经验证的标准 `code-review` Markdown 报告（含 coverage ledger 与 receiving handoff）；除非用户另行要求修复，否则不改代码或 Git 状态。",
       bestFor: [
         "审查 PR、branch diff、staged changes、working tree、聚焦文件或 pasted code。",
         "判断并行 specialist subagents 何时能实质提升审查价值。",
         "在 merge 前发现正确性 bug、release-blocking regression、安全问题、契约风险和缺失测试。",
-        "产出可复用的 `code-review/v2` artifact，包含 coverage 证据和 receiving handoff。",
+        "产出可复用的 `code-review` artifact，包含 coverage 证据和 receiving handoff。",
       ],
       workflow: [
         "在形成 findings 前先解析范围、baseline、target 和最小 diff inventory。",
         "启动只读 orchestration-assessment subagent，并执行其单 reviewer 或 specialist 计划。",
         "当风险可能传播时，沿控制流、数据、安全、持久化、集成和测试路径追踪到 diff 之外。",
         "在分配最终 ID 前，独立验证、去重并分类每个 specialist candidate。",
-        "按模板写出 `code-review/v2` Markdown 报告，并用 `scripts/validate_review_report.py` 校验。",
+        "按模板写出标准 `code-review` Markdown 报告，并用 `scripts/validate_review_report.py` 校验。",
       ],
       outputs: [
-        "一份经验证的 `code-review/v2` Markdown 报告。",
+        "一份经验证的标准 `code-review` Markdown 报告。",
         "一段简短 terminal summary，包含 recommendation、完成状态、严重度计数和编排模式。",
         "完整 findings index、test gaps、review coverage ledger 和 receiving handoff。",
       ],
@@ -450,18 +450,18 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       entryPoints: [
         { description: "编排、深度审查契约、报告写作规则和 guardrails。", label: "工作流" },
         { description: "评估协议与 specialist 分区指导。", label: "Subagent 编排" },
-        { description: "标准 code-review/v2 章节和 coverage ledger 形状。", label: "报告模板" },
+        { description: "标准 code-review 章节和 coverage ledger 形状。", label: "报告模板" },
         { description: "已完成审查报告的结构校验。", label: "报告校验器" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
     "receiving-code-review": {
       category: "代码审查后续",
-      blurb: "重新验证 code-review/v2 findings，挑战错误项，并修复已确认问题。",
+      blurb: "重新验证 code-review findings，挑战错误项，并修复已确认问题。",
       lead:
-        "一个响应工作流：重新审查每个 code-review/v2 主张，用正式挑战反驳错误或过时 findings，并把已确认修复委派给 coding subagent，同时保留 Git index。",
+        "一个响应工作流：重新审查每个 code-review 主张，用正式挑战反驳错误或过时 findings，并把已确认修复委派给 coding subagent，同时保留 Git index。",
       overview:
-        "在收到 `code-review/v2` 报告或等价 PR feedback 后使用此 skill。它启动 re-review assessment subagent，为每个 finding、test gap、未覆盖区域和 intake mismatch 建立完整 disposition ledger，用证据正式挑战错误或过时主张，并通过 coding subagent 实现已确认动作。完成前校验 companion `receiving-code-review/v2` resolution report；除非当前请求明确要求 stage 或发布，否则不触碰已 staged 工作。",
+        "在收到 `code-review` 报告或等价 PR feedback 后使用此 skill。它启动 re-review assessment subagent，为每个 finding、test gap、未覆盖区域和 intake mismatch 建立完整 disposition ledger，用证据正式挑战错误或过时主张，并通过 coding subagent 实现已确认动作。完成前校验 companion `receiving-code-review` resolution report；除非当前请求明确要求 stage 或发布，否则不触碰已 staged 工作。",
       bestFor: [
         "在改代码前，用当前范围重新验证每个 `F#`、`T#` 和未覆盖的 `A#`。",
         "用证据正式挑战错误、夸大或过时的 review 主张。",
@@ -473,10 +473,10 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "捕获当前 Git 状态和范围身份，然后启动 re-review assessment subagent。",
         "验证每个条目，在需要时创建正式 challenge cards，并分配最终 dispositions。",
         "把已确认的修复或测试工作委派给 coding subagent，并给出明确所有权与 no-staging 约束。",
-        "写出并校验 `receiving-code-review/v2` resolution report；当实质风险变化时刷新 `code-review`。",
+        "写出并校验 `receiving-code-review` resolution report；当实质风险变化时再跑 post-implementation `code-review`。",
       ],
       outputs: [
-        "一份经验证的 `receiving-code-review/v2` disposition ledger 与 resolution report。",
+        "一份经验证的 `receiving-code-review` disposition ledger 与 resolution report。",
         "针对有争议 source claims 的正式 challenge cards。",
         "针对已确认 review findings 的有范围 unstaged 修复，以及验证证据。",
       ],
@@ -490,7 +490,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       entryPoints: [
         { description: "重新审查、挑战、coding 委派和 Git index 保留规则。", label: "工作流" },
         { description: "评估协议与 specialist 重新审查指导。", label: "重新审查编排" },
-        { description: "标准 receiving-code-review/v2 resolution report 形状。", label: "Disposition 模板" },
+        { description: "标准 receiving-code-review resolution report 形状。", label: "Disposition 模板" },
         { description: "相对 source report 的 disposition ledger 结构校验。", label: "Disposition 校验器" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
