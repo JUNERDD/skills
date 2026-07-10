@@ -8,10 +8,11 @@ import json
 import os
 from pathlib import Path
 import signal
+import threading
 
 from collector_browser import open_dashboard_in_browser
 from collector_server import CollectorServer
-from collector_state import build_ready_payload, hydrate_log_cache
+from collector_state import build_ready_payload, flush_location_state_file, hydrate_log_cache
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,6 +53,15 @@ def parse_args() -> argparse.Namespace:
         help='Optional path used for collector stdout/stderr redirection metadata.',
     )
     parser.add_argument(
+        '--location-state-flush-ms',
+        type=int,
+        default=250,
+        help=(
+            'Debounce interval for location-state runtime updates. '
+            'Use 0 to rewrite the sidecar after every accepted event.'
+        ),
+    )
+    parser.add_argument(
         '--no-open-dashboard',
         action='store_true',
         help='Do not open the dashboard in a browser on startup.',
@@ -89,7 +99,7 @@ def resolve_location_state_file(
 
 def install_signal_handlers(server: CollectorServer) -> None:
     def _shutdown(_signum: int, _frame: object) -> None:
-        server.shutdown()
+        threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
@@ -127,6 +137,7 @@ def main() -> int:
         ready_file,
         args.session_id,
         service_log_file,
+        args.location_state_flush_ms,
     )
     hydrate_log_cache(server)
     install_signal_handlers(server)
@@ -149,6 +160,7 @@ def main() -> int:
     try:
         server.serve_forever()
     finally:
+        flush_location_state_file(server)
         server.server_close()
 
     return 0

@@ -60,6 +60,8 @@ mr --config --global --strategy pr
 mr --config --request-provider github
 mr --config --request-provider none
 mr --config --request-command 'gh pr create --fill --head "$MR_SOURCE_BRANCH" --base "$MR_TARGET_BRANCH"'
+git config mr.worktreeDir .mr-worktrees
+git config --global mr.worktreeDir .mr-worktrees
 mr --config --detached
 mr --config --no-detached
 mr --config --global --detached
@@ -74,12 +76,13 @@ mr -help
 mr --help
 ```
 
-Update-notice environment controls:
+Environment controls:
 
 ```sh
 MR_NO_UPDATE_CHECK=1 mr test
 NO_UPDATE_NOTIFIER=1 mr test
 MR_UPDATE_CHECK_CACHE=/tmp/mr-update-check.json mr test
+MR_WORKTREE_DIR=.mr-worktrees mr test
 ```
 
 `mr config`, `mr update`, and `mr uninstall` remain valid target-branch invocations. Use the `--config`, `--update`, and `--uninstall` flags for maintenance.
@@ -169,7 +172,7 @@ Inline mode (`--no-detached` or effective `mr.detached=false`):
 ### rebase
 
 1. Fetch `origin/<target>`.
-2. Start `mr/<target>/<current>` from the current branch. Detached mode performs this in a temporary worktree.
+2. Start `mr/<target>/<current>` from the current branch. Detached mode performs this in a detached worktree.
 3. Compute the merge base between `origin/<target>` and the current branch.
 4. Rebase the MR branch onto `origin/<target>`.
 5. Push with `--force-with-lease --set-upstream`.
@@ -180,7 +183,7 @@ Inline mode (`--no-detached` or effective `mr.detached=false`):
 
 1. Fetch `origin/<target>`.
 2. Start from the current branch.
-3. Merge `origin/<target>` into the MR content. Detached happy path uses plumbing; conflicts fall back to a temporary worktree.
+3. Merge `origin/<target>` into the MR content. Detached happy path uses plumbing; conflicts fall back to a detached worktree.
 4. Push `mr/<target>/<current>` with `--force-with-lease --set-upstream`.
 5. Run the configured request command/provider, or print manual request instructions.
 6. In inline mode, switch back to the original current branch.
@@ -201,7 +204,7 @@ Behavior:
 - MR-branch strategies do not require tracked working-tree cleanliness.
 - `pr` behaves like direct current-branch request creation; it has no local branch switching to avoid.
 - Happy-path `merge` and `merge-target` use Git plumbing (`merge-tree`, `commit-tree`, and pushing the resulting object) to update `mr/<target>/<current>` without switching local `HEAD`.
-- `rebase` and conflicted merge/merge-target paths use a temporary Git worktree under `$TMPDIR/mr-worktrees/`.
+- `rebase` and conflicted merge/merge-target paths use a detached Git worktree. The built-in root is `$TMPDIR/mr-worktrees/`; `MR_WORKTREE_DIR`, local `mr.worktreeDir`, or global `mr.worktreeDir` can move it.
 - Re-running the same detached command from the main repo detects an unresolved leftover worktree, resumes the merge or rebase there, pushes the MR branch, handles the request, and removes the worktree.
 
 Detached resume command examples:
@@ -247,6 +250,26 @@ Detached precedence from highest to lowest:
 3. Local Git config: `git config mr.detached true|false`
 4. Global Git config: `git config --global mr.detached true|false`
 5. Built-in `true`
+
+Detached conflict worktree root precedence from highest to lowest:
+
+1. `MR_WORKTREE_DIR=/path/or/relative/path`
+2. Local Git config: `git config mr.worktreeDir .mr-worktrees`
+3. Global Git config: `git config --global mr.worktreeDir .mr-worktrees`
+4. Built-in system temporary directory: `$TMPDIR/mr-worktrees/`
+
+Relative worktree directory values resolve from the repository root. When the configured root is inside the repository, current `mr` writes the directory to local `.git/info/exclude` before creating the worktree, so the main repository does not show `.mr-worktrees/` as untracked.
+
+Use `git config mr.worktreeDir .mr-worktrees` when the user wants detached conflict worktrees to be inside the currently opened repository. For VS Code/Cursor Source Control, also account for VS Code's own repository discovery settings:
+
+```json
+{
+  "git.detectWorktrees": true,
+  "scm.alwaysShowRepositories": true
+}
+```
+
+`git.detectWorktrees` is the important setting for worktrees created outside VS Code. `scm.alwaysShowRepositories` only makes the Repositories view easier to see. If the repository has many worktrees, inspect or raise `git.detectWorktreesLimit`.
 
 Request provider values:
 
@@ -305,7 +328,7 @@ git config --global mr.requestCommand 'git cnb pull create -H "$MR_SOURCE_BRANCH
 
 `mr --config` is interactive when no script-friendly option is supplied. In scripts, use `--show`, `--strategy`, `--request-provider`, `--request-command`, `--detached`, `--no-detached`, `--global`, `--local`, `--unset`, `--unset-request-command`, or `--unset-request-provider`.
 
-`mr --config --show` prints the effective strategy, detached mode, provider, request command, local values, and global values.
+`mr --config --show` prints the effective strategy, detached mode, detached worktree directory, provider, request command, local values, and global values.
 
 `mr --config --unset` clears only `mr.strategy` and `mr.detached` in the selected scope. It does not clear request config. Use `--unset-request-command` or `--unset-request-provider` for request settings.
 
@@ -315,11 +338,15 @@ The CLI has explicit resume paths. Let those paths run after the user finishes m
 
 ### Detached conflicts
 
-Detached mode is default. The main repo remains on the business branch. The CLI reports a worktree path under `$TMPDIR/mr-worktrees/`.
+Detached mode is default. The main repo remains on the business branch. The CLI reports the exact worktree path. By default it is under `$TMPDIR/mr-worktrees/`; with `MR_WORKTREE_DIR` or `mr.worktreeDir`, it can be under a user-configured root such as `.mr-worktrees`.
 
 Handoff to the user:
 
 ```sh
+# Optional, before the next conflicting run, when IDE Source Control should show the worktree:
+git config mr.worktreeDir .mr-worktrees
+# In VS Code/Cursor settings, enable git.detectWorktrees for externally-created worktrees.
+
 cd <reported-worktree>
 # install dependencies here when the project needs them for IDE support, checks, or conflict resolution
 # resolve files
@@ -336,6 +363,8 @@ mr <target> --detached --merge-target
 ```
 
 On resume, the CLI checks unresolved paths, continues merge/rebase inside the worktree, pushes the MR branch, handles the request, removes the worktree, and reports that the main repo stayed on the business branch.
+
+If a user expects the worktree in the IDE Source Control panel but cannot see it, inspect `mr --config --show`, `git config --get mr.worktreeDir`, `git worktree list --porcelain`, and VS Code `git.detectWorktrees`. For future runs, prefer local `git config mr.worktreeDir .mr-worktrees` from the main repo and enable `git.detectWorktrees` so VS Code scans externally-created worktrees.
 
 ## Dependency Setup In Detached Conflict Worktrees
 
@@ -434,7 +463,7 @@ For non-conflict failures in inline mode, the CLI attempts to restore the initia
 
 ## Diagnostics And Output
 
-Use `--dry-run` to print the planned Git/request commands without mutating local branches, remote branches, or merge requests. Detached dry-run says that it will not switch local branches and may use a temporary worktree on conflict. If tracked files are dirty, dry-run still prints the plan and warns when real execution would stop first.
+Use `--dry-run` to print the planned Git/request commands without mutating local branches, remote branches, or merge requests. Detached dry-run says that it will not switch local branches and may use a detached worktree on conflict. If tracked files are dirty, dry-run still prints the plan and warns when real execution would stop first.
 
 Use `--verbose` for executed commands and full output. `DEBUG=mr` is equivalent to verbose. Without verbose, failed command output is compacted and the CLI suggests adding `--verbose`.
 

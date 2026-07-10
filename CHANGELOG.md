@@ -4,6 +4,18 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.5-beta] - 2026-07-10
+
+### Changed
+
+- Deepened code-review into an orchestrated workflow with a read-only assessment subagent, optional specialist reviewers, code-review/v2 reports, and validate_review_report.py.
+- Expanded receiving-code-review with re-review assessment, formal challenges, coding-subagent fixes, receiving-code-review/v2 disposition reports, and validate_disposition_report.py.
+- Reworked debug for one-shot high-coverage probing with debug_session.py and summarize_debug_log.py, incremental root-cause ledgers, and removal of the bundled mcp_server package.
+- Reframed multitask-coordinator around delegation-first scheduling that maximizes useful non-overlapping parallelism, and added scheduler-audit.md.
+- Documented mr configurable detached conflict worktree placement and IDE worktree detection.
+- Added thermo-review and receiving-thermo-review skills to the public catalog.
+- Replaced delegate-to-cursor-composer with delegate-to-cursor-sdk for Cursor SDK delegation packets.
+
 ## [0.2.3] - 2026-06-04
 
 ### Changed
