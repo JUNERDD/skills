@@ -1,4 +1,4 @@
 interface:
-  display_name: "Runtime Debug"
-  short_description: "Evidence-first root-cause debugging workflows"
-  default_prompt: "Use $debug to instrument causal boundaries, prove the root cause from runtime evidence, repair the causal mechanism at the responsible ownership boundary and across every causally necessary layer, verify separately, and clean up temporary probes."
+  display_name: "Coverage-First Debug"
+  short_description: "Coverage-first runtime root-cause debugging"
+  default_prompt: "Use $debug to build and validate a coverage-first probe plan, collect one clean failing run, and prove the root cause from correlated runtime evidence."

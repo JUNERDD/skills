@@ -438,9 +438,61 @@ def _load_locations(path_text: str) -> list[Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise SessionError(f"cannot read locations file {path}: {exc}") from exc
     if isinstance(payload, dict):
-        payload = payload.get("locations")
+        is_coverage_plan = payload.get("schemaVersion") == "debug-plan/v1"
+        if is_coverage_plan or ("probes" in payload and "locations" not in payload):
+            if "probes" not in payload:
+                raise SessionError("debug-plan/v1 object must contain a probes array")
+            probes = payload["probes"]
+            if not isinstance(probes, list):
+                raise SessionError("coverage plan probes must be an array")
+            if not probes:
+                raise SessionError("coverage plan probes must be a non-empty array")
+
+            locations: list[dict[str, Any]] = []
+            for index, probe in enumerate(probes):
+                if not isinstance(probe, dict):
+                    raise SessionError(
+                        f"coverage plan probe at index {index} must be an object"
+                    )
+
+                location = probe.get("location")
+                if not isinstance(location, str) or not location.strip():
+                    raise SessionError(
+                        f"coverage plan probe at index {index} must have a non-empty location"
+                    )
+                hypothesis_ids = probe.get("hypothesisIds")
+                if not isinstance(hypothesis_ids, list) or any(
+                    not isinstance(item, str) or not item.strip()
+                    for item in hypothesis_ids
+                ):
+                    raise SessionError(
+                        f"coverage plan probe at index {index} must have a hypothesisIds string array"
+                    )
+                probe_id = probe.get("probeId")
+                if not isinstance(probe_id, str) or not probe_id.strip():
+                    raise SessionError(
+                        f"coverage plan probe at index {index} must have a non-empty probeId"
+                    )
+
+                locations.append(
+                    {
+                        "location": location,
+                        "hypothesisIds": hypothesis_ids,
+                        "probeId": probe_id,
+                    }
+                )
+            return locations
+        elif "locations" in payload:
+            payload = payload["locations"]
+        else:
+            raise SessionError(
+                "locations file object must contain a locations array or a coverage plan probes array"
+            )
     if not isinstance(payload, list):
-        raise SessionError("locations file must contain an array or an object with a locations array")
+        raise SessionError(
+            "locations file must contain an array, an object with a locations array, "
+            "or a coverage plan with a probes array"
+        )
     return payload
 
 
@@ -676,7 +728,11 @@ def build_parser() -> argparse.ArgumentParser:
         "sync-locations", help="Replace the complete active instrumentation-location set."
     )
     _add_ready_and_timeout(sync)
-    sync.add_argument("--locations-file", required=True, help="JSON array or {locations:[...]} file.")
+    sync.add_argument(
+        "--locations-file",
+        required=True,
+        help="JSON array, {locations:[...]}, or coverage plan {probes:[...]} file.",
+    )
     sync.set_defaults(handler=command_sync_locations)
 
     stop = subparsers.add_parser("stop", help="Stop the collector and clean owned artifacts.")

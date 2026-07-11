@@ -210,6 +210,44 @@ async function testUndefinedSerializationIsRejectedAndSurfaced() {
   transport.stop()
 }
 
+async function testRecordSafeContainsSerializationAndSizeFailures() {
+  const errors = []
+  let networkCalls = 0
+  const transport = createBrowserDebugTransport({
+    batchEndpoint: 'http://127.0.0.1:43125/ingest/batch',
+    sessionId: 'transport-record-safe-test',
+    maxEventBytes: 512,
+    nativeFetch: async () => {
+      networkCalls += 1
+      throw new Error('unexpected_network_call')
+    },
+    onError(status) {
+      errors.push(status)
+    },
+  })
+  const cyclic = {}
+  cyclic.self = cyclic
+
+  assert.equal(await transport.recordSafe({
+    probeId: 'record-safe.serialization',
+    event: 'custom',
+    data: cyclic,
+  }), null)
+  assert.equal(await transport.recordSafe({
+    probeId: 'record-safe.size',
+    event: 'custom',
+    data: { payload: 'x'.repeat(2_000) },
+  }), null)
+
+  const status = await transport.getStatus()
+  assert.equal(status.rejectedEvents, 2)
+  assert.equal(status.queuedEvents, 0)
+  assert.equal(networkCalls, 0)
+  assert.ok(errors.some((item) => item.reason === 'serialization_failed'))
+  assert.ok(errors.some((item) => item.eventBytes > item.maxEventBytes))
+  transport.stop()
+}
+
 async function testFlushSurfacesAnUndrainedPageQueue() {
   const errors = []
   const transport = createBrowserDebugTransport({
@@ -316,6 +354,193 @@ async function testEveryApplicationFetchIsRecordedWithoutCollectorRecursion() {
   transport.stop()
 }
 
+async function testFetchFlowContextIsStableAcrossResolveAndRejectEvents() {
+  const events = []
+  const resolvedContexts = []
+  let legacyRecordCalls = 0
+  const target = {
+    location: { href: 'https://app.example/' },
+    performance: { now: () => Date.now() },
+    fetch: async (input) => {
+      if (String(input).includes('/reject')) throw new Error('business_rejected')
+      return new Response('', { status: 201 })
+    },
+  }
+  const restore = instrumentGlobalFetch({
+    target,
+    transport: {
+      isCollectorUrl: () => false,
+      record() {
+        legacyRecordCalls += 1
+        throw new Error('record_should_not_be_used_when_record_safe_exists')
+      },
+      async recordSafe(event) {
+        events.push(event)
+        return `record-${events.length}`
+      },
+    },
+    resolveFlowContext(context) {
+      resolvedContexts.push(context)
+      return {
+        parentCorrelationId: ' shared-parent ',
+        operationId: 'shared-operation',
+        requestId: `request-${context.ordinal}`,
+        correlationId: 'must-not-replace-child',
+        ignored: 'not-a-flow-field',
+      }
+    },
+  })
+
+  assert.equal((await target.fetch('https://api.example/resolve?secret=1')).status, 201)
+  await assert.rejects(
+    target.fetch('https://api.example/reject?secret=2'),
+    /business_rejected/,
+  )
+
+  assert.equal(legacyRecordCalls, 0)
+  assert.deepEqual(resolvedContexts.map((context) => context.ordinal), [1, 2])
+  assert.equal(events.length, 4)
+  const childCorrelationIds = new Set(events.map((event) => event.correlationId))
+  assert.equal(childCorrelationIds.size, 2)
+  assert.ok(!childCorrelationIds.has('must-not-replace-child'))
+
+  for (const correlationId of childCorrelationIds) {
+    const lifecycle = events.filter((event) => event.correlationId === correlationId)
+    assert.deepEqual(lifecycle.map((event) => event.sequence), [1, 2])
+    assert.equal(lifecycle[0].parentCorrelationId, 'shared-parent')
+    assert.equal(lifecycle[1].parentCorrelationId, lifecycle[0].parentCorrelationId)
+    assert.equal(lifecycle[1].operationId, lifecycle[0].operationId)
+    assert.equal(lifecycle[1].requestId, lifecycle[0].requestId)
+    assert.equal(lifecycle[0].data.operationId, lifecycle[0].operationId)
+    assert.equal(lifecycle[1].data.operationId, lifecycle[0].operationId)
+    assert.equal(lifecycle[0].data.requestId, lifecycle[0].requestId)
+    assert.equal(lifecycle[1].data.requestId, lifecycle[0].requestId)
+    assert.equal(Object.hasOwn(lifecycle[0], 'ignored'), false)
+  }
+  assert.deepEqual(
+    events.filter((event) => event.sequence === 2).map((event) => event.event),
+    ['fetch_resolve', 'fetch_reject'],
+  )
+
+  restore()
+}
+
+async function testFetchFlowContextFailuresFallBackSilently() {
+  const events = []
+  const target = {
+    location: { href: 'https://app.example/' },
+    fetch: async () => new Response('', { status: 200 }),
+  }
+  const restore = instrumentGlobalFetch({
+    target,
+    transport: {
+      isCollectorUrl: () => false,
+      async recordSafe(event) {
+        events.push(event)
+      },
+    },
+    resolveFlowContext({ ordinal }) {
+      if (ordinal === 1) throw new Error('context_lookup_failed')
+      if (ordinal === 2) return 'not-an-object'
+      return {
+        parentCorrelationId: '   ',
+        operationId: 42,
+        requestId: '',
+        extraId: 'ignored',
+      }
+    },
+  })
+
+  await target.fetch('https://api.example/one')
+  await target.fetch('https://api.example/two')
+  await target.fetch('https://api.example/three')
+
+  assert.equal(events.length, 6)
+  for (const event of events) {
+    assert.equal(Object.hasOwn(event, 'parentCorrelationId'), false)
+    assert.equal(Object.hasOwn(event, 'operationId'), false)
+    assert.equal(Object.hasOwn(event, 'requestId'), false)
+    assert.equal(Object.hasOwn(event.data, 'operationId'), false)
+    assert.equal(Object.hasOwn(event.data, 'requestId'), false)
+    assert.equal(Object.hasOwn(event, 'extraId'), false)
+  }
+
+  restore()
+}
+
+async function testFetchRequestMappingCannotThrowIntoTheProductPath() {
+  const events = []
+  let nativeFetchCalls = 0
+  const target = {
+    location: { href: 'https://app.example/' },
+    fetch: async () => {
+      nativeFetchCalls += 1
+      return new Response(null, { status: 204 })
+    },
+  }
+  const unsafeMappedData = {
+    toJSON() {
+      return { safeDuringJsonStringify: true }
+    },
+    get unsafeDuringSpread() {
+      throw new Error('mapped_data_getter_fired')
+    },
+  }
+  const restore = instrumentGlobalFetch({
+    target,
+    transport: {
+      isCollectorUrl: () => false,
+      async recordSafe(event) {
+        events.push(event)
+      },
+    },
+    mapRequest() {
+      return unsafeMappedData
+    },
+    resolveFlowContext() {
+      return {
+        parentCorrelationId: 'parent-safe',
+        operationId: 'operation-safe',
+        requestId: 'request-safe',
+      }
+    },
+  })
+
+  assert.equal((await target.fetch('https://api.example/items')).status, 204)
+  assert.equal(nativeFetchCalls, 1)
+  assert.equal(events.length, 2)
+  for (const event of events) {
+    assert.equal(event.data.operationId, 'operation-safe')
+    assert.equal(event.data.requestId, 'request-safe')
+    assert.equal(Object.hasOwn(event.data, 'unsafeDuringSpread'), false)
+  }
+
+  restore()
+}
+
+async function testLegacyTransportRecordRejectionsAreContained() {
+  let recordCalls = 0
+  const target = {
+    location: { href: 'https://app.example/' },
+    fetch: async () => new Response('', { status: 200 }),
+  }
+  const restore = instrumentGlobalFetch({
+    target,
+    transport: {
+      isCollectorUrl: () => false,
+      record() {
+        recordCalls += 1
+        return Promise.reject(new Error('legacy_record_rejected'))
+      },
+    },
+  })
+
+  assert.equal((await target.fetch('https://api.example/items')).status, 200)
+  await delay(0)
+  assert.equal(recordCalls, 2)
+  restore()
+}
+
 async function testTransportUnwrapsAnExistingFetchInstrumentationWrapper() {
   let wrapperEvents = 0
   let collectorEvents = 0
@@ -356,8 +581,13 @@ await testHungRequestIsAbortedAndRetriedWithoutDroppingEvents()
 await testMemoryQueueFramesAndDeletesOnlyAcknowledgedPrefix()
 await testRecordSerializesEachEventOnce()
 await testUndefinedSerializationIsRejectedAndSurfaced()
+await testRecordSafeContainsSerializationAndSizeFailures()
 await testFlushSurfacesAnUndrainedPageQueue()
 await testStopAbortsTheActiveCollectorRequest()
 await testEveryApplicationFetchIsRecordedWithoutCollectorRecursion()
+await testFetchFlowContextIsStableAcrossResolveAndRejectEvents()
+await testFetchFlowContextFailuresFallBackSilently()
+await testFetchRequestMappingCannotThrowIntoTheProductPath()
+await testLegacyTransportRecordRejectionsAreContained()
 await testTransportUnwrapsAnExistingFetchInstrumentationWrapper()
-console.log('browser debug transport: 9 tests passed')
+console.log('browser debug transport: 14 tests passed')

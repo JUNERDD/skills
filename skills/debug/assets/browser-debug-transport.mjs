@@ -189,6 +189,19 @@ function requestMethod(input, init) {
   return 'GET'
 }
 
+function sanitizeFlowContext(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  const context = {}
+  for (const field of ['parentCorrelationId', 'operationId', 'requestId']) {
+    const candidate = value[field]
+    if (typeof candidate === 'string' && candidate.trim()) {
+      context[field] = candidate.trim()
+    }
+  }
+  return context
+}
+
 export function createBrowserDebugTransport({
   endpoint,
   batchEndpoint,
@@ -443,6 +456,14 @@ export function createBrowserDebugTransport({
     return enrichedEvent.transportId
   }
 
+  async function recordSafe(event) {
+    try {
+      return await record(event)
+    } catch {
+      return null
+    }
+  }
+
   async function flush({ timeoutMs = 30_000 } = {}) {
     const deadline = Date.now() + Math.max(timeoutMs, 0)
     while (true) {
@@ -472,6 +493,7 @@ export function createBrowserDebugTransport({
   return {
     clientId,
     record,
+    recordSafe,
     flush,
     getStatus,
     stop,
@@ -488,8 +510,12 @@ export function instrumentGlobalFetch({
   location = 'runtime:fetch',
   runId = 'initial',
   mapRequest = null,
+  resolveFlowContext = null,
 } = {}) {
-  if (!transport || typeof transport.record !== 'function') {
+  if (!transport || (
+    typeof transport.recordSafe !== 'function'
+    && typeof transport.record !== 'function'
+  )) {
     throw new Error('transport_is_required')
   }
   if (!target || typeof target.fetch !== 'function') {
@@ -501,11 +527,18 @@ export function instrumentGlobalFetch({
   let fetchOrdinal = 0
 
   function recordWithoutThrow(event) {
-    void transport.record(event).catch((error) => {
-      // The transport surfaces queue/network failures through onError. Never
-      // change the business request result because debug evidence could not send.
-      void error
-    })
+    try {
+      const result = typeof transport.recordSafe === 'function'
+        ? transport.recordSafe(event)
+        : transport.record(event)
+      void Promise.resolve(result).catch(() => {
+        // The transport surfaces queue/network failures through onError. Never
+        // change the business request result because debug evidence could not send.
+      })
+    } catch {
+      // Preserve the application path for legacy transports that throw before
+      // returning a promise.
+    }
   }
 
   const instrumentedFetch = function instrumentedFetch(input, init) {
@@ -514,24 +547,42 @@ export function instrumentGlobalFetch({
       return nativeFetch(input, init)
     }
 
-    const correlationId = randomId('fetch')
     const ordinal = ++fetchOrdinal
+    const correlationId = randomId('fetch')
+    let flowContext = {}
+    if (typeof resolveFlowContext === 'function') {
+      try {
+        flowContext = sanitizeFlowContext(resolveFlowContext({
+          input,
+          init,
+          url: resolvedUrl,
+          ordinal,
+        }))
+      } catch {
+        flowContext = {}
+      }
+    }
+    const flowData = {}
+    if (flowContext.operationId) flowData.operationId = flowContext.operationId
+    if (flowContext.requestId) flowData.requestId = flowContext.requestId
     const startedAt = Date.now()
     const startedMonotonic = target.performance?.now?.()
     const baseData = {
       ordinal,
       method: requestMethod(input, init),
       url: scrubUrl(resolvedUrl),
+      ...flowData,
     }
     let mappedData = baseData
-    if (typeof mapRequest === 'function') {
-      try {
-        mappedData = mapRequest({ input, init, url: resolvedUrl, data: baseData }) || baseData
-      } catch {
-        mappedData = baseData
-      }
-    }
     try {
+      if (typeof mapRequest === 'function') {
+        mappedData = mapRequest({ input, init, url: resolvedUrl, data: baseData }) || baseData
+      }
+      if (Object.keys(flowData).length > 0) {
+        mappedData = mappedData && typeof mappedData === 'object' && !Array.isArray(mappedData)
+          ? { ...mappedData, ...flowData }
+          : baseData
+      }
       JSON.stringify(mappedData)
     } catch {
       mappedData = baseData
@@ -540,6 +591,7 @@ export function instrumentGlobalFetch({
     recordWithoutThrow({
       runId,
       correlationId,
+      ...flowContext,
       sequence: 1,
       probeId: 'fetch.lifecycle',
       hypothesisIds,
@@ -559,6 +611,7 @@ export function instrumentGlobalFetch({
       recordWithoutThrow({
         runId,
         correlationId,
+        ...flowContext,
         sequence: 2,
         probeId: 'fetch.lifecycle',
         hypothesisIds,
@@ -581,6 +634,7 @@ export function instrumentGlobalFetch({
         recordWithoutThrow({
           runId,
           correlationId,
+          ...flowContext,
           sequence: 2,
           probeId: 'fetch.lifecycle',
           hypothesisIds,
@@ -603,6 +657,7 @@ export function instrumentGlobalFetch({
         recordWithoutThrow({
           runId,
           correlationId,
+          ...flowContext,
           sequence: 2,
           probeId: 'fetch.lifecycle',
           hypothesisIds,

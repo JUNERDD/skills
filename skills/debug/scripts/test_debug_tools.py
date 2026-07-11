@@ -58,6 +58,86 @@ class DebugToolTests(unittest.TestCase):
         self.assertFalse(headless_args.open_dashboard)
         self.assertFalse(alias_args.open_dashboard)
 
+    def test_load_locations_projects_coverage_plan_for_collector(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plan_file = Path(temp_dir) / "coverage-plan.json"
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "debug-plan/v1",
+                        "locations": [
+                            {
+                                "probeId": "stale.legacy",
+                                "location": "src/stale.ts:1",
+                                "hypothesisIds": ["H-stale"],
+                            }
+                        ],
+                        "probes": [
+                            {
+                                "probeId": "flow.start",
+                                "location": "src/app.ts:1",
+                                "hypothesisIds": ["H1"],
+                                "event": "flow_started",
+                                "role": "flow-start",
+                                "boundaryIds": ["B1"],
+                                "expectedEvents": ["flow_started"],
+                                "volumeControl": {"maxEvents": 1},
+                                "dataFields": ["state"],
+                                "redactions": ["secret"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                debug_session._load_locations(str(plan_file)),
+                [
+                    {
+                        "location": "src/app.ts:1",
+                        "hypothesisIds": ["H1"],
+                        "probeId": "flow.start",
+                    }
+                ],
+            )
+
+    def test_load_locations_keeps_legacy_array_and_locations_object(self) -> None:
+        locations = [
+            {
+                "location": "src/app.ts:1",
+                "hypothesisIds": ["H1"],
+                "probeId": "flow.start",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            locations_file = Path(temp_dir) / "locations.json"
+            for payload in (locations, {"locations": locations}):
+                with self.subTest(payload=payload):
+                    locations_file.write_text(json.dumps(payload), encoding="utf-8")
+                    self.assertEqual(
+                        debug_session._load_locations(str(locations_file)), locations
+                    )
+
+    def test_load_locations_reports_invalid_coverage_plan_probes(self) -> None:
+        cases = (
+            ({"schemaVersion": "debug-plan/v1"}, "must contain.*probes array"),
+            ({"probes": {}}, "coverage plan probes must be an array"),
+            ({"probes": []}, "coverage plan probes must be a non-empty array"),
+            ({"probes": ["src/app.ts:1"]}, "probe at index 0 must be an object"),
+            (
+                {"probes": [{"location": "src/app.ts:1", "hypothesisIds": []}]},
+                "probe at index 0 must have a non-empty probeId",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plan_file = Path(temp_dir) / "coverage-plan.json"
+            for payload, message in cases:
+                with self.subTest(payload=payload):
+                    plan_file.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaisesRegex(debug_session.SessionError, message):
+                        debug_session._load_locations(str(plan_file))
+
     def test_open_dashboard_skips_when_frontend_is_already_recorded(self) -> None:
         ready_path = Path("/tmp/debug-ready.json")
         payload = {
@@ -150,25 +230,47 @@ class DebugToolTests(unittest.TestCase):
                 self.assertEqual(start_payload["locationStateFlushMs"], 25)
                 self.assertTrue(start_payload["batchEndpoint"].endswith("/ingest/batch"))
 
-                locations_file = workspace / "locations.json"
+                locations_file = workspace / "coverage-plan.json"
                 locations_file.write_text(
                     json.dumps(
                         {
-                            "locations": [
+                            "schemaVersion": "debug-plan/v1",
+                            "probes": [
                                 {
                                     "location": "src/app.ts:1",
                                     "hypothesisIds": ["H1", "H2"],
                                     "probeId": "flow.start",
+                                    "event": "start",
+                                    "role": "flow-start",
+                                    "boundaryIds": ["flow"],
+                                    "expectedEvents": ["start"],
+                                    "volumeControl": {"maxEvents": 1},
+                                    "dataFields": ["version"],
+                                    "redactions": [],
                                 },
                                 {
                                     "location": "src/app.ts:2",
                                     "hypothesisIds": ["H2"],
                                     "probeId": "flow.end",
+                                    "event": "invariant_failed",
+                                    "role": "flow-terminal",
+                                    "boundaryIds": ["flow"],
+                                    "expectedEvents": ["invariant_failed"],
+                                    "volumeControl": {"maxEvents": 1},
+                                    "dataFields": ["veryLong"],
+                                    "redactions": [],
                                 },
                                 {
                                     "location": "src/app.ts:3",
                                     "hypothesisIds": ["H3"],
                                     "probeId": "flow.missing",
+                                    "event": "state_observed",
+                                    "role": "observation",
+                                    "boundaryIds": ["flow"],
+                                    "expectedEvents": ["state_observed"],
+                                    "volumeControl": {"maxEvents": 1},
+                                    "dataFields": ["state"],
+                                    "redactions": [],
                                 },
                             ]
                         }
@@ -329,6 +431,186 @@ class DebugToolTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(payload["ok"])
             self.assertIn("inside workspace_root", payload["error"])
+
+    def test_summarizer_scopes_sequences_by_run_and_correlation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / "events.ndjson"
+            events = [
+                {"runId": "initial", "correlationId": "shared", "sequence": 1},
+                {"runId": "initial", "correlationId": "shared", "sequence": 2},
+                {"runId": "verification", "correlationId": "shared", "sequence": 1},
+                {"runId": "verification", "correlationId": "shared", "sequence": 2},
+            ]
+            log_file.write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+
+            _, summary = self._run_json(
+                str(SUMMARIZER), str(log_file), "--format", "json"
+            )
+
+            self.assertEqual(summary["sequence"]["scopesWithSequence"], 2)
+            self.assertEqual(summary["sequence"]["gapCount"], 0)
+            self.assertEqual(summary["sequence"]["regressionOrDuplicateCount"], 0)
+
+    def test_summarizer_expected_probes_prefers_coverage_plan_probes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            log_file = root / "events.ndjson"
+            plan_file = root / "plan.json"
+            log_file.write_text(
+                json.dumps({"runId": "initial", "probeId": "flow.start"}) + "\n",
+                encoding="utf-8",
+            )
+            plan_file.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "debug-plan/v1",
+                        "locations": [{"probeId": "stale.legacy"}],
+                        "probes": [
+                            {"probeId": "flow.start"},
+                            {"probeId": "flow.terminal"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            _, summary = self._run_json(
+                str(SUMMARIZER),
+                str(log_file),
+                "--format",
+                "json",
+                "--expected-probes-file",
+                str(plan_file),
+            )
+
+            self.assertEqual(summary["missingExpectedProbeIds"], ["flow.terminal"])
+
+    def test_summarizer_rejects_invalid_coverage_plan_probes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            log_file = root / "events.ndjson"
+            plan_file = root / "plan.json"
+            log_file.write_text("", encoding="utf-8")
+            cases = (
+                ({"schemaVersion": "debug-plan/v1", "probes": []}, "non-empty probes"),
+                (
+                    {"schemaVersion": "debug-plan/v1", "probes": [{}]},
+                    "must have a non-empty probeId",
+                ),
+                (
+                    {
+                        "schemaVersion": "debug-plan/v1",
+                        "probes": [{"probeId": "p1"}, {"probeId": "p1"}],
+                    },
+                    "is duplicated",
+                ),
+            )
+
+            for plan, message in cases:
+                with self.subTest(plan=plan):
+                    plan_file.write_text(json.dumps(plan), encoding="utf-8")
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SUMMARIZER),
+                            str(log_file),
+                            "--expected-probes-file",
+                            str(plan_file),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(message, result.stderr)
+
+    def test_summarizer_filters_and_counts_extended_correlation_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / "events.ndjson"
+            events = [
+                {
+                    "runId": "r1",
+                    "correlationId": "flow-1",
+                    "parentCorrelationId": "parent-1",
+                    "operationId": "operation-1",
+                    "requestId": "request-1",
+                    "probeId": "p1",
+                    "event": "start",
+                },
+                {
+                    "runId": "r1",
+                    "correlationId": "flow-1",
+                    "parentCorrelationId": "parent-1",
+                    "operationId": "operation-2",
+                    "requestId": "request-2",
+                    "probeId": "p2",
+                    "event": "request",
+                },
+                {
+                    "runId": "r1",
+                    "correlationId": "flow-2",
+                    "parentCorrelationId": "parent-2",
+                    "operationId": "operation-1",
+                    "requestId": "request-3",
+                    "probeId": "p3",
+                    "event": "end",
+                },
+            ]
+            log_file.write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+
+            _, summary = self._run_json(
+                str(SUMMARIZER), str(log_file), "--format", "json"
+            )
+
+            self.assertEqual(
+                summary["counts"]["parentCorrelationIds"],
+                [
+                    {"name": "parent-1", "count": 2},
+                    {"name": "parent-2", "count": 1},
+                ],
+            )
+            self.assertEqual(
+                summary["counts"]["operationIds"],
+                [
+                    {"name": "operation-1", "count": 2},
+                    {"name": "operation-2", "count": 1},
+                ],
+            )
+            self.assertEqual(
+                summary["counts"]["requestIds"],
+                [
+                    {"name": "request-1", "count": 1},
+                    {"name": "request-2", "count": 1},
+                    {"name": "request-3", "count": 1},
+                ],
+            )
+            self.assertEqual(summary["timeline"][0]["parentCorrelationId"], "parent-1")
+            self.assertEqual(summary["timeline"][0]["operationId"], "operation-1")
+            self.assertEqual(summary["timeline"][0]["requestId"], "request-1")
+
+            cases = (
+                ("--parent-correlation-id", "parent-1", "parentCorrelationId", 2),
+                ("--operation-id", "operation-1", "operationId", 2),
+                ("--request-id", "request-2", "requestId", 1),
+            )
+            for option, value, filter_name, expected_count in cases:
+                with self.subTest(option=option):
+                    _, filtered = self._run_json(
+                        str(SUMMARIZER),
+                        str(log_file),
+                        "--format",
+                        "json",
+                        option,
+                        value,
+                    )
+                    self.assertEqual(filtered["filters"][filter_name], value)
+                    self.assertEqual(filtered["stats"]["matchedEvents"], expected_count)
 
     def test_summarizer_counts_invalid_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

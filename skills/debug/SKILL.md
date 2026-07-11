@@ -1,94 +1,61 @@
 ---
 name: debug
-description: Evidence-first runtime debugging for application bugs, regressions, flaky or timing-sensitive failures, expensive reproductions, and high-frequency browser request streams. Use when asked to instrument broadly, record every fetch, capture causal boundaries, or prove a root cause from runtime evidence. Build and deduplicate hypotheses, map them to structured probes, collect correlated NDJSON through the bundled collector and page-local byte-framed browser transport, summarize evidence, prove propagation, repair the evidence-proven root cause, treat minimal change as a scope constraint only after causal sufficiency, verify separately, and remove temporary instrumentation.
+description: Coverage-first runtime debugging that maximizes the chance that one failing reproduction proves an application bug's root cause. Use for bugs, regressions, flaky or timing-sensitive failures, expensive or user-only reproductions, unclear runtime behavior, and requests to instrument broadly, capture causal boundaries, collect sufficient logs in one pass, or prove a root cause from runtime evidence. Build a code-grounded causal map, validate a machine-readable hypothesis-and-probe plan, collect correlated evidence with bounded observer cost, prove origin-to-symptom propagation, repair only when authorized, verify separately, and remove temporary instrumentation.
 ---
 
 # Debug
 
-Use runtime evidence to prove where invalid state originates, how it propagates, and where it becomes the reported symptom. Treat code reading, tests, and static analysis as hypothesis inputs rather than runtime proof. Make eliminating the proven causal mechanism and restoring the violated invariant or contract the repair objective.
+Maximize information gained per failing reproduction. Treat code reading, tests, static analysis, and existing telemetry as hypothesis inputs; require runtime evidence to prove the originating fault, its propagation, and the reported symptom.
 
-Treat change size as a constraint, not the objective. Among causally sufficient repairs, choose the narrowest safe, coherent scope. Never prefer a smaller workaround that leaves the proven causal mechanism active, and never add unrelated cleanup merely because the root-cause repair is already broad.
+Use one **coverage-first** workflow. Scale probe breadth with reproduction cost, residual ambiguity, privacy risk, and observer cost. Treat “one pass” as the initial failing reproduction only; allow a targeted blind-spot run and a separate post-repair verification run when needed.
 
-Optimize for **information gained per reproduction**, not raw log count. A large set of low-value logs can hide the cause, perturb timing, exhaust context, and create a new failure. When the investigation targets `fetch`, record every application `fetch` actually issued during the page lifetime; never sample, truncate, or cap those lifecycle events by count.
+## Read selectively
 
-## Select the mode
-
-- Use **one-shot mode** when reproduction is expensive, flaky, destructive, slow, environment-specific, available only to the user, or explicitly requested as a single-pass investigation.
-- Use **standard mode** when reproduction is cheap and iterative narrowing is safer.
-- In one-shot mode, do not impose an arbitrary 3-5 hypothesis or 2-6 probe cap. Enumerate until every plausible subsystem and causal boundary is represented, then merge hypotheses that the same observation would confirm or reject.
-
-Read [one-shot-debugging.md](./references/one-shot-debugging.md) before planning a one-shot pass. Read [runtime-debugging.md](./references/runtime-debugging.md) before starting or operating the bundled collector. Read [root-cause-document.md](./references/root-cause-document.md) before creating or updating the investigation document.
+- Read [coverage-first-debugging.md](./references/coverage-first-debugging.md) before creating the causal map, hypotheses, or coverage plan.
+- Read [runtime-debugging.md](./references/runtime-debugging.md) before resolving the plan validator, starting a session, or operating the bundled collector.
+- Read [browser-debugging.md](./references/browser-debugging.md) only for browser instrumentation, complete application-`fetch` capture, high-frequency client streams, or page-lifecycle boundaries.
+- Read [root-cause-document.md](./references/root-cause-document.md) before creating or updating a durable investigation ledger.
 
 ## Workflow
 
-1. **Define the failure contract.** Record the expected behavior, observed behavior, smallest realistic reproduction, affected environment, occurrence rate, last-known-good boundary, and reproduction cost. State assumptions explicitly.
-2. **Build a causal map.** Trace the symptom backward through outputs, state transformations, branches, async boundaries, caches, persistence, external dependencies, configuration, and inputs. Identify where a correct value can first become incorrect.
-3. **Enumerate and deduplicate hypotheses.** Cover the cause families in [one-shot-debugging.md](./references/one-shot-debugging.md). Keep distinct causes separate when they require different evidence; merge only observationally equivalent variants.
-4. **Create a hypothesis-probe matrix.** For every hypothesis, record confirming evidence, falsifying evidence, affected boundary, probe IDs, expected event order, and runtime-volume risk. Create the investigation document at this stage in one-shot mode so the full plan survives context compaction.
-5. **Design a high-information probe graph.** Prefer shared probes that discriminate several hypotheses. Cover flow start/end sentinels, boundary entry/exit, branch decisions, state before/after mutation, async schedule/start/finish, cache read/write, external request/response metadata, exception/fallback paths, and invariants. Add probes until the matrix has no material blind spot.
-6. **Control observer cost before editing.** Estimate event cardinality for each probe. Apply first-N, once-per-key, change-only, anomaly-only, aggregate, or sampled logging to general loops and hot paths when that does not remove evidence required by the failure contract. For `fetch` investigations, exempt actual application `fetch` lifecycle events from count-based suppression: capture every start and terminal outcome, bound only each event payload and transport frame by bytes, and redact sensitive fields.
-7. **Establish the session.** Reuse authoritative logging configuration when supplied. Otherwise start the local collector with `scripts/debug_session.py start`; let it open the local dashboard automatically after HTTP readiness. Use `--no-open-dashboard` only for an explicitly headless, CI, container-only, or remote session. Treat the resulting ready file as authoritative for endpoint, dashboard status, session ID, log path, token, and owned artifacts. Distinguish an accepted OS open request from the stronger `dashboardFrontendOpenRecorded` page-load signal.
-8. **Instrument without changing behavior.** Use stable `probeId` values and include `runId`, `correlationId`, `sequence`, `hypothesisIds`, `location`, `phase`, `event`, `timestamp`, and bounded `data`. For browser `fetch` or high-frequency streams, copy and configure `assets/browser-debug-transport.mjs`: it keeps one serialized in-memory copy of each event until acknowledgement, frames by bytes, uses one drain request at a time, retries a stuck request, and sends through the captured native `fetch` so collector traffic cannot instrument itself. Sync the complete active location set after edits.
-9. **Pass the coverage gate.** Before requesting reproduction, verify collector health, clear stale logs, confirm the current endpoint is embedded in temporary instrumentation, and ensure every material hypothesis has a confirming or falsifying observation. Ensure async and cross-service paths have correlation IDs and start/end sentinels. For browser capture, confirm the reproduction does not require the in-memory queue to survive navigation, reload, or process termination; arrange another authoritative logger at such boundaries or mark continuity inconclusive. In a browser-capable local session, query state and require `dashboardFrontendOpenRecorded: true`; when it is false, run `debug_session.py open-dashboard`, re-query state, and make at most two fallback attempts. If the page still does not load, surface the exact dashboard URL and opener errors, then continue through CLI and NDJSON evidence rather than silently omitting the console or restarting a healthy collector.
-10. **Collect one clean run.** Ask the user for one smallest realistic reproduction and stop until completion. Do not mix exploratory runs into the same `runId`.
-11. **Summarize before reading raw volume.** Run `scripts/summarize_debug_log.py` on the active NDJSON file, filter by run and correlation, inspect missing probes or sequence gaps, then open only the raw entries needed to prove or reject each hypothesis.
-12. **Prove the causal chain.** Mark every hypothesis `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`. Do not equate correlation with root cause: cite evidence for the originating condition, its propagation, and the final symptom. Update the same investigation document without deleting earlier rejected paths.
-13. **Repair the evidence-proven root cause.** Eliminate the causal mechanism and restore the violated invariant or contract for the full failure scope, not only the observed example. Apply scope minimization only after establishing causal sufficiency: choose the narrowest safe, coherent repair, include every causally necessary file or layer, and exclude unrelated cleanup. Keep useful probes active. Remove speculative code associated with rejected hypotheses instead of accumulating downstream guards and fallbacks.
-14. **Verify with a separate run.** Check collector health, refresh stale endpoints if needed, clear logs, use a distinct `runId`, reproduce the same flow, and compare before/after evidence and invariants.
-15. **Clean up deterministically.** Remove all temporary probes and debug-only constants only after verification succeeds. Sync an empty location set, stop the collector with `scripts/debug_session.py stop`, delete owned artifacts, and handle the investigation document according to [root-cause-document.md](./references/root-cause-document.md).
+1. **Confirm scope and authority.** Determine whether the request is diagnosis-only or includes repair, whether temporary instrumentation is allowed, and whether the agent, user, or an external operator owns reproduction. Reproduce autonomously when it is safe and in scope; request user action only when their environment, credentials, device, or judgment is required.
+2. **Define the failure contract.** Record expected and observed behavior, smallest realistic trigger, affected scope and environment, frequency, timing, last-known-good boundary, reproduction cost, and constraints. Convert the symptom into observable assertions.
+3. **Inspect before instrumenting.** Read the relevant execution path, tests, configuration, deployment boundaries, and existing logs. Reuse authoritative trace, request, operation, job, transaction, and version identifiers when available.
+4. **Build the causal map.** Trace backward from the symptom through outputs, state transitions, branches, async boundaries, persistence, caches, dependencies, configuration, and inputs. Mark causal cuts and the earliest boundary where a correct value can become incorrect.
+5. **Enumerate material hypotheses.** Cover applicable cause families, name concrete falsifiable mechanisms, and merge only observationally equivalent variants. Treat a hypothesis as material when it is code- or architecture-grounded and requires distinct evidence or a distinct repair. Record unsupported families as exclusions rather than inventing probes.
+6. **Create the coverage plan.** Write one `debug-plan/v1` JSON file containing the failure contract, reviewed cause-family exclusions with reasons, reproduction owner and steps, causal boundaries, hypotheses, probes, observer controls, privacy review, transport checks, and residual ambiguities. Use the same file for validation, location sync, and expected-probe analysis. If writes are not authorized, present the plan without claiming the coverage gate passed.
+7. **Validate the plan.** Run `scripts/debug_plan.py validate <PLAN_FILE>` with the resolved Python 3 interpreter. Require every material hypothesis to define both confirming and rejecting evidence, every hypothesis and boundary to map to probes, flow start and terminal sentinels, and every gate flag to pass. Fix validation errors before editing product code.
+8. **Design high-information probes.** Prefer shared causal-cut and invariant probes over repeated snapshots. Cover boundary entry/exit, branch decisions, state before/after mutation, async schedule/start/finish/cancel, cache and persistence operations, external calls, exception/fallback paths, and flow sentinels as applicable.
+9. **Bound observer cost.** Estimate dynamic event count and bytes. Apply change-only, once-per-key, anomaly-only, aggregation, deterministic sampling, or other documented controls only when they preserve required evidence. Bound payloads, redact sensitive data, and make serialization and delivery failure-tolerant. Follow the browser reference when complete `fetch` lifecycle coverage is required.
+10. **Establish and instrument the session.** Reuse authoritative logging configuration or start the bundled collector. Use stable probe IDs and a correlation hierarchy such as `runId -> parentCorrelationId/flowId -> operationId -> requestId/attempt`. Do not add a correlation header when it could change CORS, cache, routing, or product behavior; prefer existing IDs or side-channel metadata.
+11. **Pass the runtime gate.** Validate the plan again, run the narrowest relevant compile/typecheck/test for the instrumentation, verify collector health and ingest acknowledgement, sync locations from the plan, confirm transport capacity and lifecycle continuity, clear stale logs, and use a unique run ID. Treat the dashboard as optional operator UX, never as an evidence prerequisite.
+12. **Collect one clean failing run.** Execute or hand off the exact reproduction steps. Keep setup traffic and exploratory activity outside the run. Preserve deterministic fault seeds and authoritative before-state when the reproduction uses controlled timing or dependency failures.
+13. **Summarize and classify.** Run the bundled summarizer with the plan as `--expected-probes-file`, filter by run and correlation hierarchy, inspect sentinels, missing probes, suppression counters, queue drain, sequence gaps, and residual ambiguities, then read only the raw events needed to mark every hypothesis `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`.
+14. **Prove or narrow.** Claim a root cause only when evidence identifies the earliest invalid state, decision, ordering, or external result and traces it through propagation to the symptom. If evidence is insufficient, preserve the ledger and add only probes that close the smallest unresolved causal interval.
+15. **Respect the requested terminal condition.** For diagnosis-only work, preserve requested evidence, remove temporary instrumentation and owned runtime artifacts, then report the proven cause and a causally sufficient repair recommendation without changing behavior. When repair is authorized, eliminate the proven mechanism and restore the violated invariant at the owning boundary; reject smaller symptom masks that leave the mechanism active.
+16. **Verify and clean up an authorized repair.** Keep discriminating probes for a separate post-repair run with a new run ID, compare the same invariants and probe IDs, then remove temporary instrumentation. Sync an empty location set only for an owned session, follow host ownership policy for shared sessions, stop owned collectors, and delete only owned ephemeral artifacts.
 
-If the first run is inconclusive, preserve the evidence and investigation ledger. Add only probes that close identified blind spots; do not repeat a rejected path without new contradictory evidence.
+## Evidence contract
 
-## Instrumentation contract
-
-Use this logical event shape. Keep backward-compatible singular `hypothesisId` only when the active session cannot accept `hypothesisIds`.
-
-```json
-{
-  "sessionId": "checkout-1733456789000",
-  "runId": "initial",
-  "correlationId": "flow-8f31",
-  "sequence": 12,
-  "probeId": "cart.commit.before",
-  "hypothesisIds": ["H-cache-stale", "H-race-overwrite"],
-  "location": "src/cart.ts:118",
-  "phase": "mutation",
-  "event": "before_commit",
-  "message": "cart state before persistence",
-  "data": {"cartVersion": 7, "itemCount": 3, "payloadHash": "..."},
-  "timestamp": 1733456789000
-}
-```
-
-- Keep `probeId` stable across initial and verification runs.
-- Increment `sequence` within each correlation scope; also capture monotonic time when the runtime exposes it.
-- Use one probe for multiple hypotheses when the observation discriminates them; list every mapped hypothesis ID.
-- Record absence safely with sentinels. A missing interior event is evidence only when the enclosing start/end or delivery probes prove the path and collector were active.
-- Capture exception type, code, retry/attempt, and bounded causal metadata; do not dump full stack-local state indiscriminately.
-- For transport-managed browser events, retain `transportId`, `transportSequence`, and `transportBatchId` so retries and ordering can be audited without imposing an event-count limit.
+- Keep `probeId` stable across failing and verification runs.
+- Require `runId`, `probeId`, `location`, `event`, and `timestamp` for every planned event.
+- Require correlation and ordering fields whenever work crosses async, concurrent, process, service, queue, persistence, or browser-lifecycle boundaries.
+- Record compact identities, versions, hashes, counts, branch operands, durations, attempts, and invariant results instead of full payloads or state trees.
+- Interpret a missing interior event only when enclosing sentinels, collector continuity, current instrumentation, and suppression metadata prove that absence.
+- Separate root cause, enabling conditions, downstream symptoms, and unresolved alternatives.
 
 ## Guardrails
 
-- Never promise that one reproduction will always identify the cause; maximize and report first-pass coverage instead.
-- Never claim a root cause from code inspection or a single correlated value without propagation evidence.
-- Never log secrets, credentials, tokens, raw authorization headers, passwords, API keys, payment data, or unnecessary PII.
-- Never impose an artificial count cap, first-N rule, sampling rule, or rate limit on actual application `fetch` lifecycle events when the investigation requires complete request coverage.
-- Never claim that the page-local browser queue survives navigation, reload, process termination, or memory exhaustion.
-- Never continue a reproduction while `queuedEvents` or `queuedBytes` grows without bound; stop and report incomplete delivery when the collector cannot drain it.
-- Never let collector `/ingest`, `/ingest/batch`, or dashboard traffic pass through an instrumented global `fetch`; use the captured native `fetch` and URL exclusion together.
-- Never use `keepalive: true` for the steady-state debug stream. Flush the acknowledged queue while the page is alive and surface any undrained events.
-- Never let instrumentation block the product path or throw into application code.
-- Never use sleeps, arbitrary delays, or `setTimeout` as the repair.
-- Never ship a symptom-level workaround while the proven causal mechanism remains active.
-- Never retain speculative guards after their hypothesis is rejected.
-- Never remove probes before post-repair evidence succeeds.
-- Never analyze collector stdout when the NDJSON evidence file is available.
-- Never create an app-local proxy solely to forward browser logs when the collector endpoint is directly reachable.
-- Never reopen the dashboard after `dashboardFrontendOpenRecorded` is true, and never exceed two fallback open attempts for one session.
-- Never leave temporary probes, stale collector endpoints, or collector-owned artifacts after successful cleanup.
+- Never promise that one reproduction will always identify the cause; report first-pass coverage and residual ambiguity.
+- Never equate correlation, overlap, or a single suspicious value with causation.
+- Never log secrets, credentials, tokens, authorization headers, passwords, payment data, or unnecessary PII.
+- Never let instrumentation block, throw into, or materially alter the product path.
+- Never use sleeps, arbitrary delays, retries, guards, fallbacks, or coercions as a repair unless they eliminate the proven mechanism and restore the violated contract.
+- Never apply a repair when the user requested diagnosis only.
+- Never remove discriminating probes before authorized repair verification succeeds.
+- Never analyze collector stdout when structured evidence is available, and never load an unbounded raw log before summarization.
+- Never leave temporary probes, stale endpoints, collector-owned files, or debug-only transport code after successful cleanup.
 
 ## Visible handoffs
 
-Before reproduction, show a concise hypothesis-family summary, the applied probe coverage, material observer-cost controls, and the exact reproduction steps. Keep the full matrix in the investigation document when it is large.
-
-After reproduction, show hypothesis dispositions with cited probe evidence, the causal chain, the investigation-document path, the proposed root-cause repair, why its scope is causally sufficient and no broader than necessary, and the verification request. After success, report verification and cleanup status without dumping the entire raw log.
+Before a user-owned reproduction, show the failure contract, concise hypothesis-family coverage, probe and observer-cost summary, residual ambiguities, and exact steps. After collection, show hypothesis dispositions with cited evidence, the origin-to-symptom chain or smallest unresolved interval, artifact paths, and the next authorized action. After verification, report invariant restoration and cleanup status without dumping the raw log.

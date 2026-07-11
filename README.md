@@ -37,7 +37,7 @@ If you are deciding what to install, start here:
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with delegation-first parallel subagent scheduling
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
-- [`debug`](#debug) - prove runtime root causes with high-coverage probes and an incremental investigation ledger
+- [`debug`](#debug) - maximize root-cause evidence from one failing reproduction with a validated coverage plan
 - [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
@@ -362,7 +362,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It starts the bundled local dashboard automatically with callback-aware fallback, captures every actual application `fetch` during the page lifetime without an artificial event-count cap through an acknowledged in-memory browser queue, and turns correlated NDJSON evidence into an incremental root-cause ledger.
+[`skills/debug/`](./skills/debug/) provides coverage-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction, and proves the origin-to-symptom chain before any authorized repair. Browser-wide `fetch` capture remains an optional specialized transport rather than the skill's primary identity.
 
 Install:
 
@@ -373,14 +373,17 @@ npx skills@latest add JUNERDD/skills --skill debug
 Key entry points:
 
 - Workflow and guardrails: [`skills/debug/SKILL.md`](./skills/debug/SKILL.md)
-- One-shot debugging: [`skills/debug/references/one-shot-debugging.md`](./skills/debug/references/one-shot-debugging.md)
+- Coverage-first planning: [`skills/debug/references/coverage-first-debugging.md`](./skills/debug/references/coverage-first-debugging.md)
 - Operator reference: [`skills/debug/references/runtime-debugging.md`](./skills/debug/references/runtime-debugging.md)
+- Browser instrumentation: [`skills/debug/references/browser-debugging.md`](./skills/debug/references/browser-debugging.md)
 - Root-cause report rules: [`skills/debug/references/root-cause-document.md`](./skills/debug/references/root-cause-document.md)
+- Coverage-plan validator: [`skills/debug/scripts/debug_plan.py`](./skills/debug/scripts/debug_plan.py)
 - Session helper: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
 - Page-local browser transport: [`skills/debug/assets/browser-debug-transport.mjs`](./skills/debug/assets/browser-debug-transport.mjs)
 - Log summarizer: [`skills/debug/scripts/summarize_debug_log.py`](./skills/debug/scripts/summarize_debug_log.py)
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
 - Lifecycle regression tests: [`skills/debug/scripts/test_debug_tools.py`](./skills/debug/scripts/test_debug_tools.py)
+- Coverage-plan regression tests: [`skills/debug/scripts/test_debug_plan.py`](./skills/debug/scripts/test_debug_plan.py)
 - Browser transport regression tests: [`skills/debug/scripts/test_browser_debug_transport.mjs`](./skills/debug/scripts/test_browser_debug_transport.mjs)
 - Optional runtime metadata: [`skills/debug/agents/openai.yaml`](./skills/debug/agents/openai.yaml)
 
@@ -388,14 +391,14 @@ Key entry points:
 
 The `debug` skill is designed to prevent speculative fixes by forcing a prove-it loop:
 
-1. Define the failure contract and build a causal map.
-2. Enumerate and deduplicate hypotheses; in one-shot mode, cover every plausible subsystem without an arbitrary probe cap.
-3. Start or attach a logging session with `scripts/debug_session.py`; local sessions open the dashboard automatically after readiness and use `--no-open-dashboard` only for explicit headless operation.
-4. Pass the coverage gate, collect one clean reproduction, and summarize the NDJSON log before reading raw volume.
-5. Mark each hypothesis as `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`.
-6. Append the root-cause investigation ledger so rejected paths and their evidence are preserved.
-7. Repair the proven root cause; treat minimal scope as a constraint applied only after causal sufficiency, not as the objective.
-8. Verify with a separate post-repair run before removing instrumentation and stopping the collector.
+1. Confirm diagnosis/repair scope and choose an agent-, user-, or external-owned reproduction.
+2. Define the failure contract, inspect the execution path, and build a causal-boundary map.
+3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
+4. Validate one `debug-plan/v1` file, then use it for location sync and expected-probe analysis.
+5. Pass compile, observer-cost, privacy, correlation, transport, and collector gates before consuming the failing reproduction.
+6. Collect one clean run, summarize by run and correlation hierarchy, and classify every hypothesis.
+7. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval.
+8. For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; when repair is authorized, repair the causal mechanism, verify separately, and then clean owned artifacts.
 
 This keeps the skill focused on evidence, not guesswork.
 
@@ -405,14 +408,16 @@ This keeps the skill focused on evidence, not guesswork.
 flowchart LR
   User["Developer / Operator"] --> Agent["Agent Runtime"]
   Agent --> Skill["debug/SKILL.md<br/>workflow + guardrails"]
-  Agent --> Ref["runtime-debugging.md<br/>bootstrap + log format"]
+  Agent --> Plan["debug-plan/v1<br/>validated boundaries + hypotheses + probes"]
+  Plan --> Validator["debug_plan.py"]
+  Plan --> Logs["Temporary instrumentation"]
   Agent --> App["Target app under debug"]
-  Agent --> Logs["Temporary instrumentation"]
   Logs --> Collector["Local NDJSON collector<br/>same-origin dashboard + APIs"]
   App --> Logs
   Collector --> File["Session log file"]
   Collector --> UI["Live dashboard"]
-  File --> Agent
+  File --> Summary["summarize_debug_log.py<br/>expected probes + correlation hierarchy"]
+  Summary --> Agent
   UI --> Agent
   Agent --> Repair["Root-cause repair + post-repair verification"]
 ```
@@ -420,18 +425,19 @@ flowchart LR
 ### `debug` Highlights
 
 - Evidence-first debugging instead of inspection-only reasoning
-- One-shot / high-coverage probe mode for expensive or flaky reproductions
-- High-information instrumentation with observer-cost controls and explicit cleanup after verification
-- Per-hypothesis logging, log summarization, and before/after comparison
+- One coverage-first workflow whose breadth scales with reproduction cost and observer risk
+- Machine-validated `debug-plan/v1` shared by location sync and expected-probe analysis
+- High-information instrumentation with observer-cost controls and explicit cleanup after terminal diagnosis or repair verification
+- Parent-flow, operation, request, child-correlation, and run-aware log analysis
 - Incremental root-cause ledger entries that prevent repeated investigation loops
 - Local collector bootstrap when the host does not already provide logging
-- Callback-aware automatic dashboard opening with at most two attempts, surfaced confirmation or failure status, and an explicit headless opt-out
-- Page-local browser transport that records every issued application `fetch`, frames the in-memory queue by bytes instead of event count, and acknowledges `POST /ingest/batch` before deleting queued evidence; navigation and reload remain explicit evidence-loss boundaries
+- Dashboard availability as optional operator UX rather than a coverage prerequisite
+- Optional page-local browser transport with non-throwing probes, parent-flow context, acknowledged byte-framed batches, and explicit navigation/reload evidence boundaries
 - Explicit prohibition on app-local proxy routes unless direct browser-to-collector delivery is proven blocked
 
 ### `debug` Runtime Support
 
-The current `debug` skill is intentionally portable. It works with:
+The current `debug` skill is intentionally portable. The bundled coverage validator, session helper, summarizer, and collector use Python 3; an authoritative host session may provide equivalent evidence operations, but the `debug-plan/v1` gate must still be validated. It works with:
 
 - OpenAI Codex and similar local-skill runtimes
 - Agent shells that read `~/.agents/skills/<name>/SKILL.md`
@@ -446,7 +452,7 @@ If your runtime ignores [`skills/debug/agents/openai.yaml`](./skills/debug/agent
 
 ### `debug` Collector
 
-The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. Local startup opens the dashboard automatically and waits through at most two callback-aware opener requests; pass `--no-open-dashboard` only for an explicitly headless environment.
+The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for optional live inspection. Local startup may open the dashboard automatically; `--no-open-dashboard` supports headless, CI, remote, or CLI-only operation, and dashboard state never gates evidence collection.
 
 For frontend and browser debugging, the intended transport is direct client-to-collector HTTP posting. The collector already handles CORS and preflight, so the skill should not create temporary Next.js API routes or other app-local proxy layers unless direct browser delivery has been proven blocked in the current host.
 
@@ -710,13 +716,16 @@ When you add more skills later:
     │   ├── assets/
     │   │   └── browser-debug-transport.mjs
     │   ├── references/
-    │   │   ├── one-shot-debugging.md
+    │   │   ├── browser-debugging.md
+    │   │   ├── coverage-first-debugging.md
     │   │   ├── root-cause-document.md
     │   │   └── runtime-debugging.md
     │   └── scripts/
+    │       ├── debug_plan.py
     │       ├── debug_session.py
     │       ├── summarize_debug_log.py
     │       ├── test_browser_debug_transport.mjs
+    │       ├── test_debug_plan.py
     │       ├── test_debug_tools.py
     │       └── local_log_collector/
     │           ├── main.py
