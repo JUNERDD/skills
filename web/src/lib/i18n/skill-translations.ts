@@ -344,7 +344,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       lead:
         "一个 coverage-first 调试系统，提供可机器校验的假设与探针计划、受控的运行时证据、关联感知分析，以及按需启用的浏览器专项采集。",
       overview:
-        "当只读代码不足以证明问题，且希望让首次失败复现尽可能携带高区分度证据时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，校验统一的 `debug-plan/v1`，并让 collector 位置同步与 expected-probe 分析复用该计划。相关 NDJSON 会先按 run、父 flow、operation、request 和子 correlation 摘要，再读取必要的原始事件。仅诊断任务不会擅自修复；经授权的修复会在独立运行中验证后再移除临时 instrumentation。完整浏览器 `fetch` 捕获保留为条件加载的专项能力。",
+        "当只读代码不足以证明问题，且希望让首次失败复现尽可能携带高区分度证据时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，校验 coverage plan，并让 collector 位置同步与 expected-probe 分析复用该计划。相关 NDJSON 会先按 run、父 flow、operation、request 和子 correlation 摘要，再读取必要的原始事件。仅诊断任务不会擅自修复；经授权的修复会在独立运行中验证后再移除临时 instrumentation。完整浏览器 `fetch` 捕获保留为条件加载的专项能力。",
       bestFor: [
         "昂贵、偶发、时序敏感、破坏性、环境特定或只能由用户完成的复现。",
         "很容易猜测、但难以跨因果边界证明的运行时失败。",
@@ -355,7 +355,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       workflow: [
         "确认仅诊断还是包含修复，选择复现执行者，定义失败契约，并检查相关执行路径。",
         "构建因果边界图，枚举有代码依据的 material hypothesis，并为每项定义确认与否定证据。",
-        "创建并校验统一的 `debug-plan/v1`，确保边界、假设、探针、observer controls、隐私检查和残余歧义一致。",
+        "创建并校验 coverage plan，确保边界、假设、探针、observer controls、隐私检查和残余歧义一致。",
         "启动或连接日志会话，对共享 causal cuts 与 invariants 插桩，再通过编译、传输、collector 和 expected-probe 门禁。",
         "收集一次干净失败运行，并在读取原始体积前按 run、父 flow、operation、request 与子 correlation 摘要证据。",
         "证明从起点到症状的传播链；若仍不足，只为最小未决因果区间补探针。",
@@ -377,7 +377,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       ],
       entryPoints: [
         { description: "Coverage-first 调试序列、授权边界与清理要求。", label: "工作流" },
-        { description: "因果图、material hypotheses、debug-plan/v1 与复现门禁。", label: "覆盖规划" },
+        { description: "因果图、material hypotheses、coverage plan 与复现门禁。", label: "覆盖规划" },
         { description: "Collector 启动、会话操作、结构化日志与清理。", label: "运行时参考" },
         { description: "条件化浏览器传输、flow 关联、fetch 捕获与生命周期规则。", label: "浏览器参考" },
         { description: "增量证据与排除账本的结构。", label: "Root-cause 参考" },

@@ -438,10 +438,7 @@ def _load_locations(path_text: str) -> list[Any]:
     except (OSError, json.JSONDecodeError) as exc:
         raise SessionError(f"cannot read locations file {path}: {exc}") from exc
     if isinstance(payload, dict):
-        is_coverage_plan = payload.get("schemaVersion") == "debug-plan/v1"
-        if is_coverage_plan or ("probes" in payload and "locations" not in payload):
-            if "probes" not in payload:
-                raise SessionError("debug-plan/v1 object must contain a probes array")
+        if "probes" in payload:
             probes = payload["probes"]
             if not isinstance(probes, list):
                 raise SessionError("coverage plan probes must be an array")
@@ -731,7 +728,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument(
         "--locations-file",
         required=True,
-        help="JSON array, {locations:[...]}, or coverage plan {probes:[...]} file.",
+        help="JSON array, {locations:[...]}, or coverage-plan file.",
     )
     sync.set_defaults(handler=command_sync_locations)
 

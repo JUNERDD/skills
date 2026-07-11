@@ -10,7 +10,6 @@ import sys
 from typing import Any
 
 
-SCHEMA_VERSION = "debug-plan/v1"
 HYPOTHESIS_STATUSES = {
     "PENDING",
     "CONFIRMED",
@@ -195,9 +194,6 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         validator.error("plan", "must be a JSON object")
         return _report(validator, {})
 
-    if plan.get("schemaVersion") != SCHEMA_VERSION:
-        validator.error("schemaVersion", f"must equal {SCHEMA_VERSION!r}")
-
     failure_contract = validator.object_field(plan, "failureContract", "")
     for key in (
         "expected",
@@ -243,12 +239,6 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     if owner and owner not in {"agent", "user", "external"}:
         validator.error("run.reproductionOwner", "must be one of: agent, user, external")
     validator.string_list_field(run, "steps", "run", allow_empty=False)
-    run_ambiguities = validator.string_list_field(
-        run,
-        "residualAmbiguities",
-        "run",
-        allow_empty=True,
-    )
 
     boundary_items = _indexed_objects(validator, plan, "boundaries")
     hypothesis_items = _indexed_objects(validator, plan, "hypotheses")
@@ -257,19 +247,11 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     hypotheses = _index_unique_ids(validator, hypothesis_items, "hypotheses", "id")
     probes = _index_unique_ids(validator, probe_items, "probes", "probeId")
 
-    boundary_probe_refs: dict[str, list[str]] = {}
-    for boundary_id, (index, boundary) in boundaries.items():
+    for _, (index, boundary) in boundaries.items():
         path = f"boundaries[{index}]"
         validator.string_field(boundary, "invariant", path)
-        boundary_probe_refs[boundary_id] = validator.string_list_field(
-            boundary,
-            "probeIds",
-            path,
-            allow_empty=False,
-        )
 
     hypothesis_boundary_refs: dict[str, list[str]] = {}
-    hypothesis_probe_refs: dict[str, list[str]] = {}
     for hypothesis_id, (index, hypothesis) in hypotheses.items():
         path = f"hypotheses[{index}]"
         mechanism = validator.string_field(hypothesis, "mechanism", path)
@@ -283,12 +265,6 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         )
         validator.string_list_field(hypothesis, "confirmedBy", path, allow_empty=False)
         validator.string_list_field(hypothesis, "rejectedBy", path, allow_empty=False)
-        hypothesis_probe_refs[hypothesis_id] = validator.string_list_field(
-            hypothesis,
-            "probeIds",
-            path,
-            allow_empty=False,
-        )
         status = validator.string_field(hypothesis, "status", path)
         if status and status not in HYPOTHESIS_STATUSES:
             allowed = ", ".join(sorted(HYPOTHESIS_STATUSES))
@@ -334,24 +310,6 @@ def validate_plan(plan: Any) -> dict[str, Any]:
 
     boundary_ids = set(boundaries)
     hypothesis_ids = set(hypotheses)
-    probe_ids = set(probes)
-
-    for boundary_id, (index, _) in boundaries.items():
-        valid_probes = _validate_references(
-            validator,
-            boundary_probe_refs.get(boundary_id, []),
-            probe_ids,
-            f"boundaries[{index}].probeIds",
-            "probe",
-        )
-        if not valid_probes:
-            validator.error(f"boundaries[{index}].probeIds", "must contain at least one existing probe")
-        for probe_id in valid_probes:
-            if boundary_id not in probe_boundary_refs.get(probe_id, []):
-                validator.error(
-                    f"boundaries[{index}].probeIds",
-                    f"mapping to probe {probe_id!r} is not reciprocated by that probe's boundaryIds",
-                )
 
     for hypothesis_id, (index, _) in hypotheses.items():
         _validate_references(
@@ -361,22 +319,9 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             f"hypotheses[{index}].boundaryIds",
             "boundary",
         )
-        valid_probes = _validate_references(
-            validator,
-            hypothesis_probe_refs.get(hypothesis_id, []),
-            probe_ids,
-            f"hypotheses[{index}].probeIds",
-            "probe",
-        )
-        if not valid_probes:
-            validator.error(f"hypotheses[{index}].probeIds", "must contain at least one existing probe")
-        for probe_id in valid_probes:
-            if hypothesis_id not in probe_hypothesis_refs.get(probe_id, []):
-                validator.error(
-                    f"hypotheses[{index}].probeIds",
-                    f"mapping to probe {probe_id!r} is not reciprocated by that probe's hypothesisIds",
-                )
 
+    observed_boundary_ids: set[str] = set()
+    observed_hypothesis_ids: set[str] = set()
     for probe_id, (index, _) in probes.items():
         valid_boundaries = _validate_references(
             validator,
@@ -385,12 +330,7 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             f"probes[{index}].boundaryIds",
             "boundary",
         )
-        for boundary_id in valid_boundaries:
-            if probe_id not in boundary_probe_refs.get(boundary_id, []):
-                validator.error(
-                    f"probes[{index}].boundaryIds",
-                    f"mapping to boundary {boundary_id!r} is not reciprocated by that boundary's probeIds",
-                )
+        observed_boundary_ids.update(valid_boundaries)
         valid_hypotheses = _validate_references(
             validator,
             probe_hypothesis_refs.get(probe_id, []),
@@ -403,12 +343,21 @@ def validate_plan(plan: Any) -> dict[str, Any]:
                 f"probes[{index}].hypothesisIds",
                 "non-sentinel probes must map to at least one existing hypothesis",
             )
-        for hypothesis_id in valid_hypotheses:
-            if probe_id not in hypothesis_probe_refs.get(hypothesis_id, []):
-                validator.error(
-                    f"probes[{index}].hypothesisIds",
-                    f"mapping to hypothesis {hypothesis_id!r} is not reciprocated by that hypothesis's probeIds",
-                )
+        observed_hypothesis_ids.update(valid_hypotheses)
+
+    for boundary_id, (index, _) in boundaries.items():
+        if boundary_id not in observed_boundary_ids:
+            validator.error(
+                f"boundaries[{index}]",
+                "must be referenced by at least one probe boundaryIds entry",
+            )
+
+    for hypothesis_id, (index, _) in hypotheses.items():
+        if hypothesis_id not in observed_hypothesis_ids:
+            validator.error(
+                f"hypotheses[{index}]",
+                "must be referenced by at least one probe hypothesisIds entry",
+            )
 
     role_values = list(probe_roles.values())
     if "flow-start" not in role_values:
@@ -431,12 +380,6 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             "coverage.residualAmbiguities",
             f"contains {len(coverage_ambiguities)} unresolved ambiguity item(s)",
         )
-    if run_ambiguities != coverage_ambiguities:
-        validator.error(
-            "run.residualAmbiguities",
-            "does not match coverage.residualAmbiguities",
-        )
-
     context = {
         "boundaryCount": len(boundary_items),
         "hypothesisCount": len(hypothesis_items),
@@ -480,7 +423,6 @@ def _report(validator: _Validator, counts: dict[str, int]) -> dict[str, Any]:
         )
     return {
         "ok": ok,
-        "schemaVersion": SCHEMA_VERSION,
         "summary": summary,
         "counts": normalized_counts,
         "errors": validator.errors,

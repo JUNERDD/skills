@@ -51,7 +51,7 @@ else
 fi
 ```
 
-If Python 3 is unavailable, do not claim that the bundled coverage-plan gate passed. Use a host-provided equivalent only when it validates the same `debug-plan/v1` contract. If neither validator nor an authoritative evidence session exists, explain which gate cannot start.
+If Python 3 is unavailable, do not claim that the bundled coverage-plan gate passed. Use a host-provided equivalent only when it validates the coverage-plan requirements. If neither validator nor an authoritative evidence session exists, explain which gate cannot start.
 
 ## Validate the coverage plan
 
@@ -179,7 +179,7 @@ rg -n "http://127\\.0\\.0\\.1:[0-9]+/ingest|#region agent log|probeId" <instrume
 
 ## Location synchronization
 
-Use the validated `debug-plan/v1` file as the location source whenever possible. `sync-locations` accepts its top-level `probes` array and projects only `location`, `hypothesisIds`, and `probeId`. It also accepts the legacy `locations` shape:
+Use the validated coverage plan as the location source whenever possible. `sync-locations` accepts its top-level `probes` array and projects only `location`, `hypothesisIds`, and `probeId`. It also accepts a direct `locations` payload for cleanup and host-provided operator input:
 
 ```json
 {

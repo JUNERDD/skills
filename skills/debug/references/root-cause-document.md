@@ -1,6 +1,6 @@
 # Investigation and Root-Cause Ledger
 
-Use one evolving Markdown ledger when a debug session spans a user handoff, context compaction, multiple runs, an expensive reproduction, a repair, or a request for durable evidence. Keep the validated `debug-plan/v1` JSON file as the authority for boundaries, hypotheses, probes, and coverage.
+Use one evolving Markdown ledger when a debug session spans a user handoff, context compaction, multiple runs, an expensive reproduction, a repair, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for boundaries, hypotheses, probes, and coverage.
 
 ## Table of contents
 
@@ -94,7 +94,7 @@ For an authorized repair, additionally record:
 - Workspace: `[absolute path]`
 - Session ID: `[session]`
 - Ready file: `[path]`
-- Coverage plan: `[debug-plan/v1 path]`
+- Coverage plan: `[path]`
 - Evidence file: `[NDJSON path]`
 - Status: `[status]`
 - Reproduction owner: `[agent | user | external]`

@@ -127,7 +127,6 @@ Use this shape:
 
 ```json
 {
-  "schemaVersion": "debug-plan/v1",
   "failureContract": {
     "expected": "UI success means the latest operation is durable",
     "observed": "refresh returns an older version",
@@ -148,14 +147,12 @@ Use this shape:
   "run": {
     "runId": "initial",
     "reproductionOwner": "agent",
-    "steps": ["seed version 7", "submit A then B", "refresh after terminal events"],
-    "residualAmbiguities": []
+    "steps": ["seed version 7", "submit A then B", "refresh after terminal events"]
   },
   "boundaries": [
     {
       "id": "B-commit",
-      "invariant": "an older base version cannot overwrite a newer commit",
-      "probeIds": ["save.commit.decision"]
+      "invariant": "an older base version cannot overwrite a newer commit"
     }
   ],
   "hypotheses": [
@@ -165,7 +162,6 @@ Use this shape:
       "boundaryIds": ["B-commit"],
       "confirmedBy": ["A commits after B from an older base version"],
       "rejectedBy": ["the commit path rejects every older base version"],
-      "probeIds": ["save.commit.decision"],
       "status": "PENDING"
     }
   ],
@@ -222,7 +218,7 @@ Use these probe roles: `flow-start`, `flow-terminal`, `boundary`, `branch`, `sta
 
 Write every probe location as a workspace-relative source path followed by a positive numeric line, for example `src/save.ts:88`. Revalidate after instrumentation moves a probe.
 
-Keep `boundary.probeIds`, `hypothesis.probeIds`, and each probe's `boundaryIds` and `hypothesisIds` bidirectionally consistent. Run:
+Map every boundary and hypothesis from at least one probe through `boundaryIds` and `hypothesisIds`. Run:
 
 ```bash
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_plan.py validate <PLAN_FILE>
@@ -284,7 +280,7 @@ Before the first failing reproduction, require:
 - [ ] Applicable cause families were reviewed and every exclusion has a reason.
 - [ ] Every relevant causal boundary has an invariant and mapped probe.
 - [ ] Every material hypothesis has both confirming and rejecting evidence.
-- [ ] Every hypothesis and probe mapping is bidirectionally consistent.
+- [ ] Every boundary and hypothesis is covered by at least one probe, and every probe reference resolves.
 - [ ] Flow start and terminal sentinels exist.
 - [ ] Correlation and ordering survive every relevant async or service boundary.
 - [ ] Event cardinality, bytes, perturbation risk, and suppression visibility were reviewed.

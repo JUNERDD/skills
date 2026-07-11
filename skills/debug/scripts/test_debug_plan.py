@@ -17,7 +17,6 @@ SCRIPT = Path(__file__).resolve().with_name("debug_plan.py")
 
 def valid_plan() -> dict:
     return {
-        "schemaVersion": "debug-plan/v1",
         "failureContract": {
             "expected": "The latest request owns the displayed result.",
             "observed": "An older response sometimes replaces the latest result.",
@@ -39,13 +38,11 @@ def valid_plan() -> dict:
             "runId": "initial-race-reproduction",
             "reproductionOwner": "agent",
             "steps": ["Open search.", "Issue two queries before the first returns."],
-            "residualAmbiguities": [],
         },
         "boundaries": [
             {
                 "id": "B-search-flow",
                 "invariant": "Only the newest request generation may commit results.",
-                "probeIds": ["search.commit"],
             }
         ],
         "hypotheses": [
@@ -55,7 +52,6 @@ def valid_plan() -> dict:
                 "boundaryIds": ["B-search-flow"],
                 "confirmedBy": ["Generation 1 commits after generation 2."],
                 "rejectedBy": ["Every older generation is rejected before commit."],
-                "probeIds": ["search.commit"],
                 "status": "PENDING",
             }
         ],
@@ -174,16 +170,18 @@ class DebugPlanTests(unittest.TestCase):
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("duplicates excluded family", errors)
 
-    def test_unknown_and_one_way_references_are_rejected(self) -> None:
+    def test_unknown_and_uncovered_references_are_rejected(self) -> None:
         plan = valid_plan()
         plan["hypotheses"][0]["boundaryIds"] = ["B-missing"]
+        plan["probes"][1]["boundaryIds"] = []
         plan["probes"][1]["hypothesisIds"] = ["H-missing"]
         result = self.run_cli(plan)
         self.assertEqual(result.returncode, 1)
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("unknown boundary 'B-missing'", errors)
         self.assertIn("unknown hypothesis 'H-missing'", errors)
-        self.assertIn("not reciprocated", errors)
+        self.assertIn("boundaries[0]: must be referenced by at least one probe", errors)
+        self.assertIn("hypotheses[0]: must be referenced by at least one probe", errors)
 
     def test_missing_flow_sentinel_is_rejected(self) -> None:
         plan = valid_plan()
@@ -203,16 +201,14 @@ class DebugPlanTests(unittest.TestCase):
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("coverage.privacyReviewed: must be true", errors)
 
-    def test_residual_ambiguities_must_have_one_authoritative_value(self) -> None:
+    def test_residual_ambiguities_warn_from_the_coverage_gate(self) -> None:
         plan = valid_plan()
-        plan["run"]["residualAmbiguities"] = ["Read source is not yet distinguished."]
+        plan["coverage"]["residualAmbiguities"] = ["Read source is not yet distinguished."]
         result = self.run_cli(plan)
-        self.assertEqual(result.returncode, 1)
-        errors = "\n".join(json.loads(result.stdout)["errors"])
-        self.assertIn(
-            "run.residualAmbiguities: does not match coverage.residualAmbiguities",
-            errors,
-        )
+        self.assertEqual(result.returncode, 0)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["counts"]["residualAmbiguities"], 1)
+        self.assertIn("contains 1 unresolved ambiguity", report["warnings"][0])
 
     def test_markdown_output_is_human_readable(self) -> None:
         result = self.run_cli(valid_plan(), "--format", "markdown")

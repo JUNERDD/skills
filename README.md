@@ -394,7 +394,7 @@ The `debug` skill is designed to prevent speculative fixes by forcing a prove-it
 1. Confirm diagnosis/repair scope and choose an agent-, user-, or external-owned reproduction.
 2. Define the failure contract, inspect the execution path, and build a causal-boundary map.
 3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
-4. Validate one `debug-plan/v1` file, then use it for location sync and expected-probe analysis.
+4. Validate one coverage-plan file, then use it for location sync and expected-probe analysis.
 5. Pass compile, observer-cost, privacy, correlation, transport, and collector gates before consuming the failing reproduction.
 6. Collect one clean run, summarize by run and correlation hierarchy, and classify every hypothesis.
 7. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval.
@@ -408,7 +408,7 @@ This keeps the skill focused on evidence, not guesswork.
 flowchart LR
   User["Developer / Operator"] --> Agent["Agent Runtime"]
   Agent --> Skill["debug/SKILL.md<br/>workflow + guardrails"]
-  Agent --> Plan["debug-plan/v1<br/>validated boundaries + hypotheses + probes"]
+  Agent --> Plan["Coverage plan<br/>validated boundaries + hypotheses + probes"]
   Plan --> Validator["debug_plan.py"]
   Plan --> Logs["Temporary instrumentation"]
   Agent --> App["Target app under debug"]
@@ -426,7 +426,7 @@ flowchart LR
 
 - Evidence-first debugging instead of inspection-only reasoning
 - One coverage-first workflow whose breadth scales with reproduction cost and observer risk
-- Machine-validated `debug-plan/v1` shared by location sync and expected-probe analysis
+- One machine-validated coverage plan shared by location sync and expected-probe analysis
 - High-information instrumentation with observer-cost controls and explicit cleanup after terminal diagnosis or repair verification
 - Parent-flow, operation, request, child-correlation, and run-aware log analysis
 - Incremental root-cause ledger entries that prevent repeated investigation loops
@@ -437,7 +437,7 @@ flowchart LR
 
 ### `debug` Runtime Support
 
-The current `debug` skill is intentionally portable. The bundled coverage validator, session helper, summarizer, and collector use Python 3; an authoritative host session may provide equivalent evidence operations, but the `debug-plan/v1` gate must still be validated. It works with:
+The current `debug` skill is intentionally portable. The bundled coverage validator, session helper, summarizer, and collector use Python 3; an authoritative host session may provide equivalent evidence operations, but the coverage-plan gate must still be validated. It works with:
 
 - OpenAI Codex and similar local-skill runtimes
 - Agent shells that read `~/.agents/skills/<name>/SKILL.md`

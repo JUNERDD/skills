@@ -589,7 +589,7 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A coverage-first debugging system with a machine-validated hypothesis-and-probe plan, bounded runtime evidence, correlation-aware analysis, and optional specialized browser capture.",
     overview:
-      "Use this skill when code reading is not enough and the first failing reproduction should carry as much discriminating evidence as safely possible. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one `debug-plan/v1` file, and reuses that plan for collector location sync and expected-probe analysis. Correlated NDJSON is summarized by run, parent flow, operation, request, and child correlation before raw events are inspected. Diagnosis stops before behavior changes unless repair is authorized; authorized repairs are verified in a separate run before temporary instrumentation is removed. Complete browser `fetch` capture remains available through a conditionally loaded acknowledged transport.",
+      "Use this skill when code reading is not enough and the first failing reproduction should carry as much discriminating evidence as safely possible. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file, and reuses that plan for collector location sync and expected-probe analysis. Correlated NDJSON is summarized by run, parent flow, operation, request, and child correlation before raw events are inspected. Diagnosis stops before behavior changes unless repair is authorized; authorized repairs are verified in a separate run before temporary instrumentation is removed. Complete browser `fetch` capture remains available through a conditionally loaded acknowledged transport.",
     bestFor: [
       "Expensive, flaky, timing-sensitive, destructive, environment-specific, or user-only reproductions.",
       "Runtime failures that are easy to guess about but hard to prove across causal boundaries.",
@@ -600,7 +600,7 @@ export const SKILLS: SkillDetail[] = [
     workflow: [
       "Confirm diagnosis-versus-repair scope, choose the reproduction owner, define the failure contract, and inspect the relevant execution path.",
       "Build a causal-boundary map and enumerate code-grounded material hypotheses with both confirming and rejecting evidence.",
-      "Create and validate one `debug-plan/v1` file whose boundaries, hypotheses, probes, observer controls, privacy checks, and residual ambiguities agree.",
+      "Create and validate one coverage-plan file whose boundaries, hypotheses, probes, observer controls, privacy checks, and residual ambiguities agree.",
       "Start or attach a logging session, instrument shared causal cuts and invariants, then pass compile, transport, collector, and expected-probe gates.",
       "Collect one clean failing run and summarize evidence by run, parent flow, operation, request, and child correlation before reading raw volume.",
       "Prove origin-to-symptom propagation or add only probes for the smallest unresolved causal interval.",
@@ -629,7 +629,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Coverage planning",
         path: "skills/debug/references/coverage-first-debugging.md",
-        description: "Causal maps, material hypotheses, debug-plan/v1, and the reproduction gate.",
+        description: "Causal maps, material hypotheses, the coverage plan, and the reproduction gate.",
       },
       {
         label: "Runtime reference",

@@ -64,7 +64,6 @@ class DebugToolTests(unittest.TestCase):
             plan_file.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": "debug-plan/v1",
                         "locations": [
                             {
                                 "probeId": "stale.legacy",
@@ -102,7 +101,7 @@ class DebugToolTests(unittest.TestCase):
                 ],
             )
 
-    def test_load_locations_keeps_legacy_array_and_locations_object(self) -> None:
+    def test_load_locations_accepts_direct_array_and_locations_object(self) -> None:
         locations = [
             {
                 "location": "src/app.ts:1",
@@ -121,12 +120,13 @@ class DebugToolTests(unittest.TestCase):
 
     def test_load_locations_reports_invalid_coverage_plan_probes(self) -> None:
         cases = (
-            ({"schemaVersion": "debug-plan/v1"}, "must contain.*probes array"),
             ({"probes": {}}, "coverage plan probes must be an array"),
             ({"probes": []}, "coverage plan probes must be a non-empty array"),
             ({"probes": ["src/app.ts:1"]}, "probe at index 0 must be an object"),
             (
-                {"probes": [{"location": "src/app.ts:1", "hypothesisIds": []}]},
+                {
+                    "probes": [{"location": "src/app.ts:1", "hypothesisIds": []}],
+                },
                 "probe at index 0 must have a non-empty probeId",
             ),
         )
@@ -234,7 +234,6 @@ class DebugToolTests(unittest.TestCase):
                 locations_file.write_text(
                     json.dumps(
                         {
-                            "schemaVersion": "debug-plan/v1",
                             "probes": [
                                 {
                                     "location": "src/app.ts:1",
@@ -466,7 +465,6 @@ class DebugToolTests(unittest.TestCase):
             plan_file.write_text(
                 json.dumps(
                     {
-                        "schemaVersion": "debug-plan/v1",
                         "locations": [{"probeId": "stale.legacy"}],
                         "probes": [
                             {"probeId": "flow.start"},
@@ -495,14 +493,13 @@ class DebugToolTests(unittest.TestCase):
             plan_file = root / "plan.json"
             log_file.write_text("", encoding="utf-8")
             cases = (
-                ({"schemaVersion": "debug-plan/v1", "probes": []}, "non-empty probes"),
+                ({"probes": []}, "non-empty probes"),
                 (
-                    {"schemaVersion": "debug-plan/v1", "probes": [{}]},
+                    {"probes": [{}]},
                     "must have a non-empty probeId",
                 ),
                 (
                     {
-                        "schemaVersion": "debug-plan/v1",
                         "probes": [{"probeId": "p1"}, {"probeId": "p1"}],
                     },
                     "is duplicated",

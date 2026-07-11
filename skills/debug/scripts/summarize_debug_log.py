@@ -170,19 +170,17 @@ def _load_expected_probe_ids(path_text: str) -> list[str]:
     if isinstance(payload, list):
         candidates = payload
     elif isinstance(payload, dict):
-        if payload.get("schemaVersion") == "debug-plan/v1":
+        if "probes" in payload:
             strict_plan = True
             if not isinstance(payload.get("probes"), list):
-                raise ValueError("debug-plan/v1 expected-probes file must contain a probes array")
+                raise ValueError("debug plan expected-probes file must contain a probes array")
             candidates = payload["probes"]
             if not candidates:
-                raise ValueError("debug-plan/v1 expected-probes file must contain non-empty probes")
+                raise ValueError("debug plan expected-probes file must contain non-empty probes")
         elif isinstance(payload.get("probeIds"), list):
             candidates = payload["probeIds"]
         elif isinstance(payload.get("locations"), list):
             candidates = payload["locations"]
-        elif isinstance(payload.get("probes"), list):
-            candidates = payload["probes"]
         else:
             candidates = []
     else:
@@ -192,15 +190,15 @@ def _load_expected_probe_ids(path_text: str) -> list[str]:
     for index, item in enumerate(candidates):
         if strict_plan:
             if not isinstance(item, dict):
-                raise ValueError(f"debug-plan/v1 probe at index {index} must be an object")
+                raise ValueError(f"debug plan probe at index {index} must be an object")
             probe_id = item.get("probeId")
             if not isinstance(probe_id, str) or not probe_id.strip():
                 raise ValueError(
-                    f"debug-plan/v1 probe at index {index} must have a non-empty probeId"
+                    f"debug plan probe at index {index} must have a non-empty probeId"
                 )
             normalized = probe_id.strip()
             if normalized in result:
-                raise ValueError(f"debug-plan/v1 probeId {normalized!r} is duplicated")
+                raise ValueError(f"debug plan probeId {normalized!r} is duplicated")
             result.append(normalized)
             continue
         if isinstance(item, str) and item.strip():
@@ -681,7 +679,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--expected-probes-file",
         default="",
-        help="Validated debug-plan/v1 or legacy JSON list/object for missing-probe checks.",
+        help="Validated coverage plan or direct JSON list/object for missing-probe checks.",
     )
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--timeline-limit", type=int, default=80)
