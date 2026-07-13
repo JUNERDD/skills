@@ -4,13 +4,16 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
-## Unreleased
+## [0.2.7-beta] - 2026-07-13
 
 ### Changed
 
 - Bounded code-review lineage to one frozen initial review plus at most one terminal implementation-delta review, with authoritative product-intent evidence and deterministic semantic issue fingerprints.
 - Made receiving-code-review reconstruct complete execution chains before disposition, inherit settled decisions across generations, enforce verdict/action compatibility, return distinct adjacent discoveries as provisional residuals, and prohibit automatic review/receiving recursion.
 - Added validator regression coverage for lineage, execution-chain, product-intent, and post-review-budget gates.
+- Reframed debug around coverage-first validated plans with flow-start plus terminal or observation-checkpoint sentinels, continuous-stream capture continuity, and catalog copy for browser/streaming instrumentation.
+- Expanded delegate-to-cursor-sdk with hierarchical workstream scheduling, catalog-resolved Grok defaults, and stronger live-monitoring and packet contracts.
+- Marked review and orchestration skills as explicit-only invocation in agents/openai.yaml plus README and website catalog copy.
 
 ### Fixed
 
