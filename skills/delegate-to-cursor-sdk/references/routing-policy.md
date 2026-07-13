@@ -9,6 +9,7 @@ Use this reference before delegating implementation. The upstream agent chooses 
 - Authorization policy
 - Cursor internal subagent policy
 - Mode selection rules
+- Hierarchical scheduling policy
 - Support subagent brief
 - Escalation and downgrade
 
@@ -25,10 +26,12 @@ Workspace strategy: <same branch | new branch | worktree per workstream | no app
 Cursor SDK runtime: <local | cloud>
 Cursor mode: <inspect-only | proposal | apply>
 Cursor SDK conversation mode: <plan | agent>
-Cursor model: <composer-2.5 fast=true unless the user explicitly directed Cursor to use a different model>
+Cursor model: <Grok 4.5 High with speed left to Cursor's default unless the user explicitly directed Cursor to use a different model>
 Cursor internal subagents: <disabled | read-only-analysis | verification | bounded-implementation>
 Authorization: <authorized | needs Cursor API-key authorization>
 Live monitor: <none | status.json path | log-dir/latest>
+Hierarchical graph: <n/a | workstream ids, dependencies, and ready conditions>
+Effective Cursor concurrency: <n/a | limit and binding constraint>
 ```
 
 ## Cursor SDK Runtime Policy
@@ -50,7 +53,9 @@ For cloud runtime:
 
 ## Cursor Model Policy
 
-Use the default Cursor SDK model alias `composer-2.5-fast`, implemented as `model: { id: "composer-2.5", params: [{ id: "fast", value: "true" }] }`, for every Cursor dispatch and Cursor internal subagent unless the user explicitly directed Cursor to use a different model. Do not infer Cursor model authorization from permission to use support subagents, planning subagents, workstream orchestrators, Cursor internal subagents, outer-agent model choices, or general "use subagents" wording.
+Use the wrapper's logical default profile `grok-4.5-high` for every top-level Cursor dispatch unless the user explicitly directed Cursor to use a different model. The profile means Grok 4.5 with High reasoning and Cursor-default speed; it is not an SDK model id. Resolve the canonical id and one unambiguous High effort parameter through the authenticated `Cursor.models.list()` catalog. Send only the High parameter and omit speed. During result verification, accept only catalog-supported speed parameters and values that Cursor reports in addition to the requested High parameter; reject unknown parameters, extra effort parameters, and unsupported speed values. Fail closed if High cannot be represented or verified. Do not silently fall back to Auto or another model. Do not infer Cursor model authorization from permission to use support subagents, planning subagents, workstream orchestrators, Cursor internal subagents, outer-agent model choices, or general "use subagents" wording.
+
+For Cursor internal task/Agent-tool subagents, `@cursor/sdk` 1.0.23 exposes only a string model request rather than the structured parameter selection. Request the Grok 4.5 High label by default, but mark the exact High parameter unverified. Keep internal subagents `disabled` whenever exact High is an acceptance requirement.
 
 ## Authorization Policy
 
@@ -89,12 +94,37 @@ Use a non-Cursor planning subagent, then upstream review, then Cursor.
 - The task naturally splits into two or more independent workstreams.
 - Each workstream can have clear ownership and acceptance criteria.
 - Parallel progress would materially reduce latency or context load.
+- Expected latency, coverage, or risk-reduction benefit exceeds dispatch, Cursor API usage, context, synthesis, review, and merge costs.
 - Local review and bounded follow-up loops reduce integration risk.
 - Different domains benefit from different specialists, such as backend, frontend, migrations, testing, security, or docs.
 - File ownership can be isolated by branch, worktree, patch queue, or explicit serialization.
 - The upstream agent can define cross-workstream interfaces and integration gates before dispatch.
+- Cursor authorization, budget or rate capacity, and upstream review capacity support the intended concurrency.
 
 Do not choose hierarchical mode for a small bug, a single-file edit, a task whose subtasks constantly modify the same files, or an unauthorized Cursor SDK environment.
+
+## Hierarchical Scheduling Policy
+
+Before dispatch, create the coordination ledger in `workstream-contract.md`. A workstream becomes ready only after its dependencies and shared contracts are accepted upstream; SDK `succeeded` alone does not unlock dependents.
+
+Use this upper bound:
+
+```text
+effective_cursor_parallelism = min(
+  available_outer_slots,
+  ready_independent_workstreams,
+  isolated_write_workspaces,
+  Cursor_authorization_budget_and_rate_capacity,
+  upstream_review_and_integration_capacity
+)
+```
+
+- Start critical-path, long-running, uncertainty-reducing, and dependency-unblocking workstreams first.
+- Backfill a ready workstream when an accepted result frees capacity; do not wait for an unrelated wave to finish.
+- Use a separate worktree or branch for every concurrent apply-mode writer. Without isolation, serialize writes and parallelize only inspect, proposal, review, or verification work.
+- Give every parallel run its own `--log-dir` or retain its printed `status.json` path. Do not coordinate parallel work through a shared `latest` pointer.
+- Do not duplicate, cancel, resume as a competing implementation, or change the scope of a healthy run. Intervene only for `needs_input`, `needs_authorization`, failure, cancellation, a confirmed ownership or safety conflict, a user-goal change, or a predeclared no-progress threshold.
+- Keep outer workstream concurrency and Cursor internal subagent fan-out jointly bounded; do not maximize both layers independently.
 
 ## Choose `blocked` When Any Are True
 

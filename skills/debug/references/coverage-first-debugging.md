@@ -13,6 +13,7 @@ Use this reference to maximize the probability that one clean failing reproducti
 - Coverage plan
 - Probe graph
 - Observer cost
+- Long-lived flows
 - Correlation and absence
 - Coverage gate
 - Post-run analysis
@@ -52,6 +53,7 @@ Record these facts before generating hypotheses:
 | Last known good | Version, date, configuration, schema, or deployment boundary |
 | Reproduction cost | Low, medium, high, or single opportunity |
 | Constraints | Actions, systems, data, identities, or fields that must not be changed or disclosed |
+| Completion | A real terminal outcome, or a bounded observable checkpoint for an intentionally long-lived flow |
 
 Convert vague symptoms into observable assertions. For example, replace “save is broken” with “the UI reports success for operation B, but a refresh reads persisted version A from the authoritative source.”
 
@@ -147,7 +149,8 @@ Use this shape:
   "run": {
     "runId": "initial",
     "reproductionOwner": "agent",
-    "steps": ["seed version 7", "submit A then B", "refresh after terminal events"]
+    "steps": ["seed version 7", "submit A then B", "refresh after terminal events"],
+    "completion": {"mode": "flow-terminal"}
   },
   "boundaries": [
     {
@@ -214,7 +217,9 @@ Use this shape:
 }
 ```
 
-Use these probe roles: `flow-start`, `flow-terminal`, `boundary`, `branch`, `state`, `async`, `external`, `exception`, `invariant`, or `observation`.
+Use these probe roles: `flow-start`, `flow-terminal`, `observation-checkpoint`, `boundary`, `branch`, `state`, `async`, `external`, `exception`, `invariant`, or `observation`.
+
+Omitting `run.completion` preserves the default `flow-terminal` requirement. For an intentionally long-lived flow, set `run.completion` to `{"mode":"observation-checkpoint","condition":"<bounded observable stop condition>"}` and include an `observation-checkpoint` sentinel. The checkpoint closes only the evidence window; it does not claim that the business stream terminated.
 
 Write every probe location as a workspace-relative source path followed by a positive numeric line, for example `src/save.ts:88`. Revalidate after instrumentation moves a probe.
 
@@ -252,7 +257,19 @@ Estimate dynamic events and bytes, not static statement count. Prefer:
 
 Never silently suppress all evidence from a required probe. Record the control in `volumeControl` and emit enough metadata to distinguish absence from suppression.
 
-When the contract requires every application `fetch`, preserve every start and terminal lifecycle event during the covered page lifetime. Bound fields and transport frames rather than imposing an event-count cap. Follow [browser-debugging.md](./browser-debugging.md).
+When the contract requires every application `fetch` or every source event from a real-time flow, preserve every required event during the covered page lifetime. Bound fields and transport frames rather than imposing an event-count cap. Follow [browser-debugging.md](./browser-debugging.md).
+
+## Long-lived flows
+
+Treat SSE, WebSocket, subscription, long-poll, and `ReadableStream` flows as first-class when they are intentionally open:
+
+1. Distinguish connection/request state from evidence delivery. A browser Network-panel `Pending` row can be a live business stream or an unacknowledged debug frame; it is not itself proof of a stall or lost event.
+2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every required source event with a monotonic source sequence, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
+3. Choose a checkpoint condition tied to an observable assertion, event count, protocol state, operator action, or justified product deadline. Do not wait for an intentionally open business stream to terminate.
+4. At the checkpoint, snapshot the debug transport's current event watermark and wait only until that complete FIFO prefix is acknowledged. Let later events continue to enqueue. Require zero required-event rejections and no source or transport sequence gap through the target watermark.
+5. Use a final queue-empty flush only after the producer is stopped. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unacknowledged event, use an authoritative producer/server-side logger or mark continuity incomplete.
+
+No finite page-local memory queue can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: never intentionally count-cap, sample, overwrite, or delete a successfully serialized required event before acknowledgement; never claim a wider lossless interval than the acknowledged continuous prefix proves.
 
 ## Correlation and absence
 
@@ -281,7 +298,7 @@ Before the first failing reproduction, require:
 - [ ] Every relevant causal boundary has an invariant and mapped probe.
 - [ ] Every material hypothesis has both confirming and rejecting evidence.
 - [ ] Every boundary and hypothesis is covered by at least one probe, and every probe reference resolves.
-- [ ] Flow start and terminal sentinels exist.
+- [ ] A flow-start sentinel and the configured flow-terminal or observation-checkpoint sentinel exist.
 - [ ] Correlation and ordering survive every relevant async or service boundary.
 - [ ] Event cardinality, bytes, perturbation risk, and suppression visibility were reviewed.
 - [ ] Sensitive fields are excluded or redacted.
@@ -289,7 +306,7 @@ Before the first failing reproduction, require:
 - [ ] The plan validator succeeds.
 - [ ] Instrumented code passes the narrowest relevant compile, type, or syntax check.
 - [ ] Collector health, ingest acknowledgement, endpoint freshness, and expected-probe sync succeed.
-- [ ] Browser or process lifecycle evidence-loss boundaries are covered or declared residual.
+- [ ] Required source and transport sequences, acknowledgement watermarks, and browser/process lifecycle evidence-loss boundaries are covered or declared residual.
 - [ ] The run ID is unique and stale evidence is cleared.
 
 Do not include dashboard visibility in this gate. A dashboard can improve operator experience but does not prove evidence delivery.
@@ -298,7 +315,7 @@ Do not include dashboard visibility in this gate. A dashboard can improve operat
 
 1. Summarize the exact run before reading raw volume.
 2. Select the failing parent correlation, operation, request, and attempt.
-3. Verify start/terminal sentinels, delivery continuity, queue drain, missing expected probes, suppression counters, and sequence gaps.
+3. Verify the start and configured completion sentinels, acknowledged delivery prefix, missing expected probes, required-event rejections, suppression counters, and source/transport sequence gaps. Require a queue-empty drain only when production has stopped.
 4. Evaluate every hypothesis against its confirming and rejecting evidence.
 5. Identify the earliest invalid value, decision, ordering, or external result.
 6. Trace it forward through boundaries to the observed symptom.

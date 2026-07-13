@@ -45,7 +45,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "用 DX 感知的架构门禁最大化安全删码。",
       lead: "一个删除优先的工作流，用于减少需维护代码，同时保持外部可观察行为不变。",
       overview:
-        "当代码库需要激进但有纪律的简化时使用此 skill。它会建立行为保持 oracle，审计可删除代码，测试删除和简化候选项，并在架构级重构前暂停等待明确批准，让瘦身提升可维护性，而不是制造稠密或高风险代码。",
+        "当代码库需要激进但有纪律的简化时使用此 skill。它会建立行为保持 oracle，审计可删除代码，测试删除和简化候选项，并在架构级重构前暂停等待明确批准，让瘦身提升可维护性，而不是制造稠密或高风险代码。该 skill 仅支持显式调用：用户必须使用 `$exhaustive-code-slimmer` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "寻找可删除文件、分支、导出、依赖、包装层和重复逻辑。",
         "用 build、typecheck、test、lint、smoke 或 contract oracle 验证删减候选项。",
@@ -270,7 +270,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       lead:
         "一个 parent-agent 调度器：构建依赖图、最大化有用并行、不打断健康 worker、综合证据并验证集成结果。",
       overview:
-        "用于可从并行探索、实现、审查或验证中受益的非平凡多步骤任务。触发后，parent 框定目标、构建任务依赖图，在工具与隔离容量允许下派发最大有用的就绪非重叠 worker 集合，以事件驱动方式继续调度且不打断健康 worker，并保留共享契约、集成、验证和用户沟通的所有权。只有真正琐碎或不可委派的工作才由 parent 直接处理。",
+        "用于可从并行探索、实现、审查或验证中受益的非平凡多步骤任务。触发后，parent 框定目标、构建任务依赖图，在工具与隔离容量允许下派发最大有用的就绪非重叠 worker 集合，以事件驱动方式继续调度且不打断健康 worker，并保留共享契约、集成、验证和用户沟通的所有权。只有真正琐碎或不可委派的工作才由 parent 直接处理。该 skill 仅支持显式调用：用户必须使用 `$multitask-coordinator` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "在探索、实现、审查和验证之间最大化有用并行。",
         "构建依赖图并填满每个安全的就绪 worker 槽位，而不是默认串行化。",
@@ -340,55 +340,60 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
     },
     debug: {
       category: "运行时调试",
-      blurb: "尽量用一次失败复现收集足以证明根因的证据。",
+      blurb: "从失败运行和实时流中收集可审计缺口的根因证据。",
       lead:
-        "一个 coverage-first 调试系统，提供可机器校验的假设与探针计划、受控的运行时证据、关联感知分析，以及按需启用的浏览器专项采集。",
+        "一个 coverage-first 调试系统，提供可机器校验的假设与探针计划、可审计丢失的运行时证据、关联感知分析，以及对长生命周期浏览器流的一等 checkpoint 支持。",
       overview:
-        "当只读代码不足以证明问题，且希望让首次失败复现尽可能携带高区分度证据时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，校验 coverage plan，并让 collector 位置同步与 expected-probe 分析复用该计划。相关 NDJSON 会先按 run、父 flow、operation、request 和子 correlation 摘要，再读取必要的原始事件。仅诊断任务不会擅自修复；经授权的修复会在独立运行中验证后再移除临时 instrumentation。完整浏览器 `fetch` 捕获保留为条件加载的专项能力。",
+        "当只读代码不足以证明问题，且希望让首次失败复现或有界实时观察窗口尽可能携带高区分度证据时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，校验带 terminal 或 observation-checkpoint 完成模式的 coverage plan，并让 collector 位置同步与 expected-probe 分析复用该计划。可使用浏览器的本地会话会自动尝试打开并确认内置 dashboard，并在需要时执行有限次数的 fallback。必要的实时事件不会被按数量限制或采样：页内传输为事件分配单调 ID，在幂等确认前持续保留，并可在后续事件继续进入时确认一个无缺口前缀 checkpoint。相关 NDJSON 会先按 run、父 flow、operation、request、子 correlation 与传输连续性摘要，再读取必要的原始事件。仅诊断任务不会擅自修复；经授权的修复会在独立运行中验证后再移除临时 instrumentation。",
       bestFor: [
         "昂贵、偶发、时序敏感、破坏性、环境特定或只能由用户完成的复现。",
         "很容易猜测、但难以跨因果边界证明的运行时失败。",
         "在加入广泛临时 instrumentation 前需要确定性覆盖门禁的调查。",
         "需要父 flow、operation、request、attempt 和顺序证据的并发或分布式流程。",
         "按条件需要完整页面生命周期应用 fetch 捕获的浏览器调查。",
+        "业务流有意保持打开的 SSE、WebSocket、subscription、long-poll 或 ReadableStream 故障。",
       ],
       workflow: [
-        "确认仅诊断还是包含修复，选择复现执行者，定义失败契约，并检查相关执行路径。",
+        "确认仅诊断还是包含修复，选择复现执行者，定义失败契约及 terminal 或有界观察条件，并检查相关执行路径。",
         "构建因果边界图，枚举有代码依据的 material hypothesis，并为每项定义确认与否定证据。",
         "创建并校验 coverage plan，确保边界、假设、探针、observer controls、隐私检查和残余歧义一致。",
-        "启动或连接日志会话，对共享 causal cuts 与 invariants 插桩，再通过编译、传输、collector 和 expected-probe 门禁。",
-        "收集一次干净失败运行，并在读取原始体积前按 run、父 flow、operation、request 与子 correlation 摘要证据。",
+        "启动或连接日志会话；可使用浏览器的本地启动会自动尝试打开并确认 dashboard，明确无界面、CI、容器内或远程会话则显式关闭。",
+        "对共享 causal cuts 与 invariants 插桩，通过编译、collector、expected-probe 和无损传输前缀门禁，并在每次请求用户复现前复制规范化的 `dashboard-status` 状态与 URL 行。",
+        "收集一次干净 terminal 运行或有界观察窗口，并在读取原始体积前按 run、父 flow、operation、request、子 correlation、源序列与传输序列摘要证据。",
         "证明从起点到症状的传播链；若仍不足，只为最小未决因果区间补探针。",
         "仅诊断时先保存证据并清理临时 instrumentation；修复获授权时再修复机制、独立验证并清理 owned artifacts。",
       ],
       outputs: [
         "一份由位置同步和 expected-probe 分析共同使用、且通过校验的机器可读 coverage plan。",
         "一条带引用的根因起点到症状证据链，或明确的最小未决因果区间。",
+        "对于持续流，提供确认到高水位的 checkpoint 与源/传输缺口报告，在不声称业务流结束的情况下闭合证据窗口。",
         "用于持久化或多轮调查的可选增量账本。",
         "获授权时，提供独立验证运行和确定性清理支撑的因果充分修复。",
       ],
       guardrails: [
         "没有根因起点、传播和最终症状三段证据时，不要声称已证明根因。",
         "临时 correlation header 可能改变 CORS、缓存、路由、签名、授权或产品行为时，不要添加它。",
-        "不要让 dashboard 可用性阻塞证据采集或复现。",
+        "不要把 dashboard 可见性当作证据，也不要让打开失败阻塞证据采集或复现。",
         "仅诊断任务不要实施修复，也不要保留仍让因果机制继续生效的较小 workaround。",
-        "明确要求完整浏览器覆盖时，不要对必要的应用 fetch 生命周期事件做采样、截断或按数量限制。",
+        "不要对必要的应用 fetch 或实时源事件做采样、截断、合并、覆盖或按数量限制；每个已序列化事件都必须保留到确认。",
+        "不要把 Network 面板中的 Pending 行当作丢失或死锁；应检查确认、高水位、重试状态与序列连续性。",
+        "只有页内内存队列时，不要声称跨 reload、navigation、进程丢失、内存耗尽或存储耗尽仍保持无损覆盖。",
         "不要在摘要前读取无界原始日志，也不要在成功清理后遗留临时 instrumentation 或 owned artifacts。",
       ],
       entryPoints: [
         { description: "Coverage-first 调试序列、授权边界与清理要求。", label: "工作流" },
         { description: "因果图、material hypotheses、coverage plan 与复现门禁。", label: "覆盖规划" },
         { description: "Collector 启动、会话操作、结构化日志与清理。", label: "运行时参考" },
-        { description: "条件化浏览器传输、flow 关联、fetch 捕获与生命周期规则。", label: "浏览器参考" },
+        { description: "浏览器传输、长生命周期流 checkpoint、fetch 捕获与生命周期规则。", label: "浏览器参考" },
         { description: "增量证据与排除账本的结构。", label: "Root-cause 参考" },
         { description: "校验共享 coverage plan，并在复现前失败关闭。", label: "覆盖校验器" },
         { description: "启动、确认、恢复和停止本地 collector 与仪表盘会话。", label: "会话助手" },
-        { description: "用于字节分帧确认式 fetch 捕获的页内内存队列。", label: "浏览器传输" },
-        { description: "在阅读原始体积前摘要 NDJSON 证据。", label: "日志摘要器" },
+        { description: "带字节分帧确认高水位的页内可审计无损队列。", label: "浏览器传输" },
+        { description: "在阅读原始体积前摘要 NDJSON 证据与传输连续性。", label: "日志摘要器" },
         { description: "本地 NDJSON collector 和 dashboard 实现。", label: "Collector" },
         { description: "会话、coverage-plan 同步、correlation 摘要、dashboard 与生命周期回归测试。", label: "生命周期测试" },
         { description: "Schema、映射、sentinel 与门禁校验回归测试。", label: "Coverage-plan 测试" },
-        { description: "内存队列、完整 fetch、分批、超时和重试回归测试。", label: "浏览器传输测试" },
+        { description: "无限事件、实时 checkpoint、完整 fetch、分批、超时和重试回归测试。", label: "浏览器传输测试" },
       ],
     },
     "grill-me": {
@@ -431,7 +436,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       lead:
         "一个冻结范围的深度审查工作流：要求权威 expected-behavior 依据、稳定问题指纹，并把实现后复审限制为终止 generation。",
       overview:
-        "当用户请求 `/code-review`、PR/diff/branch/staged review 或 merge 前安全检查时使用此 skill。它先做只读编排评估并冻结初审范围，追踪可传播风险，在把产品选择判为 defect 前要求权威产品或契约证据，并为问题生成确定性的语义指纹。receiving 最多可生成一次仅覆盖实现 delta 与受影响执行链的 generation-1 复审；该报告是终点，不能自动再启动 receiving。",
+        "当用户请求 `/code-review`、PR/diff/branch/staged review 或 merge 前安全检查时使用此 skill。它先做只读编排评估并冻结初审范围，追踪可传播风险，在把产品选择判为 defect 前要求权威产品或契约证据，并为问题生成确定性的语义指纹。receiving 最多可生成一次仅覆盖实现 delta 与受影响执行链的 generation-1 复审；该报告是终点，不能自动再启动 receiving。该 skill 仅支持显式调用：用户必须使用 `$code-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "审查 PR、branch diff、staged changes、working tree、聚焦文件或 pasted code。",
         "判断并行 specialist subagents 何时能实质提升审查价值。",
@@ -475,7 +480,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       lead:
         "一个执行链优先的响应工作流：继承既有产品裁决、强制 disposition 状态相容，并限制实现后复审次数。",
       overview:
-        "在收到 `code-review` 报告或等价 PR feedback 后使用此 skill。分配 disposition 前，它先从真实触发与入口出发，经过 guards、控制/数据/状态传播、持久化与外部效应、失败语义，一直追踪到终端影响。它跨 generation 继承匹配的 Intentional、Disproved、Stale 和 Duplicate 裁决；链路或产品权威证据不完整时禁止修复；只委派状态相容的已确认动作；把相邻的新发现作为 provisional residual 返回；初审链最多运行一次终止 post-review，且不自动消费其 findings。",
+        "在收到 `code-review` 报告或等价 PR feedback 后使用此 skill。分配 disposition 前，它先从真实触发与入口出发，经过 guards、控制/数据/状态传播、持久化与外部效应、失败语义，一直追踪到终端影响。它跨 generation 继承匹配的 Intentional、Disproved、Stale 和 Duplicate 裁决；链路或产品权威证据不完整时禁止修复；只委派状态相容的已确认动作；把相邻的新发现作为 provisional residual 返回；初审链最多运行一次终止 post-review，且不自动消费其 findings。该 skill 仅支持显式调用：用户必须使用 `$receiving-code-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "在改代码前，针对完整端到端执行链重新验证每个 `F#`、`T#` 和未覆盖的 `A#`。",
         "用证据正式挑战错误、夸大或过时的 review 主张。",
@@ -519,7 +524,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "审查实现是否依赖脆弱的 hack-like 捷径。",
       lead: "一个 coverage-led 审计，用于发现结构性捷径、所有权泄漏、被掩盖的根因和脆弱边界处理。",
       overview:
-        "当一个变更需要实现质量门禁，而不是普通代码审查时使用此 skill。它审查声明范围，枚举发现的每个不同 hack-risk，记录有意例外，并显示哪些所有权边界已覆盖或仍未知。",
+        "当一个变更需要实现质量门禁，而不是普通代码审查时使用此 skill。它审查声明范围，枚举发现的每个不同 hack-risk，记录有意例外，并显示哪些所有权边界已覆盖或仍未知。该 skill 仅支持显式调用：用户必须使用 `$hack-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "发现会隐藏破坏性不变量的 impossible-state fallback。",
         "标记没有解决根因的 symptom-masking patch。",
@@ -553,7 +558,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "消费 hack-review 报告，并在改代码前验证每个 finding。",
       lead: "一个响应工作流，把 hack-risk review findings 转化为有证据的修复、挑战或延续决策。",
       overview:
-        "在收到 hack-review 报告或等价 PR feedback 后使用此 skill。它会在改代码前为每个 finding、有意例外和 coverage gap 建立 disposition ledger，然后只修复仍成立的问题，并为被挑战或缩窄的条目保留证据。",
+        "在收到 hack-review 报告或等价 PR feedback 后使用此 skill。它会在改代码前为每个 finding、有意例外和 coverage gap 建立 disposition ledger，然后只修复仍成立的问题，并为被挑战或缩窄的条目保留证据。该 skill 仅支持显式调用：用户必须使用 `$receiving-hack-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "验证每个 hack-risk finding 在当前 diff 中是否仍成立。",
         "修复所有权问题，同时不机械删除必要 guard。",
@@ -586,7 +591,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "审查代码变更是否引入用户可见行为回归。",
       lead: "一个 coverage-led 审计，用于发现破坏或退化的用户路径、默认值变化、陈旧数据和行为路径变化。",
       overview:
-        "当一个变更集需要用户可见行为门禁时使用此 skill。它审查声明范围，把有意可见变化与回归分开，在能澄清受影响路径时构建 scoped behavior-graph deltas，并写出报告，将每个触及 surface 标记为 reviewed、intentional、not covered 或 not relevant。",
+        "当一个变更集需要用户可见行为门禁时使用此 skill。它审查声明范围，把有意可见变化与回归分开，在能澄清受影响路径时构建 scoped behavior-graph deltas，并写出报告，将每个触及 surface 标记为 reviewed、intentional、not covered 或 not relevant。该 skill 仅支持显式调用：用户必须使用 `$regression-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "检查重构或功能工作是否破坏了用户可见流程。",
         "审计 loading、error、permission、retry、ordering、export、email 或 CLI-output 变化。",
@@ -622,7 +627,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       blurb: "消费 regression-review 报告，并在改代码前验证每个 finding。",
       lead: "一个响应工作流，用当前证据和有范围修复解决 regression-review findings。",
       overview:
-        "在收到 regression-review 报告或相关 PR feedback 后使用此 skill。它会在编辑前用当前代码验证每个 finding、behavior graph delta、有意可见变化和 coverage gap，然后修复已证明的回归，并用证据挑战过时或有意的 findings。",
+        "在收到 regression-review 报告或相关 PR feedback 后使用此 skill。它会在编辑前用当前代码验证每个 finding、behavior graph delta、有意可见变化和 coverage gap，然后修复已证明的回归，并用证据挑战过时或有意的 findings。该 skill 仅支持显式调用：用户必须使用 `$receiving-regression-review` 调用；仅凭提示词匹配不会自动激活。",
       bestFor: [
         "用当前 diff 和基线重新检查 regression gate。",
         "把 behavior graph deltas 与 findings 和 coverage rows 对齐。",

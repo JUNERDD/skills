@@ -21,6 +21,7 @@ HYPOTHESIS_STATUSES = {
 PROBE_ROLES = {
     "flow-start",
     "flow-terminal",
+    "observation-checkpoint",
     "boundary",
     "branch",
     "state",
@@ -30,7 +31,8 @@ PROBE_ROLES = {
     "invariant",
     "observation",
 }
-SENTINEL_ROLES = {"flow-start", "flow-terminal"}
+SENTINEL_ROLES = {"flow-start", "flow-terminal", "observation-checkpoint"}
+COMPLETION_MODES = {"flow-terminal", "observation-checkpoint"}
 COVERAGE_GATES = {
     "causeFamiliesReviewed",
     "observerCostReviewed",
@@ -239,6 +241,20 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     if owner and owner not in {"agent", "user", "external"}:
         validator.error("run.reproductionOwner", "must be one of: agent, user, external")
     validator.string_list_field(run, "steps", "run", allow_empty=False)
+    completion_mode = "flow-terminal"
+    raw_completion = run.get("completion")
+    if raw_completion is not None:
+        if not isinstance(raw_completion, dict):
+            validator.error("run.completion", "must be an object")
+        else:
+            completion_mode = validator.string_field(raw_completion, "mode", "run.completion")
+            if completion_mode and completion_mode not in COMPLETION_MODES:
+                validator.error(
+                    "run.completion.mode",
+                    f"must be one of: {', '.join(sorted(COMPLETION_MODES))}",
+                )
+            if completion_mode == "observation-checkpoint":
+                validator.string_field(raw_completion, "condition", "run.completion")
 
     boundary_items = _indexed_objects(validator, plan, "boundaries")
     hypothesis_items = _indexed_objects(validator, plan, "hypotheses")
@@ -362,7 +378,13 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     role_values = list(probe_roles.values())
     if "flow-start" not in role_values:
         validator.error("probes", "must include at least one flow-start sentinel")
-    if "flow-terminal" not in role_values:
+    if completion_mode == "observation-checkpoint":
+        if "observation-checkpoint" not in role_values:
+            validator.error(
+                "probes",
+                "must include at least one observation-checkpoint sentinel for run.completion.mode",
+            )
+    elif "flow-terminal" not in role_values:
         validator.error("probes", "must include at least one flow-terminal sentinel")
 
     coverage = validator.object_field(plan, "coverage", "")
@@ -386,6 +408,7 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         "probeCount": len(probe_items),
         "flowStartProbeCount": role_values.count("flow-start"),
         "flowTerminalProbeCount": role_values.count("flow-terminal"),
+        "observationCheckpointProbeCount": role_values.count("observation-checkpoint"),
         "sharedProbeCount": sum(
             1 for refs in probe_hypothesis_refs.values() if len(set(refs)) > 1
         ),
@@ -402,6 +425,7 @@ def _report(validator: _Validator, counts: dict[str, int]) -> dict[str, Any]:
         "probes": counts.get("probeCount", 0),
         "flowStartProbes": counts.get("flowStartProbeCount", 0),
         "flowTerminalProbes": counts.get("flowTerminalProbeCount", 0),
+        "observationCheckpointProbes": counts.get("observationCheckpointProbeCount", 0),
         "sharedProbes": counts.get("sharedProbeCount", 0),
         "residualAmbiguities": counts.get("residualAmbiguityCount", 0),
         "excludedCauseFamilies": counts.get("excludedCauseFamilyCount", 0),
@@ -448,6 +472,7 @@ def _format_markdown(report: dict[str, Any]) -> str:
         "probes": "Probes",
         "flowStartProbes": "Flow-start probes",
         "flowTerminalProbes": "Flow-terminal probes",
+        "observationCheckpointProbes": "Observation-checkpoint probes",
         "sharedProbes": "Shared probes",
         "residualAmbiguities": "Residual ambiguities",
         "excludedCauseFamilies": "Excluded cause families",

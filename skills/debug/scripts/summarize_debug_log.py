@@ -102,6 +102,10 @@ def _compact_event(
         "operationId": _text(payload.get("operationId")),
         "requestId": _text(payload.get("requestId")),
         "sequence": _int_or_none(payload.get("sequence")),
+        "transportClientId": _text(payload.get("transportClientId")),
+        "transportId": _text(payload.get("transportId")),
+        "transportSequence": _int_or_none(payload.get("transportSequence")),
+        "transportBatchId": _text(payload.get("transportBatchId")),
         "probeId": _text(payload.get("probeId")),
         "hypothesisIds": _hypothesis_ids(payload),
         "location": _text(payload.get("location")),
@@ -244,6 +248,12 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
     last_sequence: dict[str, int] = {}
     sequence_gaps: list[dict[str, Any]] = []
     sequence_regressions: list[dict[str, Any]] = []
+    last_transport_sequence: dict[str, int] = {}
+    transport_sequence_gaps: list[dict[str, Any]] = []
+    transport_sequence_regressions: list[dict[str, Any]] = []
+    transport_sequence_gap_count = 0
+    transport_sequence_regression_count = 0
+    transport_event_count = 0
     error_events: list[dict[str, Any]] = []
 
     first_limit = max(args.timeline_limit // 2, 0)
@@ -265,6 +275,39 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
                 invalid_lines += 1
                 continue
             valid_events += 1
+
+            transport_client_id = _text(payload.get("transportClientId"))
+            transport_sequence = _int_or_none(payload.get("transportSequence"))
+            if transport_client_id and transport_sequence is not None:
+                transport_event_count += 1
+                previous_transport_sequence = last_transport_sequence.get(transport_client_id)
+                if previous_transport_sequence is not None:
+                    if transport_sequence > previous_transport_sequence + 1:
+                        transport_sequence_gap_count += 1
+                        if len(transport_sequence_gaps) < args.sequence_limit:
+                            transport_sequence_gaps.append(
+                                {
+                                    "clientId": transport_client_id,
+                                    "previous": previous_transport_sequence,
+                                    "current": transport_sequence,
+                                    "missingStart": previous_transport_sequence + 1,
+                                    "missingEnd": transport_sequence - 1,
+                                    "lineNumber": physical_lines,
+                                }
+                            )
+                    elif transport_sequence <= previous_transport_sequence:
+                        transport_sequence_regression_count += 1
+                        if len(transport_sequence_regressions) < args.sequence_limit:
+                            transport_sequence_regressions.append(
+                                {
+                                    "clientId": transport_client_id,
+                                    "previous": previous_transport_sequence,
+                                    "current": transport_sequence,
+                                    "lineNumber": physical_lines,
+                                }
+                            )
+                last_transport_sequence[transport_client_id] = transport_sequence
+
             if not _matches(payload, args):
                 continue
 
@@ -471,6 +514,15 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
             "gaps": sequence_gaps[: args.sequence_limit],
             "regressionsOrDuplicates": sequence_regressions[: args.sequence_limit],
         },
+        "transportContinuity": {
+            "scope": "full-log",
+            "eventsWithTransportSequence": transport_event_count,
+            "clientsWithTransportSequence": len(last_transport_sequence),
+            "gapCount": transport_sequence_gap_count,
+            "regressionOrDuplicateSequenceCount": transport_sequence_regression_count,
+            "gaps": transport_sequence_gaps,
+            "regressionsOrDuplicateSequences": transport_sequence_regressions,
+        },
         "errorLikeEvents": error_events,
         "timeline": timeline,
     }
@@ -595,6 +647,36 @@ def to_markdown(summary: dict[str, Any]) -> str:
         for item in sequence["regressionsOrDuplicates"]:
             lines.append(
                 f"| regression/duplicate | `{_md_escape(item['scope'])}` | {item['previous']} | {item['current']} | {item['lineNumber']} | `{_md_escape(item['probeId'])}` |"
+            )
+        lines.append("")
+
+    transport = summary["transportContinuity"]
+    lines.extend(
+        [
+            "## Transport Continuity",
+            "",
+            f"- Scope: `{transport['scope']}`",
+            f"- Events with transport sequence: `{transport['eventsWithTransportSequence']}`",
+            f"- Transport clients: `{transport['clientsWithTransportSequence']}`",
+            f"- Sequence gaps: `{transport['gapCount']}`",
+            f"- Sequence regressions or duplicates: `{transport['regressionOrDuplicateSequenceCount']}`",
+            "",
+        ]
+    )
+    if transport["gaps"] or transport["regressionsOrDuplicateSequences"]:
+        lines.extend(
+            [
+                "| Type | Client | Previous / ID | Current | Line |",
+                "| --- | --- | --- | ---: | ---: |",
+            ]
+        )
+        for item in transport["gaps"]:
+            lines.append(
+                f"| gap | `{_md_escape(item['clientId'])}` | {item['previous']} | {item['current']} | {item['lineNumber']} |"
+            )
+        for item in transport["regressionsOrDuplicateSequences"]:
+            lines.append(
+                f"| regression/duplicate sequence | `{_md_escape(item['clientId'])}` | {item['previous']} | {item['current']} | {item['lineNumber']} |"
             )
         lines.append("")
 

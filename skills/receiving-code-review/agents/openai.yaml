@@ -2,3 +2,6 @@ interface:
   display_name: "Receiving Deep Code Review"
   short_description: "Execution-chain-first review resolution"
   default_prompt: "Use $receiving-code-review to trace each finding end to end, preserve settled intent, fix only compatible confirmed items, and allow at most one terminal post-review without staging changes."
+
+policy:
+  allow_implicit_invocation: false

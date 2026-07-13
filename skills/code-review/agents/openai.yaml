@@ -2,3 +2,6 @@ interface:
   display_name: "Deep Code Review"
   short_description: "Lineage-aware, product-grounded deep review"
   default_prompt: "Use $code-review to run one frozen-scope deep review, ground findings in authoritative intent, and persist a bounded lineage-aware report without changing code or Git state."
+
+policy:
+  allow_implicit_invocation: false

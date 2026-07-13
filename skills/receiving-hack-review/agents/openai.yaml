@@ -2,3 +2,6 @@ interface:
   display_name: "Receiving Hack Review"
   short_description: "Close hack-review findings safely"
   default_prompt: "Use $receiving-hack-review to consume a coverage-led hack-review report, build a disposition ledger for every finding, intentional exception, and ownership coverage gap, then verify, fix, challenge, or carry items forward with evidence without staging changes unless explicitly requested."
+
+policy:
+  allow_implicit_invocation: false

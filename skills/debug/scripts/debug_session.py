@@ -21,6 +21,9 @@ COLLECTOR_MAIN = SKILL_ROOT / "scripts" / "local_log_collector" / "main.py"
 COLLECTOR_DIR = COLLECTOR_MAIN.parent
 SESSION_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 DEFAULT_TIMEOUT_SECONDS = 10.0
+DEFAULT_DASHBOARD_FRONTEND_CONFIRM_SECONDS = 3.0
+DASHBOARD_FALLBACK_ATTEMPTS = 2
+DASHBOARD_RECOVERY_HTTP_TIMEOUT_SECONDS = 5.0
 
 if str(COLLECTOR_DIR) not in sys.path:
     sys.path.insert(0, str(COLLECTOR_DIR))
@@ -128,18 +131,23 @@ def _wait_for_dashboard_startup(
     *,
     session_id: str,
     wait_seconds: float,
+    initial_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Wait for the asynchronous auto-open attempt without making it a startup dependency."""
 
     deadline = time.monotonic() + max(wait_seconds, 0.0)
-    latest: dict[str, Any] = {}
+    latest: dict[str, Any] = dict(initial_payload or {})
     while True:
         try:
-            _, latest = _read_ready_file(ready_file)
+            _, candidate = _read_ready_file(ready_file)
         except SessionError:
-            latest = {}
-        if latest.get("sessionId") != session_id:
+            if time.monotonic() >= deadline:
+                return latest
+            time.sleep(0.05)
+            continue
+        if candidate.get("sessionId") != session_id:
             raise SessionError("collector rewrote the ready file for a different session")
+        latest = candidate
         if "dashboardOpenPending" not in latest or not latest.get("dashboardOpenPending"):
             return latest
         if time.monotonic() >= deadline:
@@ -281,7 +289,18 @@ def command_start(args: argparse.Namespace) -> dict[str, Any]:
                     ready_file,
                     session_id=session_id,
                     wait_seconds=args.dashboard_open_wait_seconds,
+                    initial_payload=payload,
                 )
+                payload = _recover_dashboard_after_start(ready_file, payload)
+            else:
+                payload["dashboardRecovery"] = {
+                    "status": "disabled",
+                    "dashboardUrl": str(payload.get("dashboardUrl") or ""),
+                    "frontendConfirmed": False,
+                    "fallbackAttemptCount": 0,
+                    "fallbackAttempts": [],
+                    "error": "",
+                }
             payload["readyFile"] = str(ready_file)
             payload["lifecycleMode"] = "local-cli"
             return payload
@@ -320,6 +339,75 @@ def command_state(args: argparse.Namespace) -> dict[str, Any]:
     return {"ok": True, "readyFile": str(ready_path), "state": result}
 
 
+def _single_line(value: Any) -> str:
+    return " ".join(str(value or "").split())
+
+
+def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
+    """Return one stable, user-visible dashboard line for reproduction handoffs."""
+
+    ready_path, ready_payload = _read_ready_file(args.ready_file)
+    service = ready_payload
+    refresh_error = ""
+    try:
+        state = _http_json(
+            _session_url(ready_payload, "stateUrl"),
+            timeout=args.timeout,
+        )
+    except SessionError as exc:
+        refresh_error = _single_line(exc)
+    else:
+        current_service = state.get("service") if isinstance(state, dict) else None
+        if isinstance(current_service, dict):
+            service = current_service
+
+    dashboard_url = _single_line(service.get("dashboardUrl"))
+    frontend_recorded = service.get("dashboardFrontendOpenRecorded")
+    auto_open_enabled = service.get("dashboardAutoOpenEnabled")
+
+    if not dashboard_url:
+        status = "unavailable"
+        frontend_confirmed: bool | None = None
+    elif frontend_recorded is True:
+        status = "frontend_confirmed"
+        frontend_confirmed = True
+    elif auto_open_enabled is False:
+        status = "disabled"
+        frontend_confirmed = False
+    else:
+        status = "frontend_not_confirmed"
+        frontend_confirmed = False
+
+    dashboard_error = ""
+    if status != "frontend_confirmed":
+        dashboard_error = _single_line(
+            service.get("dashboardFrontendOpenLastError")
+            or service.get("dashboardOpenError")
+        )
+    errors = [item for item in (dashboard_error, refresh_error) if item]
+    error = "; ".join(errors)
+    frontend_text = (
+        "unknown" if frontend_confirmed is None else str(frontend_confirmed).lower()
+    )
+    line = (
+        f"Dashboard: {status} — {dashboard_url or 'unavailable'} "
+        f"(frontend confirmed: {frontend_text})"
+    )
+    if error:
+        line += f" — error: {error}"
+
+    return {
+        "ok": True,
+        "readyFile": str(ready_path),
+        "status": status,
+        "dashboardUrl": dashboard_url,
+        "frontendConfirmed": frontend_confirmed,
+        "error": error,
+        "stateRefreshError": refresh_error,
+        "line": line,
+    }
+
+
 def command_logs(args: argparse.Namespace) -> dict[str, Any]:
     ready_path, payload = _read_ready_file(args.ready_file)
     base_url = _session_url(payload, "logsUrl")
@@ -341,15 +429,51 @@ def command_clear(args: argparse.Namespace) -> dict[str, Any]:
     return {"ok": True, "readyFile": str(ready_path), "state": result}
 
 
-def command_open_dashboard(args: argparse.Namespace) -> dict[str, Any]:
-    ready_path, payload = _read_ready_file(args.ready_file)
-    _http_json(_session_url(payload, "healthUrl"), timeout=args.timeout)
-    dashboard_url = _session_url(payload, "dashboardUrl")
-    state_url = _session_url(payload, "stateUrl")
+def _dashboard_frontend_recorded(state: dict[str, Any]) -> bool:
+    service = state.get("service") if isinstance(state, dict) else None
+    return bool(
+        isinstance(service, dict) and service.get("dashboardFrontendOpenRecorded")
+    )
 
-    initial_state = _http_json(state_url, timeout=args.timeout)
-    initial_service = initial_state.get("service") if isinstance(initial_state, dict) else None
-    if isinstance(initial_service, dict) and initial_service.get("dashboardFrontendOpenRecorded"):
+
+def _wait_for_dashboard_frontend(
+    payload: dict[str, Any],
+    *,
+    timeout: float,
+    confirm_seconds: float,
+) -> tuple[bool, str]:
+    state_url = _session_url(payload, "stateUrl")
+    deadline = time.monotonic() + max(confirm_seconds, 0.0)
+    last_error = ""
+
+    while True:
+        try:
+            state = _http_json(state_url, timeout=timeout)
+        except SessionError as exc:
+            last_error = str(exc)
+        else:
+            last_error = ""
+            if _dashboard_frontend_recorded(state):
+                return True, ""
+        if time.monotonic() >= deadline:
+            return False, last_error
+        time.sleep(0.1)
+
+
+def _open_dashboard_attempt(
+    ready_path: Path,
+    payload: dict[str, Any],
+    *,
+    timeout: float,
+    confirm_seconds: float,
+) -> dict[str, Any]:
+    """Open one dashboard view and distinguish launcher success from page load."""
+
+    _http_json(_session_url(payload, "healthUrl"), timeout=timeout)
+    dashboard_url = _session_url(payload, "dashboardUrl")
+
+    initial_state = _http_json(_session_url(payload, "stateUrl"), timeout=timeout)
+    if _dashboard_frontend_recorded(initial_state):
         return {
             "ok": True,
             "status": "already_open",
@@ -366,26 +490,19 @@ def command_open_dashboard(args: argparse.Namespace) -> dict[str, Any]:
 
     frontend_confirmed = False
     confirmation_error = ""
-    if result.get("succeeded") and args.confirm_seconds > 0:
-        deadline = time.monotonic() + args.confirm_seconds
-        while time.monotonic() < deadline:
-            try:
-                state = _http_json(state_url, timeout=args.timeout)
-            except SessionError as exc:
-                confirmation_error = str(exc)
-                break
-            service = state.get("service") if isinstance(state, dict) else None
-            if isinstance(service, dict) and service.get("dashboardFrontendOpenRecorded"):
-                frontend_confirmed = True
-                break
-            time.sleep(0.1)
+    if result.get("succeeded"):
+        frontend_confirmed, confirmation_error = _wait_for_dashboard_frontend(
+            payload,
+            timeout=timeout,
+            confirm_seconds=confirm_seconds,
+        )
 
     failure_reason = ""
     if not result.get("succeeded"):
         failure_reason = str(result.get("error") or "dashboard_manual_open_failed")
-    elif args.confirm_seconds > 0 and not frontend_confirmed:
+    elif not frontend_confirmed:
         failure_reason = confirmation_error or (
-            f"dashboard_frontend_not_confirmed_after_{args.confirm_seconds:g}s"
+            f"dashboard_frontend_not_confirmed_after_{confirm_seconds:g}s"
         )
 
     failure_recorded = False
@@ -402,7 +519,7 @@ def command_open_dashboard(args: argparse.Namespace) -> dict[str, Any]:
                         "attemptedUrl": dashboard_url,
                     },
                     token=str(payload.get("dashboardToken") or ""),
-                    timeout=args.timeout,
+                    timeout=timeout,
                 )
                 failure_recorded = True
             except SessionError as exc:
@@ -427,6 +544,105 @@ def command_open_dashboard(args: argparse.Namespace) -> dict[str, Any]:
         "failureRecorded": failure_recorded,
         "failureRecordError": failure_record_error,
     }
+
+
+def command_open_dashboard(args: argparse.Namespace) -> dict[str, Any]:
+    ready_path, payload = _read_ready_file(args.ready_file)
+    return _open_dashboard_attempt(
+        ready_path,
+        payload,
+        timeout=args.timeout,
+        confirm_seconds=args.confirm_seconds,
+    )
+
+
+def _recover_dashboard_after_start(
+    ready_path: Path,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Confirm local dashboard startup with bounded, non-fatal fallback attempts."""
+
+    dashboard_url = str(payload.get("dashboardUrl") or "")
+    fallback_results: list[dict[str, Any]] = []
+    frontend_confirmed = bool(payload.get("dashboardFrontendOpenRecorded"))
+    recovery_error = ""
+
+    if not frontend_confirmed and (
+        payload.get("dashboardOpenSucceeded") or payload.get("dashboardOpenPending")
+    ):
+        try:
+            frontend_confirmed, recovery_error = _wait_for_dashboard_frontend(
+                payload,
+                timeout=DASHBOARD_RECOVERY_HTTP_TIMEOUT_SECONDS,
+                confirm_seconds=DEFAULT_DASHBOARD_FRONTEND_CONFIRM_SECONDS,
+            )
+        except SessionError as exc:
+            recovery_error = str(exc)
+    elif not frontend_confirmed:
+        recovery_error = str(payload.get("dashboardOpenError") or "")
+
+    for _ in range(DASHBOARD_FALLBACK_ATTEMPTS):
+        if frontend_confirmed:
+            break
+        try:
+            _, latest_payload = _read_ready_file(ready_path)
+            if latest_payload.get("dashboardOpenPending"):
+                recovery_error = "initial_dashboard_open_still_pending"
+                break
+            result = _open_dashboard_attempt(
+                ready_path,
+                latest_payload,
+                timeout=DASHBOARD_RECOVERY_HTTP_TIMEOUT_SECONDS,
+                confirm_seconds=DEFAULT_DASHBOARD_FRONTEND_CONFIRM_SECONDS,
+            )
+        except SessionError as exc:
+            result = {
+                "ok": False,
+                "status": "recovery_error",
+                "skipped": False,
+                "readyFile": str(ready_path),
+                "dashboardUrl": dashboard_url,
+                "open": None,
+                "frontendConfirmed": False,
+                "confirmationError": str(exc),
+                "failureReason": str(exc),
+                "failureRecorded": False,
+                "failureRecordError": "",
+            }
+        fallback_results.append(result)
+        frontend_confirmed = bool(result.get("frontendConfirmed"))
+        if not frontend_confirmed:
+            recovery_error = str(
+                result.get("failureReason")
+                or result.get("confirmationError")
+                or result.get("failureRecordError")
+                or recovery_error
+            )
+
+    try:
+        _, latest_payload = _read_ready_file(ready_path)
+    except SessionError:
+        latest_payload = dict(payload)
+    if latest_payload.get("dashboardFrontendOpenRecorded"):
+        frontend_confirmed = True
+        recovery_error = ""
+
+    fallback_attempt_count = sum(
+        1 for result in fallback_results if not result.get("skipped")
+    )
+    latest_payload["dashboardRecovery"] = {
+        "status": "frontend_confirmed" if frontend_confirmed else "frontend_not_confirmed",
+        "dashboardUrl": dashboard_url,
+        "frontendConfirmed": frontend_confirmed,
+        "fallbackAttemptCount": fallback_attempt_count,
+        "fallbackAttempts": fallback_results,
+        "error": (
+            ""
+            if frontend_confirmed
+            else recovery_error or "dashboard_frontend_not_confirmed"
+        ),
+    }
+    return latest_payload
 
 
 def _load_locations(path_text: str) -> list[Any]:
@@ -697,6 +913,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_ready_and_timeout(state)
     state.set_defaults(handler=command_state)
 
+    dashboard_status = subparsers.add_parser(
+        "dashboard-status",
+        help="Print normalized dashboard status for a user reproduction handoff.",
+    )
+    _add_ready_and_timeout(dashboard_status)
+    dashboard_status.set_defaults(handler=command_dashboard_status)
+
     logs = subparsers.add_parser("logs", help="Read a bounded metadata window from the collector.")
     _add_ready_and_timeout(logs)
     logs.add_argument("--offset", type=int, default=0)
@@ -716,7 +939,7 @@ def build_parser() -> argparse.ArgumentParser:
     open_dashboard.add_argument(
         "--confirm-seconds",
         type=float,
-        default=3.0,
+        default=DEFAULT_DASHBOARD_FRONTEND_CONFIRM_SECONDS,
         help="Wait briefly for the dashboard frontend page-load callback.",
     )
     open_dashboard.set_defaults(handler=command_open_dashboard)

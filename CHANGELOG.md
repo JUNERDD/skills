@@ -12,6 +12,10 @@ This project uses SemVer for the collection version. GitHub release tags use the
 - Made receiving-code-review reconstruct complete execution chains before disposition, inherit settled decisions across generations, enforce verdict/action compatibility, return distinct adjacent discoveries as provisional residuals, and prohibit automatic review/receiving recursion.
 - Added validator regression coverage for lineage, execution-chain, product-intent, and post-review-budget gates.
 
+### Fixed
+
+- Restored deterministic debug dashboard startup for browser-capable local sessions by waiting for the frontend callback, retrying failed opens at most twice, keeping dashboard failure non-blocking, and always surfacing dashboard status and URL before user-owned reproductions.
+
 ## [0.2.6] - 2026-07-10
 
 ### Changed

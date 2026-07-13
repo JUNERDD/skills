@@ -4,7 +4,9 @@
  * Guarantees provided by this helper:
  * - no artificial event-count cap;
  * - one collector request at a time;
- * - byte-framed batches, timeout, retry, and acknowledgement before deletion;
+ * - byte-framed batches, timeout, idempotent retry, and acknowledgement
+ *   before deletion;
+ * - monotonic enqueue/acknowledgement watermarks for live-stream checkpoints;
  * - one in-memory copy of each serialized event;
  * - collector traffic uses the captured native fetch and cannot log itself.
  *
@@ -151,6 +153,10 @@ export function createMemoryQueue() {
       return queuedBytes
     },
 
+    lastKey() {
+      return nextKey - 1
+    },
+
     clear() {
       records = []
       headIndex = 0
@@ -246,6 +252,7 @@ export function createBrowserDebugTransport({
   let retryAttempt = 0
   let acceptedEvents = 0
   let acceptedBatches = 0
+  let acknowledgedEventWatermark = 0
   let failedRequests = 0
   let rejectedEvents = 0
   let lastError = null
@@ -273,18 +280,24 @@ export function createBrowserDebugTransport({
       queueMode: eventQueue.mode,
       deliveryScope: 'page_lifetime',
       reloadSafe: false,
+      durableQueue: false,
       queuedEvents: eventQueue.count(),
       queuedBytes: eventQueue.bytes(),
       acceptedEvents,
       acceptedBatches,
+      enqueuedEventWatermark: eventQueue.lastKey(),
+      acknowledgedEventWatermark,
       failedRequests,
       rejectedEvents,
       inFlightRequests: requestActive ? 1 : 0,
       retryPending: retryTimer !== null,
       currentBatchId: inFlightFrame?.batchId || null,
+      currentFrameFirstKey: inFlightFrame?.keys?.[0] || null,
+      currentFrameLastKey: inFlightFrame?.eventWatermark || null,
       currentFrameBytes: inFlightFrame?.wireBytes || 0,
       retryAttempt,
       lastError,
+      continuityBroken: rejectedEvents > 0,
       eventCountLimited: false,
       ...extra,
     }
@@ -303,7 +316,14 @@ export function createBrowserDebugTransport({
         .join(',')}]}`
       const wireBytes = byteLength(body)
       if (wireBytes <= Math.max(frameBytes, 1) || items.length === 1) {
-        return { items, keys, batchId, body, wireBytes }
+        return {
+          items,
+          keys,
+          batchId,
+          body,
+          wireBytes,
+          eventWatermark: keys[keys.length - 1],
+        }
       }
       items.pop()
     }
@@ -356,6 +376,10 @@ export function createBrowserDebugTransport({
         throw new Error('debug_transport_batch_id_mismatch')
       }
       eventQueue.deleteKeys(keys)
+      acknowledgedEventWatermark = Math.max(
+        acknowledgedEventWatermark,
+        frame.eventWatermark,
+      )
       acceptedEvents += frame.items.length
       acceptedBatches += 1
       retryAttempt = 0
@@ -363,6 +387,7 @@ export function createBrowserDebugTransport({
       emit(onStatus, statusPayload('batch_acknowledged', {
         batchId,
         acknowledgedEvents: frame.items.length,
+        acknowledgedEventWatermark,
         duplicateBatch: Boolean(acknowledgement.duplicateBatch),
       }))
     } finally {
@@ -417,8 +442,8 @@ export function createBrowserDebugTransport({
       sessionId: event.sessionId || sessionId,
       runId: event.runId || runId,
       transportClientId: clientId,
-      transportId: event.transportId || randomId('event'),
-      transportSequence: event.transportSequence || ++transportSequence,
+      transportId: randomId('event'),
+      transportSequence: ++transportSequence,
       timestamp: event.timestamp || Date.now(),
     }
 
@@ -464,12 +489,42 @@ export function createBrowserDebugTransport({
     }
   }
 
+  async function waitForWatermark(targetEventWatermark, timeoutMs) {
+    const deadline = Date.now() + Math.max(timeoutMs, 0)
+    while (true) {
+      if (acknowledgedEventWatermark >= targetEventWatermark) return true
+      if (!stopped && eventQueue.count() > 0) scheduleDrain()
+      if (stopped) return false
+      if (Date.now() >= deadline) return false
+      await sleep(25)
+    }
+  }
+
+  async function checkpoint({ timeoutMs = 30_000 } = {}) {
+    const targetEventWatermark = eventQueue.lastKey()
+    const rejectedEventsAtCheckpoint = rejectedEvents
+    const watermarkAcknowledged = await waitForWatermark(
+      targetEventWatermark,
+      timeoutMs,
+    )
+    const complete = watermarkAcknowledged && rejectedEventsAtCheckpoint === 0
+    const status = statusPayload('transport_checkpoint', {
+      complete,
+      watermarkAcknowledged,
+      targetEventWatermark,
+      rejectedEventsAtCheckpoint,
+      continuityBrokenAtCheckpoint: rejectedEventsAtCheckpoint > 0,
+    })
+    emit(complete ? onStatus : onError, status)
+    return status
+  }
+
   async function flush({ timeoutMs = 30_000 } = {}) {
     const deadline = Date.now() + Math.max(timeoutMs, 0)
     while (true) {
-      if (eventQueue.count() > 0) scheduleDrain()
-      if (eventQueue.count() === 0 && !drainPromise) return true
-      if (Date.now() >= deadline) return false
+      if (!stopped && eventQueue.count() > 0) scheduleDrain()
+      if (eventQueue.count() === 0 && !drainPromise) return rejectedEvents === 0
+      if (stopped || Date.now() >= deadline) return false
       await sleep(25)
     }
   }
@@ -490,16 +545,23 @@ export function createBrowserDebugTransport({
     frameBytes,
   }))
 
+  const queueStatus = Object.freeze({
+    count: () => eventQueue.count(),
+    bytes: () => eventQueue.bytes(),
+    lastKey: () => eventQueue.lastKey(),
+  })
+
   return {
     clientId,
     record,
     recordSafe,
+    checkpoint,
     flush,
     getStatus,
     stop,
     isCollectorUrl,
     nativeFetch: fetchImpl,
-    queue: eventQueue,
+    queue: queueStatus,
   }
 }
 
@@ -641,13 +703,15 @@ export function instrumentGlobalFetch({
           location,
           phase: 'network',
           event: 'fetch_resolve',
-          message: 'application fetch resolved',
+          message: 'application fetch response headers available; body may still be active',
           data: {
             ...baseData,
             status: response.status,
             ok: response.ok,
             redirected: response.redirected,
             responseType: response.type,
+            responseBodyPresent: response.body !== null && response.body !== undefined,
+            responseBodyUsed: Boolean(response.bodyUsed),
             durationMs: Date.now() - startedAt,
           },
         })

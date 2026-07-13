@@ -10,6 +10,7 @@ Use this reference only when evidence originates in browser code, when the failu
 - Custom probes
 - Complete fetch capture
 - Delivery and backlog
+- Long-lived response and event streams
 - Lifecycle boundaries
 - Observer cost and security
 - Browser coverage gate
@@ -18,13 +19,14 @@ Use this reference only when evidence originates in browser code, when the failu
 
 Prefer an authoritative host-provided browser logger when one exists. Otherwise copy `assets/browser-debug-transport.mjs` into a temporary project path that client code can import.
 
-Use the bundled transport for high-frequency streams or complete page-lifetime `fetch` coverage. It provides:
+Use the bundled transport for high-frequency streams or complete page-lifetime `fetch` coverage. Its batch is a finite network frame, not an evidence-reduction rule or a wait-for-stream-completion mechanism. Recording schedules delivery immediately; it does not wait to fill a batch. The transport provides:
 
 - one serialized in-memory copy of each event until acknowledgement;
 - byte-framed batches without an event-count cap;
 - one collector request at a time;
 - timeout and deterministic batch retry;
 - deletion only after complete acknowledgement;
+- monotonic enqueue and acknowledgement watermarks for live checkpoints;
 - a captured native `fetch` and collector-URL exclusion to prevent recursion.
 
 The queue is page-local. It does not survive navigation, reload, process termination, memory exhaustion, or an oversized event.
@@ -52,9 +54,11 @@ const debugTransport = createBrowserDebugTransport({
 
 Do not log the dashboard token in product code. The ingest endpoints use the session ID; operator APIs remain token-protected and same-origin.
 
+Create one transport per page realm and run, then reuse it for every probe. During hot reload or reinstrumentation, restore wrapped APIs and stop the prior transport before installing a replacement. One transport issues at most one collector request at a time; simultaneous live batch requests therefore require checking for multiple page realms, duplicate transport instances, or stale/retried DevTools rows.
+
 ## Flow correlation
 
-Keep each actual `fetch` call as a unique child correlation with sequence `1` for start and `2` for terminal outcome. Attach it to the reproduction-wide flow through `parentCorrelationId`, `operationId`, and an existing `requestId` when available:
+Keep each actual `fetch` call as a unique child correlation with sequence `1` for start and `2` for the Fetch-promise outcome: response headers available or rejection. This is terminal only for the promise, not for a streaming response body. Attach it to the reproduction-wide flow through `parentCorrelationId`, `operationId`, and an existing `requestId` when available:
 
 ```ts
 const restoreFetch = instrumentGlobalFetch({
@@ -103,6 +107,8 @@ void debugTransport.recordSafe({
 
 The global wrapper records every actual application `fetch` start and resolve/reject event during the covered page lifetime. It does not sample, rate-limit, first-N, or count-cap those lifecycle events.
 
+`fetch_resolve` means the Fetch promise resolved and response headers became available. It does **not** prove that a response body was consumed, completed, or remained error-free. Instrument the actual decoder or reader loop when body-stream behavior is material.
+
 It records method and a query-stripped URL by default. Do not add raw request or response bodies, authorization headers, cookies, access tokens, or sensitive query values. Use `mapRequest` only for compact, JSON-serializable, non-secret metadata.
 
 Never instrument collector `/ingest`, `/ingest/batch`, `/api/*`, or dashboard traffic as application traffic. Keep both captured-native-fetch and URL-exclusion protections active.
@@ -117,6 +123,7 @@ The transport separates event count from network framing:
 - Bound each collector request with `frameBytes`.
 - Keep one request active while allowing any number of application requests to enqueue evidence.
 - Retry the same deterministic `batchId` after timeout; collector acknowledgement is idempotent.
+- Advance the acknowledged watermark only after the collector confirms the complete FIFO prefix; never delete an unacknowledged event.
 - Keep `keepalive: false` for the steady stream.
 
 Inspect:
@@ -125,16 +132,47 @@ Inspect:
 const status = await debugTransport.getStatus()
 ```
 
-Review `queuedEvents`, `queuedBytes`, `inFlightRequests`, `failedRequests`, `rejectedEvents`, `deliveryScope`, and `reloadSafe`. Before leaving the page:
+Review `queuedEvents`, `queuedBytes`, `enqueuedEventWatermark`, `acknowledgedEventWatermark`, `inFlightRequests`, `failedRequests`, `rejectedEvents`, `continuityBroken`, `deliveryScope`, `durableQueue`, and `reloadSafe`.
+
+For a stream that continues producing, freeze and confirm only the prefix that exists at the observation boundary:
+
+```ts
+const checkpoint = await debugTransport.checkpoint({ timeoutMs: 30_000 })
+if (!checkpoint.complete) {
+  throw new Error('debug evidence is incomplete through the checkpoint watermark')
+}
+```
+
+`targetEventWatermark` and `rejectedEventsAtCheckpoint` are captured when `checkpoint` starts. Later events may continue to enqueue and do not invalidate that already-bounded prefix. Require `watermarkAcknowledged: true`, `rejectedEventsAtCheckpoint: 0`, `continuityBrokenAtCheckpoint: false`, and no transport-sequence gap through the target. A `/ingest/batch` request may appear as `Pending` while its acknowledgement is outstanding; use these fields and collector state instead of the Network-panel label to decide delivery.
+
+After event production and instrumentation have stopped, drain the final queue before leaving the page:
 
 ```ts
 restoreFetch()
 const drained = await debugTransport.flush({ timeoutMs: 30_000 })
 ```
 
-Claim page-lifetime delivery only when `drained` is true, `queuedEvents` is zero, `inFlightRequests` is zero, and no rejected or suppressed required event remains unexplained.
+Claim final page-lifetime delivery only when `drained` is true, `queuedEvents` is zero, `inFlightRequests` is zero, `rejectedEvents` is zero, and no required source or transport sequence is missing.
 
 Stop the reproduction and report incomplete delivery when backlog grows without draining. Do not block the product path or silently discard required events to protect the collector.
+
+## Long-lived response and event streams
+
+For SSE, WebSocket, subscriptions, long polling, or `ReadableStream` bodies, instrument the existing application dispatch, decoder, or reader-loop boundary. Do not make transport completion depend on the business stream closing.
+
+Record:
+
+- connection/request start and headers/open;
+- every failure-contract-required source event with a monotonic `streamSequence`;
+- reconnect/attempt/generation changes;
+- close, cancel, abort, decoder error, and reader error;
+- one `observation-checkpoint` sentinel when the coverage plan's bounded condition is met.
+
+Call `recordSafe` without awaiting collector I/O in the business callback. The call serializes and enqueues before yielding, while delivery proceeds independently. Never count-cap, sample, coalesce, overwrite, or first-N a source event that the failure contract requires exhaustively. Bound the fields of each event; if serialization or the byte limit rejects a required event, stop and mark the run incomplete.
+
+Do not automatically clone, tee, or consume `response.body` merely to observe it. Those techniques can change backpressure, cancellation, buffering, and memory behavior. Add probes to the consumer the application already owns, or use an authoritative producer/server-side logger.
+
+At the observation boundary, record the checkpoint sentinel and call `checkpoint`. The business stream may remain open. Only after the producer stops should `flush` require the entire queue to reach zero.
 
 ## Lifecycle boundaries
 
@@ -167,8 +205,9 @@ Before the failing run, require:
 - [ ] Collector URLs cannot recurse through the wrapper.
 - [ ] Serialization failures and oversized events are surfaced through `recordSafe` status.
 - [ ] Expected peak event and byte volume can drain without unbounded backlog.
+- [ ] Every required source event has a monotonic source sequence, and the transport checkpoint proves an acknowledged gap-free prefix with zero rejected required events.
 - [ ] Sensitive request fields are excluded.
-- [ ] Flow start, pre-boundary when applicable, and terminal sentinels are planned.
+- [ ] Flow start, pre-boundary when applicable, and the configured terminal or observation-checkpoint sentinel are planned.
 - [ ] Instrumented client code passes the narrowest relevant syntax, type, or build check.
 
 Dashboard visibility is not part of this gate.

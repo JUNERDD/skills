@@ -75,9 +75,9 @@ Use a unique session ID. The CLI starts the collector detached, waits for the re
   --session-id "checkout-$(date +%s)"
 ```
 
-The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. Use `--no-open-dashboard` or its `--headless` alias for headless, CI, container-only, remote, or CLI-only operation. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. The session CLI waits for `dashboardFrontendOpenRecorded` and, when needed, makes at most two fallback open attempts. Use `--no-open-dashboard` or its `--headless` alias only for explicitly headless, CI, container-only, or remote operation. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
 
-Automatic browser opening is non-fatal and never part of the evidence gate. Inspect `dashboardOpenPending`, `dashboardOpenSucceeded`, `dashboardOpenError`, and `dashboardFrontendOpenRecorded` only when dashboard availability matters. `dashboardOpenSucceeded` means an opener accepted the request; `dashboardFrontendOpenRecorded` confirms that the page loaded, not that instrumentation coverage is sufficient.
+Automatic browser opening is non-fatal and never part of the evidence gate. The `start` result adds `dashboardRecovery` with `frontendConfirmed`, `fallbackAttemptCount`, `dashboardUrl`, and `error`. Preserve those values and always show the refreshed dashboard status and URL before a user-owned reproduction, including confirmed, failed, disabled, and unavailable states. `dashboardOpenSucceeded` means an opener accepted the request, while `dashboardFrontendOpenRecorded` confirms that the page loaded. Neither field proves instrumentation coverage or that a tab remains open.
 
 The CLI writes session artifacts under `<workspace>/.debug-logs/` unless `--artifact-dir` is supplied. Capture the returned `readyFile` path and use it for every later command.
 
@@ -123,7 +123,7 @@ When the collector restarts on another port, replace stale endpoint constants in
 
 The dashboard state response keeps high-cardinality count lists small so polling does not compete with ingestion. Read `summary.countCardinality`, `summary.countListLimit`, and `summary.countListsTruncated` when a list such as `correlationCounts` is abbreviated. This is a presentation bound only: `summary.totalEntries`, the paginated logs API, and the NDJSON evidence file still represent every accepted event.
 
-`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Continue with subsequent acknowledged frames until the page-local queue is empty. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`; ingestion acknowledgement is intentionally independent from dashboard indexing.
+`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Continue with subsequent acknowledged frames without sampling or dropping required events. For a live producer, use the browser transport's checkpoint target and acknowledged watermarks instead of waiting for its queue to become empty; require a final empty drain only after production stops. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`; ingestion acknowledgement is intentionally independent from dashboard indexing.
 
 ## Session commands
 
@@ -136,6 +136,10 @@ Use the lifecycle CLI rather than reimplementing token handling and cleanup in s
 
 # Full state summary
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py state \
+  --ready-file <READY_FILE>
+
+# Normalized dashboard line for a user-owned reproduction handoff
+"$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py dashboard-status \
   --ready-file <READY_FILE>
 
 # Clear the current session log and in-memory counters
@@ -255,11 +259,11 @@ Keep values bounded and JSON-serializable. Log serialization must not throw into
 
 ## Browser routing
 
-Read [browser-debugging.md](./browser-debugging.md) before adding client instrumentation, wrapping `fetch`, collecting high-frequency browser streams, or crossing navigation and reload boundaries. Keep browser-specific transport details out of non-browser investigations.
+Read [browser-debugging.md](./browser-debugging.md) before adding client instrumentation, wrapping `fetch`, collecting long-lived or high-frequency browser streams, or crossing navigation and reload boundaries. Keep browser-specific transport details out of non-browser investigations.
 
 ## Non-JavaScript guidance
 
-Use `batchEndpoint` for serialized frames and `endpoint` for a single event. Do not impose an event-count cap when complete request coverage is required. Split only by request bytes or runtime-specific payload constraints, then continue sending subsequent frames until every event is acknowledged.
+Use `batchEndpoint` for high-throughput serialized frames and `endpoint` for a single event. A batch is only a finite wire envelope: do not wait for the business stream to close, and do not impose an event-count cap when complete request or source-event coverage is required. Give events monotonic delivery sequences, split only by request bytes or runtime-specific payload constraints, retain each event until acknowledgement, and confirm an acknowledged continuous prefix at live observation checkpoints.
 
 If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close promptly. When appending directly:
 
@@ -284,7 +288,7 @@ deterministic sample by correlation ID
 
 Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing general-purpose probe events are interpretable.
 
-When the failure contract requires complete application-`fetch` coverage, follow the browser reference. Do not apply count-based suppression to required start and terminal lifecycle events.
+When the failure contract requires complete application-`fetch` or real-time source-event coverage, follow the browser reference. Do not apply count-based suppression to required request or source events. Treat serialization, oversize, lifecycle, or delivery rejection as incomplete evidence rather than suppression.
 
 Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees.
 
@@ -314,15 +318,15 @@ Useful filters:
 --format json
 ```
 
-The summarizer reports valid/invalid lines, probe and hypothesis coverage, correlations, event counts, sequence gaps/regressions, error-like events, and a bounded timeline. It does not infer the root cause; use it to select raw evidence.
+The summarizer reports valid/invalid lines, probe and hypothesis coverage, correlations, event counts, causal-sequence gaps/regressions, browser transport-sequence gaps or duplicate/regressed sequences, error-like events, and a bounded timeline. It does not infer the root cause; use it to select raw evidence and to reject any claimed lossless interval with a transport continuity break.
 
 ## Reading raw evidence
 
 After summarization:
 
 1. Verify the expected run and correlation exist.
-2. Verify flow start/end sentinels.
-3. Check missing planned probes and suppression counters.
+2. Verify flow start and the configured terminal or observation-checkpoint sentinel.
+3. Check missing planned probes, required-event rejections, acknowledged watermarks, source/transport sequence gaps, and suppression counters.
 4. Identify the earliest invalid value, invariant failure, or invalid ordering.
 5. Read the raw NDJSON lines for that causal interval.
 6. Cite probe ID, location, run, correlation, sequence, and selected data.
@@ -332,18 +336,18 @@ Do not paste the entire NDJSON file into chat when a compact summary and targete
 
 ## Dashboard startup and recovery
 
-The collector serves a same-origin dashboard with state, bounded log windows, and active source locations. Normal local sessions open it automatically after the HTTP health endpoint responds; this ordering avoids a browser landing on a port before the request loop is ready.
+The collector serves a same-origin dashboard with state, bounded log windows, and active source locations. Browser-capable local `start` sessions open it after the HTTP health endpoint responds, wait for the frontend callback, and make at most two fallback attempts before returning a non-fatal `dashboardRecovery` result.
 
-Use this recovery sequence only when the operator wants the dashboard and the console does not appear or `dashboardFrontendOpenRecorded` remains `false`:
+Use this manual recovery sequence for a reused session or when the dashboard later disappears:
 
-1. Read the ready payload and confirm `dashboardAutoOpenEnabled` is `true`.
+1. Read the ready payload, capture `dashboardUrl`, and note whether `dashboardAutoOpenEnabled` is `true`.
 2. Check `dashboardOpenPending`, `dashboardOpenSucceeded`, `dashboardOpenError`, and `dashboardOpenAttempts`.
 3. Run `debug_session.py open-dashboard --ready-file <READY_FILE>`, then re-query state. The command skips reopening when the frontend is already recorded, retries platform and Python browser openers, waits briefly for the page-load callback, and always returns `dashboardUrl`.
-4. Make no more than two fallback attempts for one session. Record and surface both opener failures and accepted requests that never produced a frontend callback.
+4. Make no more than two manual fallback attempts for one session. Record and surface both opener failures and accepted requests that never produced a frontend callback.
 5. If the page still does not load, surface the exact URL and errors. Do not restart a healthy collector merely to open the page.
 6. Continue evidence collection through the CLI and NDJSON file.
 
-Dashboard state must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence.
+Dashboard state must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Use `--no-open-dashboard` instead of relying on opener failure when the session is intentionally headless.
 
 ## CORS and security
 
@@ -360,14 +364,17 @@ The collector binds to `127.0.0.1` by default.
 
 When reproduction is user-owned, present:
 
-1. A concise hypothesis-family summary
-2. Probe count, shared-probe count, mapped-hypothesis coverage, causal-boundary coverage, and volume controls
-3. Residual ambiguities
-4. Exact reproduction steps
+1. A dashboard line formatted as `Dashboard: <status> — <dashboardUrl-or-unavailable> (frontend confirmed: <true|false|unknown>)`; append ` — error: <error>` only when non-empty
+2. A concise hypothesis-family summary
+3. Probe count, shared-probe count, mapped-hypothesis coverage, causal-boundary coverage, and volume controls
+4. Residual ambiguities
+5. Exact reproduction steps
+
+For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as item 1. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
 
 Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. When reproduction is agent-owned, execute it directly after the runtime gate instead of asking the user.
 
-Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow.
+Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream.
 
 ## Authorized root-cause repair verification
 

@@ -2,3 +2,6 @@ interface:
   display_name: "Multitask Coordinator"
   short_description: "Maximize useful subagent parallelism"
   default_prompt: "Use $multitask-coordinator to decompose this task, dispatch the maximum useful set of non-overlapping subagents, keep healthy workers running, and integrate verified results."
+
+policy:
+  allow_implicit_invocation: false

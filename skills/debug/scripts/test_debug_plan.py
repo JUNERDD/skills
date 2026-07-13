@@ -104,6 +104,32 @@ def valid_plan() -> dict:
     }
 
 
+def valid_observation_checkpoint_plan() -> dict:
+    plan = valid_plan()
+    plan["run"]["completion"] = {
+        "mode": "observation-checkpoint",
+        "condition": "Stop after the stale commit is observed or after the bounded 30-second window.",
+    }
+    plan["probes"][-1] = {
+        "probeId": "search.observation-checkpoint",
+        "location": "src/search.ts:80",
+        "event": "observation checkpoint reached",
+        "role": "observation-checkpoint",
+        "boundaryIds": [],
+        "hypothesisIds": [],
+        "expectedEvents": ["Exactly once when run.completion.condition is met."],
+        "volumeControl": {"strategy": "required-sentinel", "estimatedEvents": 1},
+        "dataFields": [
+            "observationWindowId",
+            "checkpointReason",
+            "businessStreamState",
+            "observedEventCount",
+        ],
+        "redactions": [],
+    }
+    return plan
+
+
 class DebugPlanTests(unittest.TestCase):
     def run_cli(self, plan: dict, *extra: str) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -193,6 +219,46 @@ class DebugPlanTests(unittest.TestCase):
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("flow-terminal sentinel", errors)
 
+    def test_observation_checkpoint_can_close_a_long_lived_run(self) -> None:
+        result = self.run_cli(valid_observation_checkpoint_plan())
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["counts"]["flowTerminalProbes"], 0)
+        self.assertEqual(report["counts"]["observationCheckpointProbes"], 1)
+
+    def test_checkpoint_does_not_replace_terminal_without_explicit_completion_mode(self) -> None:
+        plan = valid_observation_checkpoint_plan()
+        del plan["run"]["completion"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("flow-terminal sentinel", errors)
+
+    def test_observation_checkpoint_requires_condition_and_probe(self) -> None:
+        plan = valid_observation_checkpoint_plan()
+        plan["run"]["completion"]["condition"] = ""
+        plan["probes"] = [
+            probe for probe in plan["probes"] if probe["role"] != "observation-checkpoint"
+        ]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("run.completion.condition", errors)
+        self.assertIn("observation-checkpoint sentinel", errors)
+
+    def test_completion_shape_and_mode_are_validated(self) -> None:
+        plan = valid_plan()
+        plan["run"]["completion"] = "until done"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("run.completion: must be an object", result.stdout)
+
+        plan = valid_plan()
+        plan["run"]["completion"] = {"mode": "stream-never-ends"}
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("run.completion.mode: must be one of", result.stdout)
+
     def test_unpassed_coverage_gate_is_rejected(self) -> None:
         plan = valid_plan()
         plan["coverage"]["privacyReviewed"] = False
@@ -216,6 +282,7 @@ class DebugPlanTests(unittest.TestCase):
         self.assertIn("# Debug Plan Validation", result.stdout)
         self.assertIn("Result: **PASS**", result.stdout)
         self.assertIn("| Hypotheses | 1 |", result.stdout)
+        self.assertIn("| Observation-checkpoint probes | 0 |", result.stdout)
         self.assertIn("## Errors", result.stdout)
 
     def test_malformed_json_is_a_format_error(self) -> None:

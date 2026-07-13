@@ -24,6 +24,8 @@ async function testNoEventCountCapAndSingleDrainRequest() {
   let accepted = 0
   const keepaliveValues = []
   const bodyByteLengths = []
+  const transportIds = new Set()
+  const transportSequences = []
   const configuredFrameBytes = 16 * 1024
 
   const fetchImpl = async (_url, init) => {
@@ -32,6 +34,10 @@ async function testNoEventCountCapAndSingleDrainRequest() {
     keepaliveValues.push(init.keepalive)
     bodyByteLengths.push(new TextEncoder().encode(init.body).byteLength)
     const payload = JSON.parse(init.body)
+    for (const event of payload.events) {
+      transportIds.add(event.transportId)
+      transportSequences.push(event.transportSequence)
+    }
     await delay(1)
     accepted += payload.events.length
     active -= 1
@@ -58,6 +64,11 @@ async function testNoEventCountCapAndSingleDrainRequest() {
 
   assert.equal(await transport.flush({ timeoutMs: 20_000 }), true)
   assert.equal(accepted, eventCount)
+  assert.equal(transportIds.size, eventCount)
+  assert.deepEqual(
+    transportSequences,
+    Array.from({ length: eventCount }, (_, index) => index + 1),
+  )
   assert.equal(maxActive, 1)
   assert.ok(keepaliveValues.every((value) => value === false))
   assert.ok(bodyByteLengths.every((value) => value <= configuredFrameBytes))
@@ -65,9 +76,68 @@ async function testNoEventCountCapAndSingleDrainRequest() {
   assert.equal(status.eventCountLimited, false)
   assert.equal(status.deliveryScope, 'page_lifetime')
   assert.equal(status.reloadSafe, false)
+  assert.equal(status.enqueuedEventWatermark, eventCount)
+  assert.equal(status.acknowledgedEventWatermark, eventCount)
   assert.equal(transport.queue.count(), 0)
   assert.equal(transport.queue.bytes(), 0)
   transport.stop()
+}
+
+async function testCheckpointAcknowledgesSnapshotWhileTheStreamContinues() {
+  let requestCount = 0
+  let releaseFirstRequest
+  let markSecondRequestStarted
+  const firstRequestGate = new Promise((resolve) => {
+    releaseFirstRequest = resolve
+  })
+  const secondRequestStarted = new Promise((resolve) => {
+    markSecondRequestStarted = resolve
+  })
+
+  const fetchImpl = async (_url, init) => {
+    requestCount += 1
+    const payload = JSON.parse(init.body)
+    if (requestCount === 1) {
+      await firstRequestGate
+      return acceptedResponse(payload.events.length, { batchId: payload.batchId })
+    }
+    markSecondRequestStarted()
+    return new Promise((resolve, reject) => {
+      void resolve
+      init.signal.addEventListener('abort', () => {
+        reject(init.signal.reason || new Error('aborted'))
+      }, { once: true })
+    })
+  }
+
+  const transport = createBrowserDebugTransport({
+    batchEndpoint: 'http://127.0.0.1:43125/ingest/batch',
+    sessionId: 'transport-checkpoint-test',
+    nativeFetch: fetchImpl,
+    requestTimeoutMs: 5_000,
+  })
+
+  await transport.record({ probeId: 'stream.message', event: 'message', sequence: 1 })
+  while (requestCount < 1) await delay(1)
+
+  const checkpointPromise = transport.checkpoint({ timeoutMs: 2_000 })
+  await transport.record({ probeId: 'stream.message', event: 'message', sequence: 2 })
+  releaseFirstRequest()
+
+  const checkpoint = await checkpointPromise
+  assert.equal(checkpoint.complete, true)
+  assert.equal(checkpoint.targetEventWatermark, 1)
+  assert.ok(checkpoint.acknowledgedEventWatermark >= checkpoint.targetEventWatermark)
+
+  await secondRequestStarted
+  const liveStatus = await transport.getStatus()
+  assert.equal(liveStatus.enqueuedEventWatermark, 2)
+  assert.equal(liveStatus.acknowledgedEventWatermark, 1)
+  assert.equal(liveStatus.queuedEvents, 1)
+  assert.equal(liveStatus.inFlightRequests, 1)
+
+  transport.stop()
+  await delay(1)
 }
 
 async function testHungRequestIsAbortedAndRetriedWithoutDroppingEvents() {
@@ -241,10 +311,14 @@ async function testRecordSafeContainsSerializationAndSizeFailures() {
 
   const status = await transport.getStatus()
   assert.equal(status.rejectedEvents, 2)
+  assert.equal(status.continuityBroken, true)
   assert.equal(status.queuedEvents, 0)
   assert.equal(networkCalls, 0)
   assert.ok(errors.some((item) => item.reason === 'serialization_failed'))
   assert.ok(errors.some((item) => item.eventBytes > item.maxEventBytes))
+  const checkpoint = await transport.checkpoint({ timeoutMs: 100 })
+  assert.equal(checkpoint.watermarkAcknowledged, true)
+  assert.equal(checkpoint.complete, false)
   transport.stop()
 }
 
@@ -577,6 +651,7 @@ async function testTransportUnwrapsAnExistingFetchInstrumentationWrapper() {
 }
 
 await testNoEventCountCapAndSingleDrainRequest()
+await testCheckpointAcknowledgesSnapshotWhileTheStreamContinues()
 await testHungRequestIsAbortedAndRetriedWithoutDroppingEvents()
 await testMemoryQueueFramesAndDeletesOnlyAcknowledgedPrefix()
 await testRecordSerializesEachEventOnce()
@@ -590,4 +665,4 @@ await testFetchFlowContextFailuresFallBackSilently()
 await testFetchRequestMappingCannotThrowIntoTheProductPath()
 await testLegacyTransportRecordRejectionsAreContained()
 await testTransportUnwrapsAnExistingFetchInstrumentationWrapper()
-console.log('browser debug transport: 14 tests passed')
+console.log('browser debug transport: 15 tests passed')

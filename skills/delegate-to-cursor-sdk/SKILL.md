@@ -19,7 +19,7 @@ Choose the lightest delegation path that can produce a safe, bounded, reviewable
 - **Planning subagent**: produce a read-only plan for one coherent workstream. The upstream agent must review and edit the plan before Cursor receives it.
 - **Workstream orchestrator subagent**: own one bounded workstream in hierarchical delegation. It may create a local plan, dispatch Cursor SDK if authorized, review local output, run limited follow-up loops, and report evidence. It does not own global architecture, cross-workstream interfaces, merge, deployment, or user-facing acceptance.
 - **Cursor SDK agent**: execute the approved task packet using `@cursor/sdk`. Cursor may inspect, propose, apply changes, or launch bounded internal subagents according to the packet, but it must not broaden scope or become the acceptance reviewer.
-- **Cursor internal subagent**: a Cursor task/tool child agent launched inside one Cursor SDK run. It works under Cursor's packet, uses the default Cursor SDK model selection unless explicitly overridden by the user, and returns evidence to Cursor.
+- **Cursor internal subagent**: a Cursor task/tool child agent launched inside one Cursor SDK run. It works under Cursor's packet and returns evidence to Cursor. In `@cursor/sdk` 1.0.23 the task/Agent tool accepts only a string model request, so an internal subagent can request the default label but cannot prove the exact High effort parameter.
 
 ## Routing Modes
 
@@ -36,7 +36,7 @@ Workspace strategy: <same branch | new branch | worktree per workstream | no app
 Cursor SDK runtime: <local | cloud>
 Cursor mode: <inspect-only | proposal | apply>
 Cursor SDK conversation mode: <plan | agent>
-Cursor model: <composer-2.5 fast=true unless the user explicitly directed Cursor to use a different model>
+Cursor model: <Grok 4.5 High with speed left to Cursor's default unless the user explicitly directed Cursor to use a different model>
 Cursor internal subagents: <disabled | read-only-analysis | verification | bounded-implementation>
 Authorization: <authorized | needs Cursor API-key authorization>
 Live monitor: <none | status.json path | log-dir/latest>
@@ -56,10 +56,10 @@ Choose:
 3. **Prepare authority**:
    - Direct mode: copy `references/task-direct.md` into a task packet outside the skill directory and fill `## Master Direct Implementation Instructions`.
    - Planned mode: brief the planning subagent with `references/planning-contract.md`, review the plan, then copy `references/task-planned.md` into a task packet outside the skill directory and fill `## Approved Upstream Plan`.
-   - Hierarchical mode: define workstream contracts with `references/workstream-contract.md`; each authorized workstream copies `references/task-local.md` into a task packet outside the skill directory and fills `## Approved Local Plan`.
+   - Hierarchical mode: use `references/workstream-contract.md` to build a dependency-aware coordination ledger, compute effective Cursor concurrency, and define workstream contracts; each ready authorized workstream copies `references/task-local.md` into a task packet outside the skill directory and fills `## Approved Local Plan`.
    - User-provided plan: accept or edit the plan before Cursor receives a task packet copied from `references/task-user-plan.md` with `## User-Provided Approved Plan`.
    - Follow-up loop: copy `references/task-follow-up.md` into a new bounded follow-up task packet only for specific findings from upstream review.
-4. **Resolve Cursor SDK model**: use the default model alias `composer-2.5-fast`, implemented by the wrapper as SDK model selection `{ id: "composer-2.5", params: [{ id: "fast", value: "true" }] }`. Pass a different `--model` or `--model-param` only when the user explicitly directed Cursor to use that model; include `--user-authorized-model` and `--override-reason`.
+4. **Resolve Cursor SDK model**: use the wrapper's logical default profile `grok-4.5-high`, meaning Grok 4.5 with High reasoning while speed remains Cursor's default. The wrapper resolves the current canonical id and one unambiguous High effort parameter through `Cursor.models.list()`, sends only that High parameter, and omits every speed parameter. It fails closed rather than guessing the High parameter or falling back to Auto. Pass a different `--model` and any accompanying `--model-param` only when the user explicitly directed Cursor to use that model; include `--user-authorized-model` and `--override-reason`.
 5. **Resolve authorization**: before dispatch, read `references/cursor-sdk-authorization.md`. Prefer `CURSOR_API_KEY` in the local process environment. If the key is missing or rejected, the agent must actively request authorization using the reference workflow; do not ask the user to paste the key into chat, task packets, logs, or prompts.
 6. **Dispatch Cursor SDK**: use inspect-only, proposal, or apply mode according to the routing decision. Use `scripts/cursor_delegate.mjs`; install dependencies with `npm install` from the skill directory if `@cursor/sdk` is missing.
 7. **Monitor when useful**: when live visibility helps, read `references/live-monitoring.md` and monitor `status.json` rather than raw events by default.
@@ -87,7 +87,9 @@ CURSOR_API_KEY="$CURSOR_API_KEY" node scripts/cursor_delegate.mjs \
   --apply
 ```
 
-The wrapper defaults to local Cursor SDK runtime, SDK conversation mode `plan` for inspect/proposal and `agent` for apply, local sandbox enabled, project setting source enabled, and model alias `composer-2.5-fast` mapped to SDK `composer-2.5` with `fast=true`.
+The wrapper defaults to local Cursor SDK runtime, SDK conversation mode `plan` for inspect/proposal and `agent` for apply, local sandbox enabled, project setting source enabled, and logical model profile `grok-4.5-high`. Live dispatch resolves Grok 4.5 plus its High effort parameter through the authenticated SDK model catalog and omits the speed parameter; dry-run reports the intended profile without claiming a resolved SDK selection.
+
+Keep the task packet's `## Cursor Model` section aligned with the wrapper arguments. The wrapper requires exactly one section and exactly one each of `Wrapper profile`, `Model`, and `Model params`; it rejects stale or conflicting defaults and explicit overrides whose exact id or parameters do not match the wrapper arguments. Validation ignores fenced examples and HTML comments, and rejects ambiguous raw HTML blocks or multiline inline-code spans; fence such examples explicitly.
 
 Authorization behavior:
 
@@ -98,12 +100,13 @@ Authorization behavior:
 
 Use `--runtime cloud --repo-url <repo-url[#ref]>` only when cloud execution is explicitly desired and repository access is configured for the Cursor account/team. Keep apply-mode cloud PR behavior explicit with `--auto-create-pr` rather than implicit.
 
-Wrapper runs write `status.json`, `metadata.json`, `prompt.txt`, and a `<log-dir>/latest` pointer. Read-only workspace copies are removed on process exit by default; preserving them requires `--keep-workspace-copy` plus `--override-reason`. Raw `events.ndjson` is written only with `--include-raw-events`, which requires `--override-reason`. Prefer `status.json` for low-noise live monitoring.
+Wrapper runs write `status.json`, `metadata.json`, `prompt.txt`, and a `<log-dir>/latest` pointer. Read-only workspace copies are removed on process exit by default; preserving them requires `--keep-workspace-copy` plus `--override-reason`. The wrapper refuses symlinks that escape a copy, but permission hardening remains defense in depth rather than a security boundary; keep the SDK sandbox enabled. Raw `events.ndjson` is written only with `--include-raw-events`, which requires `--override-reason`. Prefer `status.json` for low-noise live monitoring.
 
 ## Guardrails
 
 - Keep delegated context minimal, relevant, and role-specific.
-- Default every Cursor dispatch and Cursor internal subagent to `composer-2.5 fast=true` unless an explicit user Cursor-model instruction exists.
+- Resolve and verify Grok 4.5 High for every top-level Cursor dispatch unless an explicit user Cursor-model instruction exists; leave speed unspecified so Cursor applies its current default.
+- Treat an internal subagent's Grok 4.5 High label as a request, not a verified parameter selection. Keep internal subagents `disabled` when exact High execution is acceptance-critical.
 - Do not pass secrets, private keys, tokens, production credentials, or unrelated proprietary context to Cursor SDK or subagents.
 - Do not ask the user to paste a Cursor API key into chat. Request environment authorization or use the wrapper's hidden local prompt.
 - Allow Cursor internal subagents only when the task packet includes `## Cursor Internal Subagent Policy`; otherwise keep Cursor as a single executor.
@@ -119,13 +122,13 @@ Wrapper runs write `status.json`, `metadata.json`, `prompt.txt`, and a `<log-dir
 - `references/routing-policy.md`: mode selection rules, Cursor SDK runtime/model policy, support-subagent brief, escalation and downgrade rules.
 - `references/cursor-sdk-authorization.md`: API-key authorization workflow, user request templates, and secret-handling rules.
 - `references/planning-contract.md`: planning-subagent brief and upstream plan-review format.
-- `references/workstream-contract.md`: hierarchical workstream contract and local completion report.
+- `references/workstream-contract.md`: hierarchical coordination ledger, scheduling rules, workstream contract, and local completion report.
 - `references/task-direct.md`: direct Cursor SDK task packet template.
 - `references/task-planned.md`: reviewed upstream plan task packet template.
 - `references/task-local.md`: local workstream task packet template.
 - `references/task-user-plan.md`: user-provided plan task packet template.
 - `references/task-follow-up.md`: bounded follow-up task packet template.
-- `references/cursor-internal-subagents.md`: Cursor internal task/subagent policy, model defaults, review evidence, and packet block.
+- `references/cursor-internal-subagents.md`: Cursor internal task/subagent policy, requested-model limits, review evidence, and packet block.
 - `references/review-checklist.md`: routing, plan, workstream, Cursor, follow-up, authorization, and acceptance gates.
 - `references/live-monitoring.md`: live Cursor SDK run status artifacts, usage, and limits.
 - `scripts/cursor_delegate.mjs`: optional Cursor SDK wrapper with authority-heading checks, placeholder checks, git safety checks, proactive API-key authorization, sanitized status output, and run metadata.
@@ -140,7 +143,7 @@ Report:
 - subagents used, if any;
 - Cursor SDK runtime and mode: inspect-only, proposal, or apply;
 - Cursor SDK conversation mode;
-- Cursor model and internal subagent model used;
+- top-level resolved Cursor model and verification status, plus internal subagent model requested or observed without overstating parameter verification;
 - authorization state and whether user action was needed;
 - Cursor internal subagents used, if any;
 - changes made or downstream findings;
