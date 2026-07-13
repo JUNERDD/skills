@@ -435,6 +435,36 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
 
+    def test_message_less_event_remains_valid_for_dashboard_summary_fallback(self) -> None:
+        event = {
+            'runId': 'post-repair',
+            'probeId': 'flow.terminal',
+            'location': 'src/app.ts:12',
+            'event': 'flow_terminal',
+            'timestamp': 1_783_933_652_000,
+        }
+
+        status, payload = self._request_json('POST', '/ingest', payload=event)
+        self.assertEqual(status, 202)
+        self.assertTrue(payload['ok'])
+
+        logs_status, logs_payload = self._request_json('GET', '/api/logs')
+        self.assertEqual(logs_status, 200)
+        entry = logs_payload['entries'][0]
+        self.assertEqual(entry['message'], '')
+        self.assertEqual(entry['event'], 'flow_terminal')
+        self.assertEqual(entry['probeId'], 'flow.terminal')
+
+        detail_status, detail_payload = self._request_json(
+            'GET',
+            f"/api/logs/detail?entryIndex={entry['entryIndex']}",
+        )
+        self.assertEqual(detail_status, 200)
+        raw_payload = detail_payload['entry']['payload']
+        self.assertNotIn('message', raw_payload)
+        self.assertEqual(raw_payload['event'], event['event'])
+        self.assertEqual(raw_payload['probeId'], event['probeId'])
+
     def test_batch_ingest_has_no_event_count_cap(self) -> None:
         events = [
             {

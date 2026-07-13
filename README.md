@@ -37,7 +37,7 @@ If you are deciding what to install, start here:
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with delegation-first parallel subagent scheduling
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
-- [`debug`](#debug) - maximize root-cause evidence from one failing reproduction with a validated coverage plan
+- [`debug`](#debug) - prove, repair, and separately verify runtime bugs with a validated coverage plan
 - [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
@@ -363,7 +363,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides coverage-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, and proves the origin-to-symptom chain before any authorized repair. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
+[`skills/debug/`](./skills/debug/) provides coverage-first, end-to-end runtime debugging and repair for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, proves the origin-to-symptom chain, repairs the causal mechanism, verifies the original failure contract in a separate run, and cleans up temporary instrumentation. Requests to debug, troubleshoot, fix, repair, or resolve follow this full loop unless the user explicitly asks for diagnosis-only work. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
 
 Install:
 
@@ -385,6 +385,7 @@ Key entry points:
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
 - Lifecycle regression tests: [`skills/debug/scripts/test_debug_tools.py`](./skills/debug/scripts/test_debug_tools.py)
 - Coverage-plan regression tests: [`skills/debug/scripts/test_debug_plan.py`](./skills/debug/scripts/test_debug_plan.py)
+- Dashboard summary regression tests: [`skills/debug/scripts/test_dashboard_utils.mjs`](./skills/debug/scripts/test_dashboard_utils.mjs)
 - Browser transport regression tests: [`skills/debug/scripts/test_browser_debug_transport.mjs`](./skills/debug/scripts/test_browser_debug_transport.mjs)
 - Optional runtime metadata: [`skills/debug/agents/openai.yaml`](./skills/debug/agents/openai.yaml)
 
@@ -392,17 +393,17 @@ Key entry points:
 
 The `debug` skill is designed to prevent speculative fixes by forcing a prove-it loop:
 
-1. Confirm diagnosis/repair scope and choose an agent-, user-, or external-owned reproduction.
+1. Resolve scope without redundant approval: debug/fix requests run through repair and verification, while explicitly diagnosis-only requests stop before behavior changes; then choose an agent-, user-, or external-owned reproduction.
 2. Define the failure contract and terminal or long-lived observation condition, inspect the execution path, and build a causal-boundary map.
 3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
 4. Validate one coverage-plan file with a flow-start plus configured terminal or observation-checkpoint sentinel, then use it for location sync and expected-probe analysis.
 5. Start or attach logging; browser-capable local startup automatically attempts to open and confirm the dashboard, while explicitly headless sessions opt out.
 6. Pass compile, observer-cost, privacy, correlation, transport-continuity, and collector gates; continuous streams prove an acknowledged event prefix without waiting for the live queue to become empty. Then run `debug_session.py dashboard-status` and copy its normalized status/URL line before every user-owned reproduction.
 7. Collect one clean terminal run or bounded observation window, summarize source and transport sequence continuity by run and correlation hierarchy, and classify every hypothesis.
-8. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval.
-9. For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; when repair is authorized, repair the causal mechanism, verify separately, and then clean owned artifacts.
+8. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval; keep one evolving ledger through every material transition.
+9. For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; otherwise treat the root-cause result as intermediate, repair the causal mechanism immediately, verify separately, and then clean owned artifacts.
 
-This keeps the skill focused on evidence, not guesswork.
+This keeps the skill focused on evidence while carrying normal debug requests through a verified repair instead of stopping at a diagnosis.
 
 ### `debug` Architecture
 
@@ -429,11 +430,13 @@ flowchart LR
 - Evidence-first debugging instead of inspection-only reasoning
 - One coverage-first workflow whose breadth scales with reproduction cost and observer risk
 - One machine-validated coverage plan shared by location sync and expected-probe analysis
-- High-information instrumentation with observer-cost controls and explicit cleanup after terminal diagnosis or repair verification
+- High-information instrumentation with observer-cost controls and explicit cleanup after diagnosis-only completion or repair verification
 - Parent-flow, operation, request, child-correlation, and run-aware log analysis
-- Incremental root-cause ledger entries that prevent repeated investigation loops
+- One evolving root-cause ledger across evidence collection, repair, verification, and cleanup
 - Local collector bootstrap when the host does not already provide logging
 - Automatic local dashboard startup, bounded confirmation recovery, and a deterministic `dashboard-status` line in every user-owned reproduction handoff
+- Scannable Markdown handoffs for user-owned reproduction, evidence analysis, and repair verification, with blank-line-separated headings and lists
+- Readable dashboard summaries that prefer optional human messages and fall back to structured event names or probe IDs without rewriting raw evidence
 - Optional page-local browser transport with non-throwing probes, parent-flow context, unlimited event-count capture, idempotent acknowledged byte frames, live high-watermark checkpoints, and explicit navigation/reload evidence boundaries
 - Explicit prohibition on app-local proxy routes unless direct browser-to-collector delivery is proven blocked
 
@@ -454,7 +457,7 @@ If your runtime ignores [`skills/debug/agents/openai.yaml`](./skills/debug/agent
 
 ### `debug` Collector
 
-The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. A batch is only a finite throughput frame: events are queued immediately, retried with the same ID, and deleted only after acknowledgement. Continuous producers use an acknowledged-prefix checkpoint, while a queue-empty flush is reserved for after production stops; a Network-panel `Pending` row alone does not prove loss or deadlock. Browser-capable local startup automatically attempts to open and confirm the dashboard after HTTP readiness, with at most two fallback attempts. Use `--no-open-dashboard` only for explicitly headless, CI, container-only, or remote operation; a failed open never blocks evidence collection. Before every user-owned reproduction, the agent refreshes session state and shows the dashboard status and current URL, even when opening was confirmed, disabled, failed, or unavailable.
+The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. The log stream prefers the optional human-readable `message`, then falls back to the required structured `event`, then its `probeId`, so valid compact events remain readable without mutating the NDJSON evidence. A batch is only a finite throughput frame: events are queued immediately, retried with the same ID, and deleted only after acknowledgement. Continuous producers use an acknowledged-prefix checkpoint, while a queue-empty flush is reserved for after production stops; a Network-panel `Pending` row alone does not prove loss or deadlock. Browser-capable local startup automatically attempts to open and confirm the dashboard after HTTP readiness, with at most two fallback attempts. Use `--no-open-dashboard` only for explicitly headless, CI, container-only, or remote operation; a failed open never blocks evidence collection. Before every user-owned reproduction, the agent refreshes session state and shows the dashboard status and current URL, even when opening was confirmed, disabled, failed, or unavailable.
 
 For frontend and browser debugging, the intended transport is direct client-to-collector HTTP posting. The collector already handles CORS and preflight, so the skill should not create temporary Next.js API routes or other app-local proxy layers unless direct browser delivery has been proven blocked in the current host.
 
@@ -727,6 +730,7 @@ When you add more skills later:
     │       ├── debug_session.py
     │       ├── summarize_debug_log.py
     │       ├── test_browser_debug_transport.mjs
+    │       ├── test_dashboard_utils.mjs
     │       ├── test_debug_plan.py
     │       ├── test_debug_tools.py
     │       └── local_log_collector/

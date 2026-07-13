@@ -584,12 +584,12 @@ export const SKILLS: SkillDetail[] = [
   {
     slug: "debug",
     title: "debug",
-    category: "Runtime debugging",
-    blurb: "Capture gap-auditable root-cause evidence from failing runs and live streams.",
+    category: "Runtime debugging & repair",
+    blurb: "Prove, repair, and verify runtime bugs with gap-auditable evidence.",
     lead:
-      "A coverage-first debugging system with a machine-validated hypothesis-and-probe plan, loss-auditable runtime evidence, correlation-aware analysis, and first-class long-lived browser-stream checkpoints.",
+      "A coverage-first debugging and repair system with a machine-validated hypothesis-and-probe plan, loss-auditable runtime evidence, an evolving investigation ledger, and separate post-repair verification.",
     overview:
-      "Use this skill when code reading is not enough and the first failing reproduction or bounded live observation window should carry as much discriminating evidence as safely possible. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file with a terminal or observation-checkpoint completion mode, and reuses that plan for collector location sync and expected-probe analysis. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts. Required real-time events are never count-capped or sampled: the page transport assigns monotonic IDs, retains events until idempotent acknowledgement, and confirms a gap-free prefix checkpoint while later events continue. Correlated NDJSON is summarized by run, parent flow, operation, request, child correlation, and transport continuity before raw events are inspected. Diagnosis stops before behavior changes unless repair is authorized; authorized repairs are verified in a separate run before temporary instrumentation is removed.",
+      "Use this skill when code reading is not enough and a runtime bug should be followed from failure contract to verified repair. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file with a terminal or observation-checkpoint completion mode, and reuses that plan for collector location sync and expected-probe analysis. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts. The dashboard log stream prefers an optional human-readable message and falls back to the structured event name or probe ID, keeping compact events readable without rewriting raw evidence. Required real-time events are never count-capped or sampled: the page transport assigns monotonic IDs, retains events until idempotent acknowledgement, and confirms a gap-free prefix checkpoint while later events continue. Correlated NDJSON is summarized by run, parent flow, operation, request, child correlation, and transport continuity before raw events are inspected. Requests to debug, troubleshoot, fix, repair, or resolve continue through the evidence-proven repair, a separate verification run, ledger completion, and cleanup unless the user explicitly requests diagnosis-only work.",
     bestFor: [
       "Expensive, flaky, timing-sensitive, destructive, environment-specific, or user-only reproductions.",
       "Runtime failures that are easy to guess about but hard to prove across causal boundaries.",
@@ -597,23 +597,25 @@ export const SKILLS: SkillDetail[] = [
       "Concurrent or distributed flows that need parent-flow, operation, request, attempt, and ordering evidence.",
       "Browser investigations that conditionally require complete page-lifetime application-fetch capture.",
       "SSE, WebSocket, subscription, long-poll, or ReadableStream failures where the business flow intentionally remains open.",
+      "End-to-end bug-fix requests that must not stop at a root-cause report or unverified recommendation.",
     ],
     workflow: [
-      "Confirm diagnosis-versus-repair scope, choose the reproduction owner, define the failure contract plus terminal or bounded observation condition, and inspect the relevant execution path.",
+      "Resolve scope without redundant approval: debug/fix requests include repair and verification unless the user explicitly limits the work to diagnosis; then choose the reproduction owner, define the failure contract plus terminal or bounded observation condition, and inspect the relevant execution path.",
       "Build a causal-boundary map and enumerate code-grounded material hypotheses with both confirming and rejecting evidence.",
       "Create and validate one coverage-plan file whose boundaries, hypotheses, probes, observer controls, privacy checks, and residual ambiguities agree.",
       "Start or attach a logging session; browser-capable local startup automatically attempts to open and confirm the dashboard, while explicitly headless, CI, container-only, or remote sessions opt out.",
       "Instrument shared causal cuts and invariants, pass compile, collector, expected-probe, and lossless transport-prefix gates, then copy the normalized `dashboard-status` line before every user-owned reproduction.",
       "Collect one clean terminal run or bounded observation window and summarize evidence by run, parent flow, operation, request, child correlation, source sequence, and transport sequence before reading raw volume.",
-      "Prove origin-to-symptom propagation or add only probes for the smallest unresolved causal interval.",
-      "For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; when repair is authorized, repair the proven mechanism, verify separately, and then clean owned artifacts.",
+      "Prove origin-to-symptom propagation or add only probes for the smallest unresolved causal interval, updating one evolving investigation ledger throughout.",
+      "For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; otherwise treat diagnosis as intermediate, repair the proven mechanism immediately, verify separately, and then clean owned artifacts.",
     ],
     outputs: [
       "A validated machine-readable coverage plan shared by location sync and expected-probe analysis.",
       "A cited origin-to-symptom proof or the smallest explicitly unresolved causal interval.",
       "For continuous streams, an acknowledged high-watermark checkpoint and source/transport gap report that closes the evidence window without claiming the business stream ended.",
-      "An optional incremental investigation ledger for durable or multi-run work.",
-      "When authorized, a causally sufficient repair backed by a separate verification run and deterministic cleanup.",
+      "One evolving investigation ledger for every repair-scoped, user-owned, multi-run, or durable investigation.",
+      "Scannable Markdown handoffs for user-owned reproduction, evidence analysis, and repair verification, with blank-line-separated headings and lists.",
+      "For repair-scoped work, a causally sufficient code change backed by a separate verification run and deterministic cleanup.",
     ],
     guardrails: [
       "Do not claim a root cause without evidence for the originating fault, its propagation, and the reported symptom.",
@@ -629,7 +631,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Workflow",
         path: "skills/debug/SKILL.md",
-        description: "Coverage-first debugging sequence, authority boundaries, and cleanup requirements.",
+        description: "Coverage-first debug-and-repair sequence, completion scope, ledger, and cleanup requirements.",
       },
       {
         label: "Coverage planning",
@@ -685,6 +687,11 @@ export const SKILLS: SkillDetail[] = [
         label: "Coverage-plan tests",
         path: "skills/debug/scripts/test_debug_plan.py",
         description: "Schema, mapping, sentinel, and gate validation regressions.",
+      },
+      {
+        label: "Dashboard summary tests",
+        path: "skills/debug/scripts/test_dashboard_utils.mjs",
+        description: "Message, event-name, probe-ID, whitespace, and empty-state summary regressions.",
       },
       {
         label: "Browser transport tests",

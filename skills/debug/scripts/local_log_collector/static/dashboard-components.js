@@ -4,6 +4,7 @@ import {
   cx,
   formatClock,
   formatDateTime,
+  getLogEntrySummary,
   METRICS,
   STATUS_BG,
   STATUS_COLOR,
@@ -240,9 +241,9 @@ function LogRow({ row, entry, totalEntries, selectedEntryId, onSelect }) {
           ` : null}
         </div>
 
-        <!-- Message -->
+        <!-- Human message or structured-event summary -->
         <span className="text-[11px] sm:text-xs text-pale truncate min-w-0 flex-1 leading-tight">
-          ${entry.message || 'No message'}
+          ${getLogEntrySummary(entry)}
         </span>
 
         <!-- Mobile: location -->

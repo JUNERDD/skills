@@ -1,6 +1,6 @@
 # Investigation and Root-Cause Ledger
 
-Use one evolving Markdown ledger when a debug session spans a user handoff, context compaction, multiple runs, an expensive reproduction, a repair, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for boundaries, hypotheses, probes, and coverage.
+Use one evolving Markdown ledger whenever repair is in scope or a debug session spans a user handoff, context compaction, multiple runs, an expensive reproduction, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for boundaries, hypotheses, probes, and coverage. Carry the same ledger through evidence collection, repair, verification, and cleanup; do not create a diagnosis-only stopping point for repair-scoped work.
 
 ## Table of contents
 
@@ -13,7 +13,7 @@ Use one evolving Markdown ledger when a debug session spans a user handoff, cont
 
 ## Creation and placement
 
-Create the ledger after the initial coverage plan validates and before the first expensive or user-owned reproduction. For a short agent-owned diagnosis that remains within one turn and does not require durable evidence, the validated plan and final evidence summary may be sufficient.
+Create the ledger after the initial coverage plan validates and before the first repair, expensive or user-owned reproduction, or multi-run transition. For short, agent-owned, diagnosis-only work that remains within one turn and does not require durable evidence, the validated plan and final evidence summary may be sufficient.
 
 Prefer this order:
 
@@ -32,7 +32,7 @@ Read the current ledger before every update. Append one investigation row for ea
 - targeted blind-spot run;
 - root-cause change;
 - diagnosis-only terminal handoff;
-- authorized repair decision;
+- in-scope repair decision;
 - failed verification;
 - successful verification;
 - cleanup or retention decision.
@@ -48,7 +48,7 @@ Use these document statuses:
 - `Awaiting reproduction`
 - `Analyzing`
 - `Confirmed root cause`
-- `Diagnosis complete; repair not authorized`
+- `Diagnosis complete; repair not in scope`
 - `Repair applied; awaiting verification`
 - `Root cause repaired and verified`
 - `Still failing`
@@ -75,7 +75,7 @@ Require evidence for all three links:
 
 Cite run, parent flow, operation, child correlation or request, sequence/time, probe ID, location, and bounded values. Do not promote a hypothesis from correlation alone.
 
-For an authorized repair, additionally record:
+For an in-scope repair, additionally record:
 
 - the owning boundary and violated invariant;
 - why the repair eliminates the causal mechanism;
@@ -151,7 +151,7 @@ Causal chain:
 
 ## Repair and Verification
 
-- Repair authorization: `[not requested | authorized]`
+- Resolution scope: `[diagnosis-only | repair in scope]`
 - Repair: `[file/function/behavior or Not applied]`
 - Mechanism eliminated: `[mechanism]`
 - Invariant restored: `[invariant]`

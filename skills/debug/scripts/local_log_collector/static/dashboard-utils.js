@@ -53,6 +53,13 @@ export function cx(...values) {
   return values.filter(Boolean).join(' ')
 }
 
+export function getLogEntrySummary(entry) {
+  for (const value of [entry?.message, entry?.event, entry?.probeId]) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return 'No message'
+}
+
 export function formatClock(timestamp) {
   if (!timestamp) return '--:--:--'
   return new Intl.DateTimeFormat(undefined, {

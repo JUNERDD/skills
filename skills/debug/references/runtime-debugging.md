@@ -21,7 +21,7 @@ Use this reference for exact collector, instrumentation, evidence-reading, and c
 - Dashboard startup and recovery
 - CORS and security
 - Reproduction handoff
-- Root-cause repair verification
+- In-scope root-cause repair verification
 - Final cleanup
 
 ## Session selection
@@ -247,6 +247,8 @@ Required for planned probes:
 - `event`
 - `timestamp`
 
+Treat `message` as optional human-readable context rather than evidence identity. In the dashboard log stream, show the first non-empty value from `message`, `event`, and `probeId`; do not synthesize a `message` into the stored payload, and show `No message` only when all three are absent.
+
 Required when work crosses async, concurrent, process, service, queue, persistence, or browser-lifecycle boundaries:
 
 - `parentCorrelationId` or another durable flow identifier when child operations fan out
@@ -362,23 +364,17 @@ The collector binds to `127.0.0.1` by default.
 
 ## Reproduction handoff
 
-When reproduction is user-owned, present:
+When reproduction is user-owned, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; and observer, volume, and privacy controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
 
-1. A dashboard line formatted as `Dashboard: <status> — <dashboardUrl-or-unavailable> (frontend confirmed: <true|false|unknown>)`; append ` — error: <error>` only when non-empty
-2. A concise hypothesis-family summary
-3. Probe count, shared-probe count, mapped-hypothesis coverage, causal-boundary coverage, and volume controls
-4. Residual ambiguities
-5. Exact reproduction steps
-
-For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as item 1. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
+For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as the opening paragraph. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
 
 Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. When reproduction is agent-owned, execute it directly after the runtime gate instead of asking the user.
 
 Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream.
 
-## Authorized root-cause repair verification
+## In-scope root-cause repair verification
 
-- Apply this section only when repair is authorized. Keep discriminating probes active while applying the repair.
+- Apply this section whenever repair is in scope under the completion rules in `SKILL.md`; do not wait for a second authorization after proving the cause. Keep discriminating probes active while applying the repair.
 - Eliminate the evidence-proven causal mechanism and restore its violated invariant or contract at the owning boundary.
 - Treat change size as a constraint, not the objective. After establishing causal sufficiency, choose the narrowest safe, coherent repair; include every causally necessary file or layer and exclude unrelated cleanup.
 - Do not substitute a smaller downstream guard, fallback, or coercion while the proven causal mechanism remains active.
@@ -389,7 +385,7 @@ Use one `runId` for the clean initial reproduction. Do not mix setup activity wi
 
 ## Final cleanup
 
-After a diagnosis-only evidence handoff completes, or after an authorized repair verifies:
+After a diagnosis-only evidence handoff completes, or after an in-scope repair verifies:
 
 1. Remove every temporary probe, helper, endpoint constant, header, and debug-only import.
 2. For a session owned by this invocation, sync `{"locations": []}`. For a host-provided or shared session, remove or report only this invocation's locations according to host policy; never replace shared location state with an empty set.
