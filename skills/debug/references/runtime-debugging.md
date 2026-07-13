@@ -6,21 +6,22 @@ Use this reference for exact collector, instrumentation, evidence-reading, and c
 
 - Session selection
 - Resolve Python and skill root
+- Validate the coverage plan
 - Start a local session
 - Ready-file contract
 - Session commands
 - Health, clear, and restart rules
 - Location synchronization
 - Structured log format
-- JavaScript and TypeScript template
+- Browser routing
 - Non-JavaScript guidance
 - Volume controls
 - Evidence summarization
 - Reading raw evidence
-- Optional dashboard
+- Dashboard startup and recovery
 - CORS and security
 - Reproduction handoff
-- Fix verification
+- Root-cause repair verification
 - Final cleanup
 
 ## Session selection
@@ -37,7 +38,7 @@ Only delete artifacts created by the current skill invocation. Never delete file
 
 ## Resolve Python and skill root
 
-Resolve `<SKILL_ROOT>` to the installed `debug` skill directory. Resolve Python 3 before using bundled scripts:
+Resolve `<SKILL_ROOT>` to the installed `debug` skill directory. Resolve Python 3 before validating the coverage plan or using other bundled Python scripts:
 
 ```bash
 if command -v python3 >/dev/null 2>&1; then
@@ -50,7 +51,19 @@ else
 fi
 ```
 
-If Python 3 is unavailable and no authoritative session exists, explain that evidence collection cannot start in the configured mode.
+If Python 3 is unavailable, do not claim that the bundled coverage-plan gate passed. Use a host-provided equivalent only when it validates the coverage-plan requirements. If neither validator nor an authoritative evidence session exists, explain which gate cannot start.
+
+## Validate the coverage plan
+
+Validate before adding temporary probes and again after their final locations and mappings are current:
+
+```bash
+"$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_plan.py validate \
+  <PLAN_FILE> \
+  --format markdown
+```
+
+Treat exit code `0` as a passed structural gate, `1` as plan validation failure, and `2` as an unreadable or malformed JSON artifact. Runtime checks still need to prove source locations, collector health, delivery, and observer capacity.
 
 ## Start a local session
 
@@ -62,7 +75,9 @@ Use a unique session ID. The CLI starts the collector detached, waits for the re
   --session-id "checkout-$(date +%s)"
 ```
 
-The default is headless. Add `--open-dashboard` only when the user wants the live dashboard. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. The session CLI waits for `dashboardFrontendOpenRecorded` and, when needed, makes at most two fallback open attempts. Use `--no-open-dashboard` or its `--headless` alias only for explicitly headless, CI, container-only, or remote operation. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+
+Automatic browser opening is non-fatal and never part of the evidence gate. The `start` result adds `dashboardRecovery` with `frontendConfirmed`, `fallbackAttemptCount`, `dashboardUrl`, and `error`. Preserve those values and always show the refreshed dashboard status and URL before a user-owned reproduction, including confirmed, failed, disabled, and unavailable states. `dashboardOpenSucceeded` means an opener accepted the request, while `dashboardFrontendOpenRecorded` confirms that the page loaded. Neither field proves instrumentation coverage or that a tab remains open.
 
 The CLI writes session artifacts under `<workspace>/.debug-logs/` unless `--artifact-dir` is supplied. Capture the returned `readyFile` path and use it for every later command.
 
@@ -78,12 +93,21 @@ Treat the ready file as authoritative. It includes at least:
   "batchEndpoint": "http://127.0.0.1:43125/ingest/batch",
   "dashboardUrl": "http://127.0.0.1:43125/",
   "dashboardToken": "<SESSION_TOKEN>",
+  "dashboardAutoOpenEnabled": true,
+  "dashboardOpenPending": false,
+  "dashboardOpenAttempted": true,
+  "dashboardOpenSucceeded": true,
+  "dashboardFrontendOpenRecorded": true,
   "stateUrl": "http://127.0.0.1:43125/api/state",
   "logsUrl": "http://127.0.0.1:43125/api/logs",
   "syncLocationsUrl": "http://127.0.0.1:43125/api/locations/sync",
   "clearUrl": "http://127.0.0.1:43125/api/clear",
   "shutdownUrl": "http://127.0.0.1:43125/api/shutdown",
   "healthUrl": "http://127.0.0.1:43125/health",
+  "ingestEventCountLimited": false,
+  "ingestMaxJsonBodyBytes": 4194304,
+  "ingestAcceptedEventCount": 0,
+  "indexLagBytes": 0,
   "logFile": "/workspace/.debug-logs/checkout-1733456789.ndjson",
   "locationStateFile": "/workspace/.debug-logs/checkout-1733456789.locations.json",
   "serviceLogFile": "/workspace/.debug-logs/checkout-1733456789.service.log",
@@ -96,6 +120,10 @@ Treat the ready file as authoritative. It includes at least:
 ```
 
 When the collector restarts on another port, replace stale endpoint constants in all active temporary probes before reproduction.
+
+The dashboard state response keeps high-cardinality count lists small so polling does not compete with ingestion. Read `summary.countCardinality`, `summary.countListLimit`, and `summary.countListsTruncated` when a list such as `correlationCounts` is abbreviated. This is a presentation bound only: `summary.totalEntries`, the paginated logs API, and the NDJSON evidence file still represent every accepted event.
+
+`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Continue with subsequent acknowledged frames without sampling or dropping required events. For a live producer, use the browser transport's checkpoint target and acknowledged watermarks instead of waiting for its queue to become empty; require a final empty drain only after production stops. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`; ingestion acknowledgement is intentionally independent from dashboard indexing.
 
 ## Session commands
 
@@ -110,21 +138,29 @@ Use the lifecycle CLI rather than reimplementing token handling and cleanup in s
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py state \
   --ready-file <READY_FILE>
 
+# Normalized dashboard line for a user-owned reproduction handoff
+"$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py dashboard-status \
+  --ready-file <READY_FILE>
+
 # Clear the current session log and in-memory counters
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py clear \
+  --ready-file <READY_FILE>
+
+# Retry browser opening for a healthy session and print the URL/status
+"$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py open-dashboard \
   --ready-file <READY_FILE>
 
 # Replace the complete active instrumentation-location set
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py sync-locations \
   --ready-file <READY_FILE> \
-  --locations-file <LOCATIONS_JSON>
+  --locations-file <PLAN_FILE>
 
 # Stop and remove collector-owned artifacts
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/debug_session.py stop \
   --ready-file <READY_FILE>
 ```
 
-Use `--keep-artifacts` on `stop` only when the user asks to retain raw evidence. Use `--delete-root-cause-document <PATH>` only after final verification and after updating the document's cleanup status.
+Use `--keep-artifacts` on `stop` only when the user asks to retain raw evidence. Use `--delete-root-cause-document <PATH>` only after a terminal diagnosis or successful repair verification and after updating the document's cleanup status.
 
 ## Health, clear, and restart rules
 
@@ -147,7 +183,7 @@ rg -n "http://127\\.0\\.0\\.1:[0-9]+/ingest|#region agent log|probeId" <instrume
 
 ## Location synchronization
 
-Create a JSON file containing the complete current set of temporary probe locations:
+Use the validated coverage plan as the location source whenever possible. `sync-locations` accepts its top-level `probes` array and projects only `location`, `hypothesisIds`, and `probeId`. It also accepts a direct `locations` payload for cleanup and host-provided operator input:
 
 ```json
 {
@@ -166,7 +202,7 @@ Create a JSON file containing the complete current set of temporary probe locati
 }
 ```
 
-The collector accepts and validates `location`, `hypothesisIds`, and `probeId` or `probeIds`; the location sidecar retains those mappings. Use replace semantics: send the full active set after adding, moving, or deleting probes. Sync an empty list after removing all instrumentation.
+The collector accepts and validates `location`, `hypothesisIds`, and `probeId` or `probeIds`; the location sidecar retains those mappings. Use replace semantics: send the full active set after adding, moving, or deleting probes. Sync an empty `locations` list after removing all instrumentation. Validate a coverage plan with `scripts/debug_plan.py` before syncing it.
 
 Each location must be relative to `workspaceRoot`, include a line number, resolve to an existing file, and remain inside the workspace.
 
@@ -180,6 +216,9 @@ Use one JSON object per NDJSON line:
 {
   "sessionId": "checkout-1733456789",
   "runId": "initial",
+  "parentCorrelationId": "save-flow-8f31",
+  "operationId": "save-B",
+  "requestId": "req-42",
   "correlationId": "flow-8f31",
   "sequence": 12,
   "probeId": "cart.commit.before",
@@ -199,7 +238,7 @@ Use one JSON object per NDJSON line:
 }
 ```
 
-Required for one-shot probes:
+Required for planned probes:
 
 - `runId`
 - `probeId`
@@ -208,119 +247,35 @@ Required for one-shot probes:
 - `event`
 - `timestamp`
 
-Required when concurrency or fan-out is possible:
+Required when work crosses async, concurrent, process, service, queue, persistence, or browser-lifecycle boundaries:
 
+- `parentCorrelationId` or another durable flow identifier when child operations fan out
+- `operationId` and `requestId` when those boundaries exist
 - `correlationId`
 - `sequence`
 - attempt/generation/version metadata in `data`
 
 Keep values bounded and JSON-serializable. Log serialization must not throw into product code.
 
-## JavaScript and TypeScript template
+## Browser routing
 
-Prefer one small file-local helper per runtime boundary instead of repeating a large `fetch` block at every probe. Use the endpoint, batch endpoint, and session values from the ready file. The helper below micro-batches probes emitted in the same turn, bounds each request, and never throws into product code.
-
-```ts
-// #region agent log config
-const debugEndpoint = '<ENDPOINT>'
-const debugBatchEndpoint = '<BATCH_ENDPOINT>'
-const debugSessionId = '<SESSION_ID>'
-const debugBatchSize = 20
-let debugSequence = 0
-let debugFlushScheduled = false
-const debugQueue: Array<Record<string, unknown>> = []
-const scheduleDebugFlush = typeof queueMicrotask === 'function'
-  ? queueMicrotask
-  : (callback: () => void) => { void Promise.resolve().then(callback) }
-
-function flushDebugProbes() {
-  debugFlushScheduled = false
-  const events = debugQueue.splice(0, debugBatchSize)
-  if (events.length === 0) return
-
-  try {
-    const requests = debugBatchEndpoint
-      ? [{ url: debugBatchEndpoint, body: JSON.stringify({ events }) }]
-      : events.map((event) => ({ url: debugEndpoint, body: JSON.stringify(event) }))
-    for (const request of requests) {
-      void fetch(request.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': debugSessionId,
-        },
-        body: request.body,
-        keepalive: true,
-      }).catch(() => {})
-    }
-  } catch {
-    // Temporary debugging must never affect product behavior.
-  }
-
-  if (debugQueue.length > 0 && !debugFlushScheduled) {
-    debugFlushScheduled = true
-    scheduleDebugFlush(flushDebugProbes)
-  }
-}
-
-function debugProbe(input: {
-  probeId: string
-  hypothesisIds: string[]
-  location: string
-  phase: string
-  event: string
-  correlationId: string
-  message: string
-  data?: Record<string, unknown>
-}) {
-  try {
-    debugQueue.push({
-      sessionId: debugSessionId,
-      runId: 'initial',
-      correlationId: input.correlationId,
-      sequence: ++debugSequence,
-      probeId: input.probeId,
-      hypothesisIds: input.hypothesisIds,
-      location: input.location,
-      phase: input.phase,
-      event: input.event,
-      message: input.message,
-      data: input.data ?? {},
-      timestamp: Date.now(),
-      monotonicMs: typeof performance !== 'undefined' ? performance.now() : undefined,
-    })
-    if (!debugFlushScheduled) {
-      debugFlushScheduled = true
-      scheduleDebugFlush(flushDebugProbes)
-    }
-  } catch {
-    // Temporary debugging must never affect product behavior.
-  }
-}
-// #endregion
-```
-
-For runtimes without `queueMicrotask`, use a resolved Promise or send a single event to `endpoint`. Keep batches below 200 events and comfortably below browser `keepalive` payload limits; 20 small bounded events is the default. Do not allow an unbounded client queue.
-
-Call the helper inside collapsible temporary regions when the language supports them. Remove the helper, endpoint constants, and calls after successful verification.
-
-For concurrent flows, use a sequence counter scoped to a correlation rather than one global counter when practical. Emit a terminal sentinel before navigation or teardown so the last batch is scheduled.
+Read [browser-debugging.md](./browser-debugging.md) before adding client instrumentation, wrapping `fetch`, collecting long-lived or high-frequency browser streams, or crossing navigation and reload boundaries. Keep browser-specific transport details out of non-browser investigations.
 
 ## Non-JavaScript guidance
 
-Prefer `batchEndpoint` when the runtime can buffer a small bounded burst; otherwise use the single-event `endpoint`. If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close immediately.
+Use `batchEndpoint` for high-throughput serialized frames and `endpoint` for a single event. A batch is only a finite wire envelope: do not wait for the business stream to close, and do not impose an event-count cap when complete request or source-event coverage is required. Give events monotonic delivery sequences, split only by request bytes or runtime-specific payload constraints, retain each event until acknowledgement, and confirm an acknowledged continuous prefix at live observation checkpoints.
 
-When appending directly:
+If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close promptly. When appending directly:
 
 - Use the same schema.
 - Serialize under a process-safe lock when multiple writers share a file.
 - Keep each object on one physical line.
-- Expect the collector to rehydrate the file on the next state read.
+- Expect the collector to incrementally index the file on the next state read or background tail pass.
 - Do not mix unrelated sessions in one file.
 
 ## Volume controls
 
-Before instrumenting a loop or hot path, select and document a control:
+For general loops or hot paths unrelated to complete `fetch` capture, select and document an information-preserving control:
 
 ```text
 first 5 per correlation
@@ -331,9 +286,11 @@ aggregate count and emit at flow end
 deterministic sample by correlation ID
 ```
 
-Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing events are interpretable.
+Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing general-purpose probe events are interpretable.
 
-Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees. Batch transport reduces request and file-open overhead but does not justify larger payloads or an unbounded queue.
+When the failure contract requires complete application-`fetch` or real-time source-event coverage, follow the browser reference. Do not apply count-based suppression to required request or source events. Treat serialization, oversize, lifecycle, or delivery rejection as incomplete evidence rather than suppression.
+
+Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees.
 
 ## Evidence summarization
 
@@ -343,6 +300,7 @@ Summarize large logs before loading raw entries into model context:
 "$PYTHON_BIN" <SKILL_ROOT>/scripts/summarize_debug_log.py \
   <LOG_FILE> \
   --run-id initial \
+  --expected-probes-file <PLAN_FILE> \
   --format markdown \
   --timeline-limit 80 \
   --max-examples 2
@@ -352,20 +310,23 @@ Useful filters:
 
 ```bash
 --correlation-id flow-8f31
+--parent-correlation-id save-flow-8f31
+--operation-id save-B
+--request-id req-42
 --hypothesis-id H-race-overwrite
 --probe-id cart.commit.before
 --format json
 ```
 
-The summarizer reports valid/invalid lines, probe and hypothesis coverage, correlations, event counts, sequence gaps/regressions, error-like events, and a bounded timeline. It does not infer the root cause; use it to select raw evidence.
+The summarizer reports valid/invalid lines, probe and hypothesis coverage, correlations, event counts, causal-sequence gaps/regressions, browser transport-sequence gaps or duplicate/regressed sequences, error-like events, and a bounded timeline. It does not infer the root cause; use it to select raw evidence and to reject any claimed lossless interval with a transport continuity break.
 
 ## Reading raw evidence
 
 After summarization:
 
 1. Verify the expected run and correlation exist.
-2. Verify flow start/end sentinels.
-3. Check missing planned probes and suppression counters.
+2. Verify flow start and the configured terminal or observation-checkpoint sentinel.
+3. Check missing planned probes, required-event rejections, acknowledged watermarks, source/transport sequence gaps, and suppression counters.
 4. Identify the earliest invalid value, invariant failure, or invalid ordering.
 5. Read the raw NDJSON lines for that causal interval.
 6. Cite probe ID, location, run, correlation, sequence, and selected data.
@@ -373,11 +334,20 @@ After summarization:
 
 Do not paste the entire NDJSON file into chat when a compact summary and targeted lines suffice.
 
-## Optional dashboard
+## Dashboard startup and recovery
 
-The collector can serve a same-origin dashboard with state, log windows, and active source locations. It is optional and must not block evidence collection.
+The collector serves a same-origin dashboard with state, bounded log windows, and active source locations. Browser-capable local `start` sessions open it after the HTTP health endpoint responds, wait for the frontend callback, and make at most two fallback attempts before returning a non-fatal `dashboardRecovery` result.
 
-Start with `--open-dashboard` only when the user wants it. Otherwise use ready-file values, CLI commands, and the NDJSON file. Do not spend reproduction time proving that the dashboard frontend opened.
+Use this manual recovery sequence for a reused session or when the dashboard later disappears:
+
+1. Read the ready payload, capture `dashboardUrl`, and note whether `dashboardAutoOpenEnabled` is `true`.
+2. Check `dashboardOpenPending`, `dashboardOpenSucceeded`, `dashboardOpenError`, and `dashboardOpenAttempts`.
+3. Run `debug_session.py open-dashboard --ready-file <READY_FILE>`, then re-query state. The command skips reopening when the frontend is already recorded, retries platform and Python browser openers, waits briefly for the page-load callback, and always returns `dashboardUrl`.
+4. Make no more than two manual fallback attempts for one session. Record and surface both opener failures and accepted requests that never produced a frontend callback.
+5. If the page still does not load, surface the exact URL and errors. Do not restart a healthy collector merely to open the page.
+6. Continue evidence collection through the CLI and NDJSON file.
+
+Dashboard state must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Use `--no-open-dashboard` instead of relying on opener failure when the session is intentionally headless.
 
 ## CORS and security
 
@@ -392,36 +362,41 @@ The collector binds to `127.0.0.1` by default.
 
 ## Reproduction handoff
 
-Before the first reproduction request, present:
+When reproduction is user-owned, present:
 
-1. A concise hypothesis-family summary
-2. Probe count, shared-probe count, mapped-hypothesis coverage, causal-boundary coverage, and volume controls
-3. Residual ambiguities
-4. Exact reproduction steps
+1. A dashboard line formatted as `Dashboard: <status> — <dashboardUrl-or-unavailable> (frontend confirmed: <true|false|unknown>)`; append ` — error: <error>` only when non-empty
+2. A concise hypothesis-family summary
+3. Probe count, shared-probe count, mapped-hypothesis coverage, causal-boundary coverage, and volume controls
+4. Residual ambiguities
+5. Exact reproduction steps
 
-Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`.
+For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as item 1. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
 
-Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow.
+Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. When reproduction is agent-owned, execute it directly after the runtime gate instead of asking the user.
 
-## Fix verification
+Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream.
 
-- Keep discriminating probes active while applying the fix.
-- Use the smallest change that addresses the proven origin, not only the downstream symptom.
-- Use a new `runId`, such as `post-fix`.
+## Authorized root-cause repair verification
+
+- Apply this section only when repair is authorized. Keep discriminating probes active while applying the repair.
+- Eliminate the evidence-proven causal mechanism and restore its violated invariant or contract at the owning boundary.
+- Treat change size as a constraint, not the objective. After establishing causal sufficiency, choose the narrowest safe, coherent repair; include every causally necessary file or layer and exclude unrelated cleanup.
+- Do not substitute a smaller downstream guard, fallback, or coercion while the proven causal mechanism remains active.
+- Use a new `runId`, such as `post-repair`.
 - Reproduce the same flow and compare the same probe IDs and invariants.
-- Treat a missing post-fix symptom as insufficient when the flow itself did not complete.
-- If verification fails, preserve the failed-fix evidence and update the same investigation document.
+- Treat a missing post-repair symptom as insufficient when the flow itself did not complete.
+- If verification fails, preserve the failed-repair evidence and update the same investigation document.
 
 ## Final cleanup
 
-After verification succeeds:
+After a diagnosis-only evidence handoff completes, or after an authorized repair verifies:
 
 1. Remove every temporary probe, helper, endpoint constant, header, and debug-only import.
-2. Sync `{"locations": []}`.
-3. Update the investigation document with verification and cleanup status.
-4. Run `debug_session.py stop --ready-file <READY_FILE>`.
-5. Verify every `ownedArtifacts` path is absent unless `--keep-artifacts` was requested.
-6. Remove an empty `.debug-logs/` directory.
-7. Delete or retain the investigation document according to [root-cause-document.md](./root-cause-document.md).
+2. For a session owned by this invocation, sync `{"locations": []}`. For a host-provided or shared session, remove or report only this invocation's locations according to host policy; never replace shared location state with an empty set.
+3. Update any investigation document with the terminal diagnosis or verification status and cleanup decision.
+4. Run `debug_session.py stop --ready-file <READY_FILE>` only when this invocation started and owns the session. Never stop a host-provided or shared collector.
+5. For an owned session, verify every `ownedArtifacts` path is absent unless `--keep-artifacts` was requested.
+6. Remove an empty `.debug-logs/` directory only when this invocation created it.
+7. Delete or retain the coverage plan and investigation document according to [root-cause-document.md](./root-cause-document.md).
 
 Do not use Git status as cleanup proof because `.debug-logs/` is commonly ignored.

@@ -1,66 +1,43 @@
-# Investigation and Root-Cause Document
+# Investigation and Root-Cause Ledger
 
-Use one evolving Markdown document to preserve the hypothesis plan, evidence, rejected paths, root cause, fix, and verification for a debug session.
+Use one evolving Markdown ledger when a debug session spans a user handoff, context compaction, multiple runs, an expensive reproduction, a repair, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for boundaries, hypotheses, probes, and coverage.
 
 ## Table of contents
 
-- Creation timing
-- File placement and retention
+- Creation and placement
 - Update rules
 - Status model
-- Document template
-- Self-check
+- Root-cause proof
+- Template
+- Retention and cleanup
 
-## Creation timing
+## Creation and placement
 
-- In one-shot mode, create the document after the causal map and initial hypothesis-probe matrix are ready, before adding probes.
-- In standard mode, create it no later than the first leading evidence-backed root-cause candidate and before applying a fix.
-- Create one document per session. Update the same file even when the leading theory changes.
-- Never overwrite an unrelated existing report.
-
-Creating the document before reproduction in one-shot mode keeps a large matrix out of chat context and preserves the plan if the conversation compacts.
-
-## File placement and retention
+Create the ledger after the initial coverage plan validates and before the first expensive or user-owned reproduction. For a short agent-owned diagnosis that remains within one turn and does not require durable evidence, the validated plan and final evidence summary may be sufficient.
 
 Prefer this order:
 
-1. Use an established incident, RCA, or engineering-report directory when the user wants durable evidence.
-2. Otherwise create an ephemeral file at `.debug-logs/<SESSION_ID>.root-cause.md`.
-3. Keep the path inside `workspaceRoot` and use a `.md` suffix.
+1. Use an established incident or RCA directory when the user requests durable evidence.
+2. Otherwise use `.debug-logs/<SESSION_ID>.root-cause.md` as an ephemeral ledger.
+3. Keep the path inside the authorized workspace and never overwrite an unrelated report.
 
-Use a unique session ID or random suffix when needed. Do not infer cleanup from Git status.
-
-Retention policy:
-
-- Keep the document throughout investigation, reruns, failed verification, and intermediate log clears.
-- After success, retain it when the user asked for evidence or the repository has an established durable RCA convention.
-- Otherwise update it with final verification and cleanup status, then delete it with `debug_session.py stop --delete-root-cause-document <PATH>` or delete it separately and verify removal.
-- Never delete a document from an incomplete or failed investigation unless the user explicitly requests deletion.
+Record the coverage-plan path rather than duplicating its full hypothesis-probe matrix. Create one ledger per session and update the same file even when the leading theory changes.
 
 ## Update rules
 
-Before every update, read the current document.
+Read the current ledger before every update. Append one investigation row for each material transition:
 
-Append an investigation-ledger row for each of these events:
+- initial validated plan;
+- failing reproduction analysis;
+- targeted blind-spot run;
+- root-cause change;
+- diagnosis-only terminal handoff;
+- authorized repair decision;
+- failed verification;
+- successful verification;
+- cleanup or retention decision.
 
-- Initial plan
-- Reproduction analysis
-- Targeted rerun
-- Root-cause change
-- Fix decision
-- Failed verification
-- Successful verification
-- Cleanup or retention decision
-
-Preserve prior hypotheses and evidence. When a theory is displaced, move it to `Superseded or Rejected Causes` with the evidence that displaced it. Do not retry a rejected path without new contradictory evidence.
-
-Separate verified facts from inferences. A root cause requires evidence for:
-
-1. Originating invalid state, decision, ordering, or external result
-2. Propagation through one or more boundaries
-3. The observed symptom
-
-Record enabling conditions and downstream symptoms separately from the root cause.
+Preserve rejected and superseded paths with the evidence that displaced them. Do not retry one without new contradictory evidence. Separate verified facts from inference, and separate root cause from enabling conditions and downstream symptoms.
 
 ## Status model
 
@@ -70,14 +47,14 @@ Use these document statuses:
 - `Instrumented`
 - `Awaiting reproduction`
 - `Analyzing`
-- `Working theory`
 - `Confirmed root cause`
-- `Fix applied; awaiting verification`
-- `Fixed and verified`
+- `Diagnosis complete; repair not authorized`
+- `Repair applied; awaiting verification`
+- `Root cause repaired and verified`
 - `Still failing`
 - `Incomplete`
 
-Use these hypothesis statuses:
+Use these hypothesis statuses, matching the coverage plan:
 
 - `PENDING`
 - `CONFIRMED`
@@ -86,11 +63,28 @@ Use these hypothesis statuses:
 - `NOT_REACHED`
 - `SUPERSEDED`
 
-`NOT_REACHED` means enclosing evidence proves the flow terminated or branched before the hypothesized path. A missing probe without enclosing evidence remains `INCONCLUSIVE`.
+Use `NOT_REACHED` only when enclosing evidence proves the flow terminated or branched before the hypothesized path. Treat an otherwise missing probe as `INCONCLUSIVE`.
 
-## Document template
+## Root-cause proof
 
-````md
+Require evidence for all three links:
+
+1. The originating invalid state, decision, ordering, or external result.
+2. Its propagation across the relevant boundaries.
+3. The observed symptom under the failure contract.
+
+Cite run, parent flow, operation, child correlation or request, sequence/time, probe ID, location, and bounded values. Do not promote a hypothesis from correlation alone.
+
+For an authorized repair, additionally record:
+
+- the owning boundary and violated invariant;
+- why the repair eliminates the causal mechanism;
+- why every changed layer is necessary and unrelated cleanup is excluded;
+- the same relevant probe and invariant results from a separate verification run.
+
+## Template
+
+```md
 # Root-Cause Investigation
 
 ## Scope
@@ -100,12 +94,12 @@ Use these hypothesis statuses:
 - Workspace: `[absolute path]`
 - Session ID: `[session]`
 - Ready file: `[path]`
+- Coverage plan: `[path]`
 - Evidence file: `[NDJSON path]`
-- Mode: `[one-shot | standard]`
 - Status: `[status]`
-- Last updated: `[timestamp and timezone]`
+- Reproduction owner: `[agent | user | external]`
 - Reproduction cost: `[low | medium | high | single opportunity]`
-- Assumptions and constraints: `[explicit list]`
+- Constraints: `[list]`
 
 ## Failure Contract
 
@@ -113,114 +107,84 @@ Use these hypothesis statuses:
 - Observed: `[observable failure]`
 - Trigger: `[smallest realistic flow]`
 - Scope and frequency: `[details]`
-- Last known good boundary: `[version/config/date or unknown]`
+- Last known good: `[boundary or unknown]`
 
-## Causal Map
+## Coverage
 
-```text
-[input] -> [boundary] -> [state transition] -> [boundary] -> [symptom]
-```
-
-| Boundary | Input/invariant | Output/invariant | Probe IDs |
-| --- | --- | --- | --- |
-| `[name]` | `[expected]` | `[expected]` | `[ids]` |
-
-## Coverage Summary
-
-- Hypotheses: `[count]`
-- Probes: `[count]`
-- Shared probes: `[count]`
-- Hypotheses mapped: `[percentage]`
-- Causal boundaries covered: `[count/total]`
-- Hot-path controls: `[count and types]`
+- Plan validation: `[passed at timestamp]`
+- Boundaries / hypotheses / probes: `[counts]`
+- Reviewed cause-family exclusions: `[families and reasons]`
+- Observer and privacy controls: `[summary]`
 - Residual ambiguities: `[list]`
-
-## Hypothesis-Probe Matrix
-
-| ID | Mechanism | Boundary | Confirmed by | Rejected by | Probe IDs | Expected order | Volume control | Priority | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `H-...` | `[specific mechanism]` | `[boundary]` | `[observation]` | `[observation]` | `[probe ids]` | `[sequence]` | `[control]` | `[high/medium/low]` | `PENDING` |
 
 ## Current Root Cause
 
-- Root cause: `[one precise sentence or Not proven yet]`
+- Root cause: `[precise mechanism or Not proven]`
 - Confidence: `[high | medium | low]`
 - Origin: `[first invalid boundary/location]`
-- Enabling conditions: `[conditions that make the bug possible]`
-- Downstream symptoms: `[effects, not causes]`
+- Enabling conditions: `[list]`
+- Downstream symptoms: `[list]`
 
 Causal chain:
 
-1. `[originating condition with probe evidence]`
+1. `[origin with probe evidence]`
 2. `[propagation with probe evidence]`
-3. `[reported symptom with probe evidence]`
-
-Key evidence:
-
-- `[run, correlation, sequence, probeId, location, selected values]`
-
-Look here first:
-
-- `[primary code path](/absolute/path/file.ts#L10)`
-- `[secondary code path](/absolute/path/file.ts#L42)`
+3. `[symptom with probe evidence]`
 
 ## Evidence Timeline
 
-| Run | Correlation | Sequence/time | Probe | Evidence | Interpretation |
+| Run | Parent flow / operation | Sequence/time | Probe | Evidence | Interpretation |
 | --- | --- | --- | --- | --- | --- |
-| `initial` | `[id]` | `[seq/time]` | `[probeId]` | `[bounded values]` | `[what this proves]` |
+| `initial` | `[ids]` | `[sequence/time]` | `[probeId]` | `[bounded values]` | `[what this proves]` |
+
+## Hypothesis Dispositions
+
+| ID | Status | Decisive evidence | Residual ambiguity |
+| --- | --- | --- | --- |
+| `H-...` | `CONFIRMED` | `[evidence]` | `[none or detail]` |
 
 ## Investigation Ledger
 
-| Attempt | Trigger | Evidence reviewed | Decision | Blind spot closed / next step | Do not repeat unless |
-| --- | --- | --- | --- | --- | --- |
-| `1` | `initial plan` | `[files/map]` | `[matrix created]` | `[coverage]` | `[new evidence condition]` |
+| Attempt | Trigger | Evidence reviewed | Decision | Blind spot closed / next authorized step |
+| --- | --- | --- | --- | --- |
+| `1` | `initial plan` | `[plan and paths]` | `[validated]` | `[coverage]` |
 
-## Fix and Verification
+## Repair and Verification
 
-- Fix applied: `[file/function/behavior or Not applied]`
-- Why this fixes the origin: `[causal explanation]`
-- Verification run: `[runId]`
+- Repair authorization: `[not requested | authorized]`
+- Repair: `[file/function/behavior or Not applied]`
+- Mechanism eliminated: `[mechanism]`
+- Invariant restored: `[invariant]`
+- Scope rationale: `[causal necessity]`
+- Verification run: `[runId or Not run]`
 - Verification status: `[Not run | Passed | Failed | Blocked]`
-- Before evidence: `[probe evidence]`
-- After evidence: `[same probe evidence]`
-- Unchanged invariants: `[proof no adjacent regression]`
+- Before/after evidence: `[same probe IDs and selected values]`
 
-## Superseded or Rejected Causes
+## Rejected or Superseded Causes
 
-- `[theory]` — `[status]` — `[evidence that rejected/displaced it]`
+- `[theory]` — `[status]` — `[decisive evidence]`
 
 ## Cleanup and Retention
 
 - Temporary probes: `[present | removed and verified]`
 - Location state: `[active count | synced empty]`
 - Collector artifacts: `[present | deleted | retained by request]`
-- Investigation document: `[ephemeral; scheduled for deletion | retained at path by request/convention]`
+- Plan and ledger: `[ephemeral | retained by request/convention | deleted]`
 
 ## Open Questions
 
 - `[remaining uncertainty or none]`
+```
 
-## Self-Check
+## Retention and cleanup
 
-- `[yes/no]` Every material hypothesis has confirming and falsifying evidence definitions.
-- `[yes/no]` Missing probes were interpreted only with enclosing sentinels and suppression metadata.
-- `[yes/no]` The root cause cites origin, propagation, and symptom evidence.
-- `[yes/no]` Rejected or superseded paths retain their exclusion evidence.
-- `[yes/no]` Every analysis/verification pass has an append-only ledger row.
-- `[yes/no]` The fix addresses the origin rather than only the symptom.
-- `[yes/no]` Before/after verification uses the same relevant probe IDs.
-- `[yes/no]` Temporary instrumentation and artifacts are accounted for.
-- `[yes/no]` Secrets and unnecessary PII are absent or redacted.
-````
+Keep the plan and ledger through targeted reruns, intermediate log clears, failed verification, and incomplete investigations.
 
-## Self-check
+After success:
 
-Before claiming success, verify:
+- Retain them when the user requests evidence or the repository has a durable RCA convention.
+- Otherwise update the terminal diagnosis or verification status and cleanup decision, then delete owned ephemeral files.
+- Use `debug_session.py stop --delete-root-cause-document <PATH>` only for a ledger inside the workspace after a terminal diagnosis or successful repair verification.
+- Delete the plan separately only when it is owned by the current invocation and no evidence retention was requested.
 
-- The current status matches the latest evidence.
-- The earliest invalid state or ordering is identified.
-- At least one evidence chain links origin to symptom.
-- Alternative causes at adjacent boundaries are rejected or explicitly unresolved.
-- The verification run completed the same flow.
-- Cleanup did not delete externally owned artifacts.
+Never infer cleanup from Git status because `.debug-logs/` is commonly ignored. Never delete host-owned evidence or an incomplete investigation unless the user explicitly requests it.

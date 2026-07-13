@@ -98,7 +98,14 @@ def _compact_event(
         "lineNumber": line_number,
         "runId": _text(payload.get("runId")),
         "correlationId": _text(payload.get("correlationId")),
+        "parentCorrelationId": _text(payload.get("parentCorrelationId")),
+        "operationId": _text(payload.get("operationId")),
+        "requestId": _text(payload.get("requestId")),
         "sequence": _int_or_none(payload.get("sequence")),
+        "transportClientId": _text(payload.get("transportClientId")),
+        "transportId": _text(payload.get("transportId")),
+        "transportSequence": _int_or_none(payload.get("transportSequence")),
+        "transportBatchId": _text(payload.get("transportBatchId")),
         "probeId": _text(payload.get("probeId")),
         "hypothesisIds": _hypothesis_ids(payload),
         "location": _text(payload.get("location")),
@@ -115,6 +122,15 @@ def _matches(payload: dict[str, Any], args: argparse.Namespace) -> bool:
     if args.run_id and _text(payload.get("runId")) != args.run_id:
         return False
     if args.correlation_id and _text(payload.get("correlationId")) != args.correlation_id:
+        return False
+    if (
+        args.parent_correlation_id
+        and _text(payload.get("parentCorrelationId")) != args.parent_correlation_id
+    ):
+        return False
+    if args.operation_id and _text(payload.get("operationId")) != args.operation_id:
+        return False
+    if args.request_id and _text(payload.get("requestId")) != args.request_id:
         return False
     if args.probe_id and _text(payload.get("probeId")) != args.probe_id:
         return False
@@ -154,29 +170,48 @@ def _load_expected_probe_ids(path_text: str) -> list[str]:
         raise ValueError(f"cannot read expected probes file {path}: {exc}") from exc
 
     candidates: list[Any]
+    strict_plan = False
     if isinstance(payload, list):
         candidates = payload
     elif isinstance(payload, dict):
-        if isinstance(payload.get("probeIds"), list):
+        if "probes" in payload:
+            strict_plan = True
+            if not isinstance(payload.get("probes"), list):
+                raise ValueError("debug plan expected-probes file must contain a probes array")
+            candidates = payload["probes"]
+            if not candidates:
+                raise ValueError("debug plan expected-probes file must contain non-empty probes")
+        elif isinstance(payload.get("probeIds"), list):
             candidates = payload["probeIds"]
         elif isinstance(payload.get("locations"), list):
             candidates = payload["locations"]
-        elif isinstance(payload.get("probes"), list):
-            candidates = payload["probes"]
         else:
             candidates = []
     else:
         candidates = []
 
     result: list[str] = []
-    for item in candidates:
+    for index, item in enumerate(candidates):
+        if strict_plan:
+            if not isinstance(item, dict):
+                raise ValueError(f"debug plan probe at index {index} must be an object")
+            probe_id = item.get("probeId")
+            if not isinstance(probe_id, str) or not probe_id.strip():
+                raise ValueError(
+                    f"debug plan probe at index {index} must have a non-empty probeId"
+                )
+            normalized = probe_id.strip()
+            if normalized in result:
+                raise ValueError(f"debug plan probeId {normalized!r} is duplicated")
+            result.append(normalized)
+            continue
         if isinstance(item, str) and item.strip():
             result.append(item.strip())
         elif isinstance(item, dict):
             probe_id = item.get("probeId")
             if isinstance(probe_id, str) and probe_id.strip():
                 result.append(probe_id.strip())
-    return list(dict.fromkeys(result))
+    return result if strict_plan else list(dict.fromkeys(result))
 
 
 def summarize(args: argparse.Namespace) -> dict[str, Any]:
@@ -197,6 +232,9 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
 
     run_counts: Counter[str] = Counter()
     correlation_counts: Counter[str] = Counter()
+    parent_correlation_counts: Counter[str] = Counter()
+    operation_counts: Counter[str] = Counter()
+    request_counts: Counter[str] = Counter()
     probe_counts: Counter[str] = Counter()
     hypothesis_counts: Counter[str] = Counter()
     event_counts: Counter[str] = Counter()
@@ -210,6 +248,12 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
     last_sequence: dict[str, int] = {}
     sequence_gaps: list[dict[str, Any]] = []
     sequence_regressions: list[dict[str, Any]] = []
+    last_transport_sequence: dict[str, int] = {}
+    transport_sequence_gaps: list[dict[str, Any]] = []
+    transport_sequence_regressions: list[dict[str, Any]] = []
+    transport_sequence_gap_count = 0
+    transport_sequence_regression_count = 0
+    transport_event_count = 0
     error_events: list[dict[str, Any]] = []
 
     first_limit = max(args.timeline_limit // 2, 0)
@@ -231,6 +275,39 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
                 invalid_lines += 1
                 continue
             valid_events += 1
+
+            transport_client_id = _text(payload.get("transportClientId"))
+            transport_sequence = _int_or_none(payload.get("transportSequence"))
+            if transport_client_id and transport_sequence is not None:
+                transport_event_count += 1
+                previous_transport_sequence = last_transport_sequence.get(transport_client_id)
+                if previous_transport_sequence is not None:
+                    if transport_sequence > previous_transport_sequence + 1:
+                        transport_sequence_gap_count += 1
+                        if len(transport_sequence_gaps) < args.sequence_limit:
+                            transport_sequence_gaps.append(
+                                {
+                                    "clientId": transport_client_id,
+                                    "previous": previous_transport_sequence,
+                                    "current": transport_sequence,
+                                    "missingStart": previous_transport_sequence + 1,
+                                    "missingEnd": transport_sequence - 1,
+                                    "lineNumber": physical_lines,
+                                }
+                            )
+                    elif transport_sequence <= previous_transport_sequence:
+                        transport_sequence_regression_count += 1
+                        if len(transport_sequence_regressions) < args.sequence_limit:
+                            transport_sequence_regressions.append(
+                                {
+                                    "clientId": transport_client_id,
+                                    "previous": previous_transport_sequence,
+                                    "current": transport_sequence,
+                                    "lineNumber": physical_lines,
+                                }
+                            )
+                last_transport_sequence[transport_client_id] = transport_sequence
+
             if not _matches(payload, args):
                 continue
 
@@ -247,6 +324,9 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
 
             run_id = event["runId"] or "<missing>"
             correlation_id = event["correlationId"] or "<missing>"
+            parent_correlation_id = event["parentCorrelationId"] or "<missing>"
+            operation_id = event["operationId"] or "<missing>"
+            request_id = event["requestId"] or "<missing>"
             probe_id = event["probeId"] or "<missing>"
             event_name = event["event"] or "<missing>"
             phase = event["phase"] or "<missing>"
@@ -255,6 +335,9 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
 
             run_counts[run_id] += 1
             correlation_counts[correlation_id] += 1
+            parent_correlation_counts[parent_correlation_id] += 1
+            operation_counts[operation_id] += 1
+            request_counts[request_id] += 1
             probe_counts[probe_id] += 1
             event_counts[event_name] += 1
             phase_counts[phase] += 1
@@ -303,7 +386,7 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
 
             sequence = event["sequence"]
             if sequence is not None:
-                scope = event["correlationId"] or f"<missing>:{run_id}"
+                scope = f"{run_id}:{correlation_id}"
                 previous = last_sequence.get(scope)
                 if previous is not None:
                     if sequence > previous + 1:
@@ -390,6 +473,9 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         "filters": {
             "runId": args.run_id or None,
             "correlationId": args.correlation_id or None,
+            "parentCorrelationId": args.parent_correlation_id or None,
+            "operationId": args.operation_id or None,
+            "requestId": args.request_id or None,
             "hypothesisId": args.hypothesis_id or None,
             "probeId": args.probe_id or None,
         },
@@ -407,6 +493,11 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
         "counts": {
             "runIds": _count_pairs(run_counts, args.group_limit),
             "correlationIds": _count_pairs(correlation_counts, args.group_limit),
+            "parentCorrelationIds": _count_pairs(
+                parent_correlation_counts, args.group_limit
+            ),
+            "operationIds": _count_pairs(operation_counts, args.group_limit),
+            "requestIds": _count_pairs(request_counts, args.group_limit),
             "probeIds": _count_pairs(probe_counts, args.group_limit),
             "hypothesisIds": _count_pairs(hypothesis_counts, args.group_limit),
             "events": _count_pairs(event_counts, args.group_limit),
@@ -422,6 +513,15 @@ def summarize(args: argparse.Namespace) -> dict[str, Any]:
             "regressionOrDuplicateCount": len(sequence_regressions),
             "gaps": sequence_gaps[: args.sequence_limit],
             "regressionsOrDuplicates": sequence_regressions[: args.sequence_limit],
+        },
+        "transportContinuity": {
+            "scope": "full-log",
+            "eventsWithTransportSequence": transport_event_count,
+            "clientsWithTransportSequence": len(last_transport_sequence),
+            "gapCount": transport_sequence_gap_count,
+            "regressionOrDuplicateSequenceCount": transport_sequence_regression_count,
+            "gaps": transport_sequence_gaps,
+            "regressionsOrDuplicateSequences": transport_sequence_regressions,
         },
         "errorLikeEvents": error_events,
         "timeline": timeline,
@@ -489,6 +589,9 @@ def to_markdown(summary: dict[str, Any]) -> str:
     for title, key in (
         ("Runs", "runIds"),
         ("Correlations", "correlationIds"),
+        ("Parent Correlations", "parentCorrelationIds"),
+        ("Operations", "operationIds"),
+        ("Requests", "requestIds"),
         ("Probes", "probeIds"),
         ("Hypotheses", "hypothesisIds"),
         ("Events", "events"),
@@ -547,22 +650,56 @@ def to_markdown(summary: dict[str, Any]) -> str:
             )
         lines.append("")
 
+    transport = summary["transportContinuity"]
+    lines.extend(
+        [
+            "## Transport Continuity",
+            "",
+            f"- Scope: `{transport['scope']}`",
+            f"- Events with transport sequence: `{transport['eventsWithTransportSequence']}`",
+            f"- Transport clients: `{transport['clientsWithTransportSequence']}`",
+            f"- Sequence gaps: `{transport['gapCount']}`",
+            f"- Sequence regressions or duplicates: `{transport['regressionOrDuplicateSequenceCount']}`",
+            "",
+        ]
+    )
+    if transport["gaps"] or transport["regressionsOrDuplicateSequences"]:
+        lines.extend(
+            [
+                "| Type | Client | Previous / ID | Current | Line |",
+                "| --- | --- | --- | ---: | ---: |",
+            ]
+        )
+        for item in transport["gaps"]:
+            lines.append(
+                f"| gap | `{_md_escape(item['clientId'])}` | {item['previous']} | {item['current']} | {item['lineNumber']} |"
+            )
+        for item in transport["regressionsOrDuplicateSequences"]:
+            lines.append(
+                f"| regression/duplicate sequence | `{_md_escape(item['clientId'])}` | {item['previous']} | {item['current']} | {item['lineNumber']} |"
+            )
+        lines.append("")
+
     lines.extend(
         [
             "## Error-Like Events",
             "",
-            "| Line | Correlation | Seq | Probe | Event | Message | Data |",
-            "| ---: | --- | ---: | --- | --- | --- | --- |",
+            "| Line | Run | Correlation | Parent | Operation | Request | Seq | Probe | Event | Message | Data |",
+            "| ---: | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- |",
         ]
     )
     if not summary["errorLikeEvents"]:
-        lines.append("|  |  |  | _none_ |  |  |  |")
+        lines.append("|  |  |  |  |  |  |  | _none_ |  |  |  |")
     else:
         for event in summary["errorLikeEvents"]:
             lines.append(
-                "| {} | `{}` | {} | `{}` | `{}` | {} | `{}` |".format(
+                "| {} | `{}` | `{}` | `{}` | `{}` | `{}` | {} | `{}` | `{}` | {} | `{}` |".format(
                     event["lineNumber"],
+                    _md_escape(event["runId"]),
                     _md_escape(event["correlationId"]),
+                    _md_escape(event["parentCorrelationId"]),
+                    _md_escape(event["operationId"]),
+                    _md_escape(event["requestId"]),
                     event["sequence"] if event["sequence"] is not None else "",
                     _md_escape(event["probeId"]),
                     _md_escape(event["event"]),
@@ -576,22 +713,28 @@ def to_markdown(summary: dict[str, Any]) -> str:
         [
             "## Bounded Timeline",
             "",
-            "| Line | Time | Correlation | Seq | Probe | Event | Message | Data |",
-            "| ---: | ---: | --- | ---: | --- | --- | --- | --- |",
+            "| Line | Time | Run | Correlation | Parent | Operation | Request | Seq | Probe | Event | Message | Data |",
+            "| ---: | ---: | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- |",
         ]
     )
     if not summary["timeline"]:
-        lines.append("|  |  |  |  | _none_ |  |  |  |")
+        lines.append("|  |  |  |  |  |  |  |  | _none_ |  |  |  |")
     else:
         for event in summary["timeline"]:
             if "omittedEvents" in event:
-                lines.append(f"|  |  |  |  | _{event['omittedEvents']} events omitted_ |  |  |  |")
+                lines.append(
+                    f"|  |  |  |  |  |  |  |  | _{event['omittedEvents']} events omitted_ |  |  |  |"
+                )
                 continue
             lines.append(
-                "| {} | {} | `{}` | {} | `{}` | `{}` | {} | `{}` |".format(
+                "| {} | {} | `{}` | `{}` | `{}` | `{}` | `{}` | {} | `{}` | `{}` | {} | `{}` |".format(
                     event["lineNumber"],
                     event["timestamp"] if event["timestamp"] is not None else "",
+                    _md_escape(event["runId"]),
                     _md_escape(event["correlationId"]),
+                    _md_escape(event["parentCorrelationId"]),
+                    _md_escape(event["operationId"]),
+                    _md_escape(event["requestId"]),
                     event["sequence"] if event["sequence"] is not None else "",
                     _md_escape(event["probeId"]),
                     _md_escape(event["event"]),
@@ -610,12 +753,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("log_file", help="NDJSON log file.")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--correlation-id", default="")
+    parser.add_argument("--parent-correlation-id", default="")
+    parser.add_argument("--operation-id", default="")
+    parser.add_argument("--request-id", default="")
     parser.add_argument("--hypothesis-id", default="")
     parser.add_argument("--probe-id", default="")
     parser.add_argument(
         "--expected-probes-file",
         default="",
-        help="Optional JSON list/object containing probe IDs for missing-probe checks.",
+        help="Validated coverage plan or direct JSON list/object for missing-probe checks.",
     )
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--timeline-limit", type=int, default=80)

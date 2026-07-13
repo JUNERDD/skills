@@ -2,3 +2,6 @@ interface:
   display_name: "Receiving Regression Review"
   short_description: "Resolve regression gate reports"
   default_prompt: "Use $receiving-regression-review to consume a regression-review report, reconcile findings, behavior graph deltas, intentional changes, and coverage gaps, then verify or fix each item without staging changes unless explicitly requested."
+
+policy:
+  allow_implicit_invocation: false

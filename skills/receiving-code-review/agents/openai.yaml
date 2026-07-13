@@ -1,4 +1,7 @@
 interface:
   display_name: "Receiving Deep Code Review"
-  short_description: "Re-review, challenge, and implement findings"
-  default_prompt: "Use $receiving-code-review to assess the source review with a subagent, re-verify and formally challenge claims as needed, delegate confirmed fixes to a coding subagent, and persist a validated receiving-code-review resolution report without staging changes."
+  short_description: "Execution-chain-first review resolution"
+  default_prompt: "Use $receiving-code-review to trace each finding end to end, preserve settled intent, fix only compatible confirmed items, and allow at most one terminal post-review without staging changes."
+
+policy:
+  allow_implicit_invocation: false

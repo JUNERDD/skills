@@ -2,3 +2,6 @@ interface:
   display_name: "Hack Review"
   short_description: "Complete hack-risk ownership audit"
   default_prompt: "Use $hack-review to perform a scoped, coverage-led audit of the current implementation or diff and write a Markdown report with all distinct hack-risk findings, intentional exceptions, ownership coverage gaps, and a gate recommendation."
+
+policy:
+  allow_implicit_invocation: false

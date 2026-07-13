@@ -9,7 +9,7 @@ Use this packet only for bounded findings from upstream review of a prior Cursor
 - Source: <master-direct | non-cursor-planning-subagent | orchestrator-subagent | user-provided-plan>
 - Prior task packet: <path or identifier>
 - Prior status path: <status.json path if available>
-- Prior Cursor model: composer-2.5 fast=true unless explicitly user-overridden
+- Prior Cursor model: Grok 4.5 High with speed left to Cursor's default unless explicitly user-overridden
 
 ## Review Findings to Address
 - <specific blocker or required finding>
@@ -29,16 +29,19 @@ Use this packet only for bounded findings from upstream review of a prior Cursor
 - Local sandbox: <enabled | disabled with explicit upstream reason>
 
 ## Cursor Model
-- Model: composer-2.5 fast=true
-- SDK selection: `{ "id": "composer-2.5", "params": [{ "id": "fast", "value": "true" }] }`
-- Override authority: none unless an explicit user Cursor-model instruction is quoted here.
+- Wrapper profile: `grok-4.5-high`
+- Model: `Grok 4.5 High`
+- Model params: `catalog-resolved-high-default-speed`
+- SDK resolution: resolve the canonical id and one High effort parameter through `Cursor.models.list()`; the speed parameter is omitted so Cursor uses its current default.
+- Override authority: none unless an explicit user Cursor-model instruction is quoted here. For an authorized override, set Wrapper profile to `explicit`, Model to the exact SDK id, and Model params to `none` or a comma-separated exact `key=value` list matching the wrapper arguments.
 
 ## Cursor Internal Subagent Policy
 - Allowed: <disabled | read-only-analysis | verification | bounded-implementation>
-- Default model: composer-2.5 fast=true
+- Default requested model: Grok 4.5 High
+- Model verification: requested label only; exact High parameters are unverified, so use `disabled` when exact pinning is required
 - Max concurrent internal subagents: <0-2>
 - Write policy: <forbidden | parent-only | owned-files-only>
-- Required evidence: description, model requested, scope, files read or touched, result, risks
+- Required evidence: description, model requested, model observed if supplied otherwise unverified, scope, files read or touched, result, risks
 
 ## Authorization
 - Cursor API-key state: <authorized | needs user authorization>

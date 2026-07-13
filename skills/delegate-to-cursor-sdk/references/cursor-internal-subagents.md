@@ -9,7 +9,8 @@ Include this block in every Cursor packet:
 ```markdown
 ## Cursor Internal Subagent Policy
 - Allowed: <disabled | read-only-analysis | verification | bounded-implementation>
-- Default model: composer-2.5 fast=true
+- Default requested model: Grok 4.5 High
+- Model verification: requested label only; exact High parameters are unverified, so use `disabled` when exact pinning is required
 - Model override authority: none unless an explicit user Cursor-model instruction is quoted here
 - Max concurrent internal subagents: <0-4>
 - Allowed purposes:
@@ -18,6 +19,8 @@ Include this block in every Cursor packet:
 - Background mode: <forbidden | allowed with joined completion report>
 - Required evidence: description, model requested, scope, files read or touched, result, risks
 ```
+
+`@cursor/sdk` 1.0.23 exposes the internal task/Agent-tool model field as a string. It does not expose the top-level structured `{ id, params }` selection for these child calls. Therefore the requested label is useful routing intent, but it is not proof that High reasoning was honored. Never report that internal selection as verified without independent structured SDK evidence.
 
 ## Selection
 
@@ -33,7 +36,8 @@ Prefer 1-3 internal subagents. Use 4 only for clearly independent read-only or v
 Every internal subagent prompt must be self-contained and include:
 
 - exact task and non-goals;
-- model requirement: `composer-2.5 fast=true` unless explicitly overridden by the user;
+- requested model label: Grok 4.5 High unless explicitly overridden by the user;
+- model-verification limit: report the label as requested or observed, never as exact parameter verification;
 - read/write limits;
 - relevant file paths, globs, or interfaces;
 - required output format;
@@ -47,7 +51,7 @@ Cursor's completion report must include:
 
 ```markdown
 ## Internal Subagents
-- <description>: <model requested>, <mode>, <scope>, <result>, <files read/touched>, <risk or none>
+- <description>: <model requested>, <model observed if the SDK supplies one, otherwise unverified>, <mode>, <scope>, <result>, <files read/touched>, <risk or none>
 ```
 
-The upstream reviewer must compare this report with `status.json` when available. Treat internal subagent output as evidence, not authority.
+The upstream reviewer must compare this report with `status.json` when available. A `recent_subagents` requested-model value is not independent proof of parameters. Treat internal subagent output as evidence, not authority.

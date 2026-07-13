@@ -9,10 +9,17 @@ import os
 from pathlib import Path
 import signal
 import threading
+import time
+import urllib.error
+import urllib.request
 
 from collector_browser import open_dashboard_in_browser
 from collector_server import CollectorServer
 from collector_state import build_ready_payload, flush_location_state_file, hydrate_log_cache
+
+
+DASHBOARD_READY_TIMEOUT_SECONDS = 5.0
+DASHBOARD_READY_POLL_SECONDS = 0.05
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,6 +112,50 @@ def install_signal_handlers(server: CollectorServer) -> None:
     signal.signal(signal.SIGTERM, _shutdown)
 
 
+def wait_for_dashboard_ready(
+    health_url: str,
+    *,
+    timeout_seconds: float = DASHBOARD_READY_TIMEOUT_SECONDS,
+) -> bool:
+    """Wait until the HTTP request loop can answer before asking the OS to open the UI."""
+
+    deadline = time.monotonic() + max(timeout_seconds, 0.0)
+    while True:
+        try:
+            with urllib.request.urlopen(health_url, timeout=0.25) as response:
+                if 200 <= response.status < 300:
+                    return True
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
+
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(DASHBOARD_READY_POLL_SECONDS)
+
+
+def auto_open_dashboard(server: CollectorServer) -> None:
+    """Open the dashboard only after the collector is actually serving HTTP."""
+
+    with server.write_lock:
+        server.dashboard_open_started_at = int(time.time() * 1000)
+        server.dashboard_open_pending = True
+        server.write_ready_file()
+
+    if wait_for_dashboard_ready(server.health_url):
+        result = open_dashboard_in_browser(server.dashboard_url)
+    else:
+        result = {
+            'method': 'readiness_probe',
+            'attempted': False,
+            'succeeded': False,
+            'error': 'dashboard_server_not_ready_before_open_timeout',
+            'attempts': [],
+        }
+
+    with server.write_lock:
+        server.record_dashboard_open_result(result)
+
+
 def main() -> int:
     args = parse_args()
     log_file = Path(args.log_file).expanduser().resolve()
@@ -139,27 +190,28 @@ def main() -> int:
         service_log_file,
         args.location_state_flush_ms,
     )
+    server.dashboard_auto_open_enabled = not args.no_open_dashboard
+    server.dashboard_open_pending = server.dashboard_auto_open_enabled
     hydrate_log_cache(server)
+    server.start_background_workers()
     install_signal_handlers(server)
-
-    if not args.no_open_dashboard:
-        open_result = open_dashboard_in_browser(server.dashboard_url)
-        server.dashboard_open_attempted = bool(open_result['attempted'])
-        server.dashboard_open_succeeded = bool(open_result['succeeded'])
-        server.dashboard_open_error = str(open_result['error'])
-        if server.dashboard_open_attempted and not server.dashboard_open_succeeded:
-            server.record_dashboard_frontend_open_failed(
-                error=server.dashboard_open_error or 'dashboard_auto_open_failed',
-                attempted_url=server.dashboard_url,
-            )
 
     server.write_ready_file()
 
     print(json.dumps(build_ready_payload(server), ensure_ascii=True), flush=True)
 
+    if server.dashboard_auto_open_enabled:
+        threading.Thread(
+            target=auto_open_dashboard,
+            args=(server,),
+            name='debug-dashboard-auto-open',
+            daemon=True,
+        ).start()
+
     try:
         server.serve_forever()
     finally:
+        server.stop_background_workers()
         flush_location_state_file(server)
         server.server_close()
 

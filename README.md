@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.6`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.7-beta`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -37,11 +37,11 @@ If you are deciding what to install, start here:
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with delegation-first parallel subagent scheduling
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
-- [`debug`](#debug) - prove runtime root causes with high-coverage probes and an incremental investigation ledger
-- [`code-review`](#code-review) - run deep orchestrated reviews and persist canonical code-review reports
+- [`debug`](#debug) - maximize root-cause evidence from one failing reproduction with a validated coverage plan
+- [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
-- [`receiving-code-review`](#receiving-code-review) - re-verify code-review findings, challenge errors, and fix confirmed items
+- [`receiving-code-review`](#receiving-code-review) - trace findings end to end, preserve intent, and resolve confirmed items without recursive review loops
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
@@ -145,7 +145,7 @@ Key entry points:
 
 ### `exhaustive-code-slimmer`
 
-[`skills/exhaustive-code-slimmer/`](./skills/exhaustive-code-slimmer/) exhaustively searches for behavior-preserving code reductions. It combines audit scripts, deletion-first candidate search, oracle design, and an approval gate for architecture-level refactors so slimming improves maintainability instead of producing dense or risky code.
+[`skills/exhaustive-code-slimmer/`](./skills/exhaustive-code-slimmer/) exhaustively searches for behavior-preserving code reductions. It combines audit scripts, deletion-first candidate search, oracle design, and an approval gate for architecture-level refactors so slimming improves maintainability instead of producing dense or risky code. Invocation is explicit-only: a user must invoke `$exhaustive-code-slimmer`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -287,7 +287,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with delegation-first subagent scheduling. The parent builds a dependency graph, dispatches the maximum useful set of ready non-overlapping workers, keeps healthy workers running to completion, synthesizes evidence, and verifies the integrated result while retaining ownership of shared contracts and final judgment.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with delegation-first subagent scheduling. The parent builds a dependency graph, dispatches the maximum useful set of ready non-overlapping workers, keeps healthy workers running to completion, synthesizes evidence, and verifies the integrated result while retaining ownership of shared contracts and final judgment. Invocation is explicit-only: a user must invoke `$multitask-coordinator`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -311,7 +311,7 @@ Key entry points:
 
 ### `delegate-to-cursor-sdk`
 
-[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through Cursor SDK with reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice.
+[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through Cursor SDK with reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice. Hierarchical mode adds dependency-aware workstream scheduling, effective-concurrency limits, isolated writers, and integration gates without making direct or planned delegation heavier.
 
 Install:
 
@@ -322,8 +322,9 @@ npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 Best for:
 
 - dispatching bounded implementation, proposal, or inspect-only packets through Cursor SDK
-- using `composer-2.5-fast` consistently for Cursor and Cursor internal subagents unless explicitly overridden
-- allowing Cursor `Task()` / `taskToolCall` subagents only under an explicit packet policy
+- using catalog-resolved Grok 4.5 High for top-level Cursor runs while leaving speed to Cursor's default and treating internal-subagent model labels as requests rather than verified parameter selections
+- coordinating independent hierarchical workstreams through a dependency ledger, event-driven readiness, isolated apply-mode writers, and upstream acceptance gates
+- allowing Cursor task/Agent-tool subagents only under an explicit packet policy
 - monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
 - reviewing Cursor output, diffs, verification evidence, and repair loops before final acceptance
 
@@ -362,7 +363,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides evidence-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, and unclear failures. It maximizes information gained per reproduction with a broad but deduplicated hypothesis set, high-coverage probes, the bundled local NDJSON collector, log summarization, and an incremental root-cause ledger.
+[`skills/debug/`](./skills/debug/) provides coverage-first runtime debugging for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, and proves the origin-to-symptom chain before any authorized repair. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
 
 Install:
 
@@ -373,26 +374,33 @@ npx skills@latest add JUNERDD/skills --skill debug
 Key entry points:
 
 - Workflow and guardrails: [`skills/debug/SKILL.md`](./skills/debug/SKILL.md)
-- One-shot debugging: [`skills/debug/references/one-shot-debugging.md`](./skills/debug/references/one-shot-debugging.md)
+- Coverage-first planning: [`skills/debug/references/coverage-first-debugging.md`](./skills/debug/references/coverage-first-debugging.md)
 - Operator reference: [`skills/debug/references/runtime-debugging.md`](./skills/debug/references/runtime-debugging.md)
+- Browser and streaming instrumentation: [`skills/debug/references/browser-debugging.md`](./skills/debug/references/browser-debugging.md)
 - Root-cause report rules: [`skills/debug/references/root-cause-document.md`](./skills/debug/references/root-cause-document.md)
+- Coverage-plan validator: [`skills/debug/scripts/debug_plan.py`](./skills/debug/scripts/debug_plan.py)
 - Session helper: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
+- Page-local browser transport: [`skills/debug/assets/browser-debug-transport.mjs`](./skills/debug/assets/browser-debug-transport.mjs)
 - Log summarizer: [`skills/debug/scripts/summarize_debug_log.py`](./skills/debug/scripts/summarize_debug_log.py)
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
+- Lifecycle regression tests: [`skills/debug/scripts/test_debug_tools.py`](./skills/debug/scripts/test_debug_tools.py)
+- Coverage-plan regression tests: [`skills/debug/scripts/test_debug_plan.py`](./skills/debug/scripts/test_debug_plan.py)
+- Browser transport regression tests: [`skills/debug/scripts/test_browser_debug_transport.mjs`](./skills/debug/scripts/test_browser_debug_transport.mjs)
 - Optional runtime metadata: [`skills/debug/agents/openai.yaml`](./skills/debug/agents/openai.yaml)
 
 ### `debug` Skill Snapshot
 
 The `debug` skill is designed to prevent speculative fixes by forcing a prove-it loop:
 
-1. Define the failure contract and build a causal map.
-2. Enumerate and deduplicate hypotheses; in one-shot mode, cover every plausible subsystem without an arbitrary probe cap.
-3. Start or attach a logging session with `scripts/debug_session.py`, then add high-information temporary probes.
-4. Pass the coverage gate, collect one clean reproduction, and summarize the NDJSON log before reading raw volume.
-5. Mark each hypothesis as `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, or `NOT_REACHED`.
-6. Append the root-cause investigation ledger so rejected paths and their evidence are preserved.
-7. Apply a fix only after the root cause is proven.
-8. Verify with a separate post-fix run before removing instrumentation and stopping the collector.
+1. Confirm diagnosis/repair scope and choose an agent-, user-, or external-owned reproduction.
+2. Define the failure contract and terminal or long-lived observation condition, inspect the execution path, and build a causal-boundary map.
+3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
+4. Validate one coverage-plan file with a flow-start plus configured terminal or observation-checkpoint sentinel, then use it for location sync and expected-probe analysis.
+5. Start or attach logging; browser-capable local startup automatically attempts to open and confirm the dashboard, while explicitly headless sessions opt out.
+6. Pass compile, observer-cost, privacy, correlation, transport-continuity, and collector gates; continuous streams prove an acknowledged event prefix without waiting for the live queue to become empty. Then run `debug_session.py dashboard-status` and copy its normalized status/URL line before every user-owned reproduction.
+7. Collect one clean terminal run or bounded observation window, summarize source and transport sequence continuity by run and correlation hierarchy, and classify every hypothesis.
+8. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval.
+9. For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; when repair is authorized, repair the causal mechanism, verify separately, and then clean owned artifacts.
 
 This keeps the skill focused on evidence, not guesswork.
 
@@ -402,31 +410,36 @@ This keeps the skill focused on evidence, not guesswork.
 flowchart LR
   User["Developer / Operator"] --> Agent["Agent Runtime"]
   Agent --> Skill["debug/SKILL.md<br/>workflow + guardrails"]
-  Agent --> Ref["runtime-debugging.md<br/>bootstrap + log format"]
+  Agent --> Plan["Coverage plan<br/>validated boundaries + hypotheses + probes"]
+  Plan --> Validator["debug_plan.py"]
+  Plan --> Logs["Temporary instrumentation"]
   Agent --> App["Target app under debug"]
-  Agent --> Logs["Temporary instrumentation"]
   Logs --> Collector["Local NDJSON collector<br/>same-origin dashboard + APIs"]
   App --> Logs
   Collector --> File["Session log file"]
   Collector --> UI["Live dashboard"]
-  File --> Agent
+  File --> Summary["summarize_debug_log.py<br/>expected probes + correlation hierarchy"]
+  Summary --> Agent
   UI --> Agent
-  Agent --> Fix["Proven fix + post-fix verification"]
+  Agent --> Repair["Root-cause repair + post-repair verification"]
 ```
 
 ### `debug` Highlights
 
 - Evidence-first debugging instead of inspection-only reasoning
-- One-shot / high-coverage probe mode for expensive or flaky reproductions
-- High-information instrumentation with observer-cost controls and explicit cleanup after verification
-- Per-hypothesis logging, log summarization, and before/after comparison
+- One coverage-first workflow whose breadth scales with reproduction cost and observer risk
+- One machine-validated coverage plan shared by location sync and expected-probe analysis
+- High-information instrumentation with observer-cost controls and explicit cleanup after terminal diagnosis or repair verification
+- Parent-flow, operation, request, child-correlation, and run-aware log analysis
 - Incremental root-cause ledger entries that prevent repeated investigation loops
 - Local collector bootstrap when the host does not already provide logging
-- Browser-first log transport for frontend debugging, with explicit prohibition on app-local proxy routes unless direct delivery is proven blocked
+- Automatic local dashboard startup, bounded confirmation recovery, and a deterministic `dashboard-status` line in every user-owned reproduction handoff
+- Optional page-local browser transport with non-throwing probes, parent-flow context, unlimited event-count capture, idempotent acknowledged byte frames, live high-watermark checkpoints, and explicit navigation/reload evidence boundaries
+- Explicit prohibition on app-local proxy routes unless direct browser-to-collector delivery is proven blocked
 
 ### `debug` Runtime Support
 
-The current `debug` skill is intentionally portable. It works with:
+The current `debug` skill is intentionally portable. The bundled coverage validator, session helper, summarizer, and collector use Python 3; an authoritative host session may provide equivalent evidence operations, but the coverage-plan gate must still be validated. It works with:
 
 - OpenAI Codex and similar local-skill runtimes
 - Agent shells that read `~/.agents/skills/<name>/SKILL.md`
@@ -441,13 +454,14 @@ If your runtime ignores [`skills/debug/agents/openai.yaml`](./skills/debug/agent
 
 ### `debug` Collector
 
-The bundled collector is a zero-dependency Python app built on the standard library. It accepts JSON log events, appends them to an NDJSON file, and serves a same-origin dashboard for live inspection.
+The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. A batch is only a finite throughput frame: events are queued immediately, retried with the same ID, and deleted only after acknowledgement. Continuous producers use an acknowledged-prefix checkpoint, while a queue-empty flush is reserved for after production stops; a Network-panel `Pending` row alone does not prove loss or deadlock. Browser-capable local startup automatically attempts to open and confirm the dashboard after HTTP readiness, with at most two fallback attempts. Use `--no-open-dashboard` only for explicitly headless, CI, container-only, or remote operation; a failed open never blocks evidence collection. Before every user-owned reproduction, the agent refreshes session state and shows the dashboard status and current URL, even when opening was confirmed, disabled, failed, or unavailable.
 
 For frontend and browser debugging, the intended transport is direct client-to-collector HTTP posting. The collector already handles CORS and preflight, so the skill should not create temporary Next.js API routes or other app-local proxy layers unless direct browser delivery has been proven blocked in the current host.
 
 Collector endpoints:
 
 - `POST /ingest`
+- `POST /ingest/batch`
 - `GET /health`
 - `GET /api/state`
 - `GET /api/logs`
@@ -467,7 +481,7 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `code-review`
 
-[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into a deep orchestrated review. It begins with a read-only orchestration-assessment subagent that decides whether one reviewer or specialist subagents are justified, then persists a validated canonical `code-review` Markdown report with findings, test gaps, coverage ledger, and a merge recommendation. It does not edit code or Git state unless the user separately requests fixes.
+[`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into one frozen-scope deep review. It begins with a read-only orchestration assessment, requires authoritative expected-behavior evidence before treating product choices as defects, assigns stable semantic issue fingerprints, and persists a validated lineage-aware report. A receiving workflow may produce one implementation-delta post-review, but that generation is terminal and cannot automatically start another receiving cycle. The skill does not edit code or Git state unless the user separately requests fixes. Invocation is explicit-only: a user must invoke `$code-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -480,7 +494,8 @@ Best for:
 - reviewing PRs, branch diffs, staged changes, working trees, files, or pasted code
 - deciding when parallel specialist subagents add material review value
 - surfacing bugs, regressions, security issues, contract risks, and missing tests before merge
-- producing a reusable `code-review` artifact with coverage evidence and receiving handoff
+- distinguishing verified defects from unconfirmed product intent
+- producing a reusable `code-review` artifact with coverage evidence, semantic issue lineage, and a bounded receiving handoff
 
 Key entry points:
 
@@ -488,11 +503,12 @@ Key entry points:
 - Subagent orchestration: [`skills/code-review/references/subagent-orchestration.md`](./skills/code-review/references/subagent-orchestration.md)
 - Report template: [`skills/code-review/references/report-template.md`](./skills/code-review/references/report-template.md)
 - Report validator: [`skills/code-review/scripts/validate_review_report.py`](./skills/code-review/scripts/validate_review_report.py)
+- Validator regression tests: [`skills/code-review/scripts/test_validate_review_report.py`](./skills/code-review/scripts/test_validate_review_report.py)
 - Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
 
 ### `thermo-review`
 
-[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source threshold, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes.
+[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source threshold, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -514,7 +530,7 @@ Key entry points:
 
 ### `receiving-thermo-review`
 
-[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions.
+[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -535,7 +551,7 @@ Key entry points:
 
 ### `receiving-code-review`
 
-[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback, launches a re-review assessment subagent, formally challenges incorrect or stale claims, and delegates confirmed fixes to a coding subagent. It persists a validated `receiving-code-review` disposition ledger and preserves the user's Git index unless staging or publishing is explicitly requested.
+[`skills/receiving-code-review/`](./skills/receiving-code-review/) consumes a `code-review` report or equivalent PR feedback and reconstructs each problem's complete execution chain before assigning a disposition. It carries a claim from its real trigger and entry through guards, state/data propagation, persistence and external effects, failure handling, and terminal impact; preserves authoritative `Intentional` and other settled decisions across review generations; delegates only compatible confirmed fixes; and permits at most one terminal post-implementation review. Distinct adjacent issues discovered during re-review are returned as provisional residual candidates instead of silently expanding into another review/implementation loop. It preserves the user's Git index unless staging or publishing is explicitly requested. Invocation is explicit-only: a user must invoke `$receiving-code-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -545,8 +561,9 @@ npx skills@latest add JUNERDD/skills --skill receiving-code-review
 
 Best for:
 
-- re-verifying every `F#`, `T#`, and uncovered `A#` against the current scope before changing code
+- re-verifying every `F#`, `T#`, and uncovered `A#` against its complete end-to-end execution chain before changing code
 - formally challenging incorrect, overstated, or stale review claims with evidence
+- protecting authoritative product intent from being reopened without changed code, contract, or evidence
 - fixing confirmed correctness, security, contract, or test issues through a coding subagent
 - preserving staged work while keeping new fixes unstaged unless publication is requested
 
@@ -556,11 +573,12 @@ Key entry points:
 - Re-review orchestration: [`skills/receiving-code-review/references/re-review-orchestration.md`](./skills/receiving-code-review/references/re-review-orchestration.md)
 - Disposition template: [`skills/receiving-code-review/references/disposition-template.md`](./skills/receiving-code-review/references/disposition-template.md)
 - Disposition validator: [`skills/receiving-code-review/scripts/validate_disposition_report.py`](./skills/receiving-code-review/scripts/validate_disposition_report.py)
+- Validator regression tests: [`skills/receiving-code-review/scripts/test_validate_disposition_report.py`](./skills/receiving-code-review/scripts/test_validate_disposition_report.py)
 - Optional runtime metadata: [`skills/receiving-code-review/agents/openai.yaml`](./skills/receiving-code-review/agents/openai.yaml)
 
 ### `hack-review`
 
-[`skills/hack-review/`](./skills/hack-review/) reviews whether an implementation is relying on hack-like tactics instead of sound ownership and abstraction boundaries. It produces a coverage-led reviewer report that enumerates all distinct hack-risk findings discovered within scope, records intentional exceptions, and marks uncovered ownership boundaries explicitly.
+[`skills/hack-review/`](./skills/hack-review/) reviews whether an implementation is relying on hack-like tactics instead of sound ownership and abstraction boundaries. It produces a coverage-led reviewer report that enumerates all distinct hack-risk findings discovered within scope, records intentional exceptions, and marks uncovered ownership boundaries explicitly. Invocation is explicit-only: a user must invoke `$hack-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -583,7 +601,7 @@ Key entry points:
 
 ### `receiving-hack-review`
 
-[`skills/receiving-hack-review/`](./skills/receiving-hack-review/) consumes a `hack-review` report and builds a disposition ledger for every finding, intentional exception, and open ownership coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
+[`skills/receiving-hack-review/`](./skills/receiving-hack-review/) consumes a `hack-review` report and builds a disposition ledger for every finding, intentional exception, and open ownership coverage gap before deciding whether to fix, challenge, confirm, or carry it forward. Invocation is explicit-only: a user must invoke `$receiving-hack-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -605,7 +623,7 @@ Key entry points:
 
 ### `regression-review`
 
-[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, builds scoped behavior-graph deltas for affected surfaces when useful, and marks uncovered surfaces explicitly.
+[`skills/regression-review/`](./skills/regression-review/) reviews whether the current change set introduces user-visible behavioral regressions. It writes a coverage-led reviewer report that enumerates all distinct findings discovered within scope, records intentional visible changes, builds scoped behavior-graph deltas for affected surfaces when useful, and marks uncovered surfaces explicitly. Invocation is explicit-only: a user must invoke `$regression-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -628,7 +646,7 @@ Key entry points:
 
 ### `receiving-regression-review`
 
-[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, behavior-graph delta, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward.
+[`skills/receiving-regression-review/`](./skills/receiving-regression-review/) consumes a `regression-review` report and builds a disposition ledger for every finding, behavior-graph delta, intentional visible change, and open coverage gap before deciding whether to fix, challenge, confirm, or carry it forward. Invocation is explicit-only: a user must invoke `$receiving-regression-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -681,6 +699,7 @@ When you add more skills later:
     │   │   ├── report-template.md
     │   │   └── subagent-orchestration.md
     │   └── scripts/
+    │       ├── test_validate_review_report.py
     │       └── validate_review_report.py
     ├── thermo-review/
     │   ├── SKILL.md
@@ -696,13 +715,19 @@ When you add more skills later:
     │   ├── SKILL.md
     │   ├── agents/
     │   │   └── openai.yaml
+    │   ├── assets/
+    │   │   └── browser-debug-transport.mjs
     │   ├── references/
-    │   │   ├── one-shot-debugging.md
+    │   │   ├── browser-debugging.md
+    │   │   ├── coverage-first-debugging.md
     │   │   ├── root-cause-document.md
     │   │   └── runtime-debugging.md
     │   └── scripts/
+    │       ├── debug_plan.py
     │       ├── debug_session.py
     │       ├── summarize_debug_log.py
+    │       ├── test_browser_debug_transport.mjs
+    │       ├── test_debug_plan.py
     │       ├── test_debug_tools.py
     │       └── local_log_collector/
     │           ├── main.py
@@ -761,6 +786,7 @@ When you add more skills later:
     │   │   ├── disposition-template.md
     │   │   └── re-review-orchestration.md
     │   └── scripts/
+    │       ├── test_validate_disposition_report.py
     │       └── validate_disposition_report.py
     ├── receiving-hack-review/
     │   ├── SKILL.md

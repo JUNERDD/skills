@@ -23,10 +23,12 @@ Launch the assessor after collecting only minimal scope metadata. Keep it read-o
 Give it:
 
 - requested scope type and user intent
+- review chain ID, generation, trigger, scope mode, and parent resolution for generation `1`
 - baseline and target identifiers
 - changed paths, additions/deletions, and diff statistics
 - touched languages, frameworks, subsystems, and generated files
 - available requirements, issue text, PR description, or design notes
+- authoritative expected-behavior sources and inherited `Intentional`, `Disproved`, `Stale`, or `Duplicate` decisions
 - obvious critical surfaces such as auth, money, privacy, migrations, concurrency, external effects, or deployment
 - runtime, credential, platform, and tool limitations
 - any explicit review priorities from the user
@@ -47,6 +49,7 @@ Require this output:
 orchestration_decision: single-reviewer | parallel-specialists
 confidence: high | medium | low
 scope_summary: <one paragraph>
+scope_mode: full-frozen-scope | implementation-delta-and-affected-chains
 risk_dimensions:
   - <risk dimension and why it matters>
 parallelism_benefit: <specific benefit or why it is low>
@@ -145,12 +148,14 @@ candidates:
     title: <short title>
     risk: <user, security, data, contract, availability, or test risk>
     expected: <required behavior>
+    expected_basis: "kind:<kind>; strength:<authoritative|inferred|unavailable>; evidence:<source>"
     current: <observed behavior>
     evidence:
       - <path/line, trace, test, output, or command result>
     confidence: high | medium | low
     assumptions:
       - <assumption>
+    semantic_key_basis: <normalized surface | expected basis | failure mode, without line numbers>
     suggested_class: blocker | major | minor | question | test-gap
 dismissed_candidates:
   - candidate: <suspected issue>
@@ -167,13 +172,15 @@ The coordinator must:
 1. Compare specialist coverage against the semantic diff inventory.
 2. Re-open the relevant code for every candidate that could affect approval.
 3. Reject claims that rely on stale paths, misunderstood intent, duplicate failure modes, or unsupported assumptions.
-4. Merge candidates that describe the same failure mode.
-5. Split candidates whose impacts cross different contracts, users, security boundaries, or persisted data.
-6. Resolve conflicts with stronger evidence, not majority vote.
-7. Add coordinator-discovered findings when specialist partitions missed a cross-cutting issue.
-8. Assign final severity and stable IDs only after adjudication.
-9. Persist all accepted, merged, dismissed, and unresolved meaningful candidates in `Subagent Candidate Adjudication`.
-10. Record intentional overlap and whether it confirmed or contradicted another pass.
+4. Convert a disputed product choice without authoritative expected-behavior evidence into an approval-affecting `Question`; do not preserve a defect severity by substituting current code, tests, or history for product authority.
+5. For generation `1`, compare each semantic key with the parent resolution. Keep settled `Intentional`, `Disproved`, `Stale`, and `Duplicate` claims closed unless relevant code, the governing contract, or material evidence changed.
+6. Merge candidates that describe the same failure mode.
+7. Split candidates whose impacts cross different contracts, users, security boundaries, or persisted data.
+8. Resolve conflicts with stronger evidence, not majority vote.
+9. Add coordinator-discovered findings when specialist partitions missed a cross-cutting issue.
+10. Assign final severity, stable IDs, and semantic issue fingerprints only after adjudication.
+11. Persist all accepted, merged, dismissed, and unresolved meaningful candidates in `Subagent Candidate Adjudication`.
+12. Record intentional overlap and whether it confirmed or contradicted another pass.
 
 A specialist conclusion is input evidence, not an authority. The final report must never say an issue exists only because “a subagent found it.”
 

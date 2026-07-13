@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import subprocess
@@ -20,6 +21,7 @@ if str(SCRIPT_DIR) not in sys.path:
 import collector_config
 import collector_browser
 import collector_ide
+import main as collector_main
 import collector_server
 import collector_state
 
@@ -220,12 +222,40 @@ class CollectorBrowserTests(unittest.TestCase):
         with mock.patch.object(collector_browser.platform, 'system', return_value='Darwin'):
             with mock.patch.object(collector_browser.shutil, 'which', return_value='/usr/bin/open'):
                 with mock.patch.object(collector_browser.subprocess, 'run', return_value=completed):
-                    result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
+                    with mock.patch.object(
+                        collector_browser.webbrowser,
+                        'open_new_tab',
+                        return_value=False,
+                    ):
+                        result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
 
         self.assertTrue(result['attempted'])
         self.assertFalse(result['succeeded'])
         self.assertIn('macos_open_exit_1', str(result['error']))
         self.assertIn('No application knows how to open URL', str(result['error']))
+        self.assertIn('browser_open_returned_false', str(result['error']))
+
+    def test_failed_platform_open_falls_back_to_python_webbrowser(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=['/usr/bin/xdg-open', 'http://127.0.0.1:43125/'],
+            returncode=3,
+            stderr='no method available',
+        )
+
+        with mock.patch.object(collector_browser.platform, 'system', return_value='Linux'):
+            with mock.patch.object(collector_browser.shutil, 'which', return_value='/usr/bin/xdg-open'):
+                with mock.patch.object(collector_browser.subprocess, 'run', return_value=completed):
+                    with mock.patch.object(
+                        collector_browser.webbrowser,
+                        'open_new_tab',
+                        return_value=True,
+                    ) as browser_mock:
+                        result = collector_browser.open_dashboard_in_browser('http://127.0.0.1:43125/')
+
+        self.assertTrue(result['succeeded'])
+        self.assertEqual(result['method'], 'python_webbrowser')
+        self.assertEqual(len(result['attempts']), 2)
+        browser_mock.assert_called_once_with('http://127.0.0.1:43125/')
 
     def test_webbrowser_fallback_when_no_platform_opener_exists(self) -> None:
         with mock.patch.object(collector_browser.platform, 'system', return_value='Linux'):
@@ -237,6 +267,76 @@ class CollectorBrowserTests(unittest.TestCase):
         self.assertTrue(result['succeeded'])
         self.assertEqual(result['error'], '')
         browser_mock.assert_called_once_with('http://127.0.0.1:43125/')
+
+
+class CollectorDashboardStartupTests(unittest.TestCase):
+    def test_auto_open_waits_for_http_readiness_before_browser_launch(self) -> None:
+        events: list[str] = []
+
+        class FakeServer:
+            def __init__(self) -> None:
+                self.write_lock = threading.Lock()
+                self.health_url = 'http://127.0.0.1:43125/health'
+                self.dashboard_url = 'http://127.0.0.1:43125/'
+                self.dashboard_open_started_at = None
+                self.dashboard_open_pending = True
+                self.result = None
+
+            def write_ready_file(self) -> None:
+                events.append('ready')
+
+            def record_dashboard_open_result(self, result: dict[str, object]) -> None:
+                events.append('record')
+                self.result = result
+
+        server = FakeServer()
+
+        def ready(_url: str) -> bool:
+            events.append('health')
+            return True
+
+        def open_browser(_url: str) -> dict[str, object]:
+            events.append('open')
+            return {
+                'method': 'test',
+                'attempted': True,
+                'succeeded': True,
+                'error': '',
+                'attempts': [],
+            }
+
+        with mock.patch.object(collector_main, 'wait_for_dashboard_ready', side_effect=ready):
+            with mock.patch.object(collector_main, 'open_dashboard_in_browser', side_effect=open_browser):
+                collector_main.auto_open_dashboard(server)  # type: ignore[arg-type]
+
+        self.assertLess(events.index('health'), events.index('open'))
+        self.assertLess(events.index('open'), events.index('record'))
+        self.assertTrue(server.result['succeeded'])
+
+    def test_auto_open_records_readiness_timeout_without_opening_browser(self) -> None:
+        class FakeServer:
+            def __init__(self) -> None:
+                self.write_lock = threading.Lock()
+                self.health_url = 'http://127.0.0.1:43125/health'
+                self.dashboard_url = 'http://127.0.0.1:43125/'
+                self.dashboard_open_started_at = None
+                self.dashboard_open_pending = True
+                self.result = None
+
+            def write_ready_file(self) -> None:
+                pass
+
+            def record_dashboard_open_result(self, result: dict[str, object]) -> None:
+                self.result = result
+
+        server = FakeServer()
+        with mock.patch.object(collector_main, 'wait_for_dashboard_ready', return_value=False):
+            with mock.patch.object(collector_main, 'open_dashboard_in_browser') as open_mock:
+                collector_main.auto_open_dashboard(server)  # type: ignore[arg-type]
+
+        open_mock.assert_not_called()
+        self.assertFalse(server.result['succeeded'])
+        self.assertIn('not_ready', server.result['error'])
 
 
 class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
@@ -335,12 +435,106 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
 
-    def test_batch_ingest_rejects_oversized_batches(self) -> None:
-        events = [{'probeId': f'p{i}'} for i in range(collector_server.MAX_BATCH_EVENTS + 1)]
+    def test_batch_ingest_has_no_event_count_cap(self) -> None:
+        events = [
+            {
+                'probeId': f'p{i}',
+                'event': 'fetch_start',
+                'sequence': i + 1,
+            }
+            for i in range(1_000)
+        ]
         status, payload = self._request_json('POST', '/ingest/batch', payload=events)
-        self.assertEqual(status, 413)
-        self.assertEqual(payload['error'], 'too_many_events')
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['accepted'], len(events))
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        self.assertFalse(state_payload['service']['ingestEventCountLimited'])
+        self.assertEqual(state_payload['summary']['totalEntries'], len(events))
+
+    def test_state_count_lists_are_bounded_without_limiting_capture(self) -> None:
+        events = [
+            {
+                'probeId': 'fetch.lifecycle',
+                'event': 'fetch_start',
+                'correlationId': f'fetch-{index}',
+            }
+            for index in range(500)
+        ]
+        status, payload = self._request_json('POST', '/ingest/batch', payload={'events': events})
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['accepted'], len(events))
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        summary = state_payload['summary']
+        self.assertEqual(summary['totalEntries'], len(events))
+        self.assertEqual(summary['countCardinality']['correlationCounts'], len(events))
+        self.assertIn('correlationCounts', summary['countListsTruncated'])
+        self.assertEqual(len(summary['correlationCounts']), summary['countListLimit'])
+
+    def test_retrying_same_transport_batch_is_idempotent(self) -> None:
+        events = [
+            {'probeId': 'fetch.lifecycle', 'event': 'fetch_start', 'transportId': f'e-{i}'}
+            for i in range(25)
+        ]
+        body = {'batchId': 'client-a:1:25', 'events': events}
+
+        first_status, first_payload = self._request_json('POST', '/ingest/batch', payload=body)
+        second_status, second_payload = self._request_json('POST', '/ingest/batch', payload=body)
+
+        self.assertEqual(first_status, 202)
+        self.assertEqual(first_payload['persistedEvents'], len(events))
+        self.assertFalse(first_payload['duplicateBatch'])
+        self.assertEqual(second_status, 202)
+        self.assertEqual(second_payload['accepted'], len(events))
+        self.assertEqual(second_payload['persistedEvents'], 0)
+        self.assertTrue(second_payload['duplicateBatch'])
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
+
+    def test_ingest_ack_is_not_blocked_by_dashboard_index_lock(self) -> None:
+        self.server.write_lock.acquire()
+        try:
+            status, payload = self._request_json(
+                'POST',
+                '/ingest/batch',
+                payload={'events': [{'probeId': 'fetch.start'} for _ in range(500)]},
+            )
+        finally:
+            self.server.write_lock.release()
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['accepted'], 500)
+
+    def test_concurrent_batches_all_complete_and_persist(self) -> None:
+        batch_count = 32
+        events_per_batch = 64
+
+        def send_batch(batch_index: int) -> tuple[int, dict[str, object]]:
+            events = [
+                {
+                    'probeId': 'fetch.lifecycle',
+                    'event': 'fetch_start',
+                    'correlationId': f'{batch_index}-{event_index}',
+                }
+                for event_index in range(events_per_batch)
+            ]
+            return self._request_json('POST', '/ingest/batch', payload={'events': events})
+
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            results = list(pool.map(send_batch, range(batch_count)))
+
+        self.assertTrue(all(status == 202 for status, _ in results))
+        self.assertEqual(
+            sum(int(payload['accepted']) for _, payload in results),
+            batch_count * events_per_batch,
+        )
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            batch_count * events_per_batch,
+        )
 
     def test_config_update_requires_dashboard_token_and_ignores_unrelated_fields(self) -> None:
         self.config_dir.mkdir(parents=True, exist_ok=True)

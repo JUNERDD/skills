@@ -1,4 +1,7 @@
 interface:
   display_name: "Deep Code Review"
-  short_description: "Orchestrated, evidence-first code review"
-  default_prompt: "Use $code-review to assess the change scope with a subagent, run the justified deep-review plan, and persist a validated code-review report without changing code or Git state."
+  short_description: "Lineage-aware, product-grounded deep review"
+  default_prompt: "Use $code-review to run one frozen-scope deep review, ground findings in authoritative intent, and persist a bounded lineage-aware report without changing code or Git state."
+
+policy:
+  allow_implicit_invocation: false

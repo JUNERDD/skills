@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Perform a deep, scoped review of a working tree, staged diff, commit range, branch diff, pull request, focused file set, or pasted code. Use for `/code-review`, PR or diff review, and merge-safety assessment. Begin with a read-only orchestration-assessment subagent that decides whether one reviewer or multiple specialist subagents are justified by the change scope and risk. Prioritize correctness, regressions, security, privacy, contracts, data, concurrency, migrations, and tests. Persist the canonical Markdown review report and do not edit code or Git state unless the user separately requests fixes.
+description: Perform a deep, scoped review of a working tree, staged diff, commit range, branch diff, pull request, focused file set, or pasted code. Use for `/code-review`, PR or diff review, merge-safety assessment, and one bounded post-implementation review. Begin with a read-only orchestration assessment, ground expected behavior in authoritative product or contract evidence, trace propagated risk, persist a canonical lineage-aware report, and never edit code or Git state unless the user separately requests fixes. A post-implementation report is terminal for its automatic review chain.
 ---
 
 # Code Review
@@ -15,7 +15,7 @@ The coordinating agent owns scope, final judgment, de-duplication, severity, and
 
 - Read [references/subagent-orchestration.md](references/subagent-orchestration.md) before delegating review work.
 - Write the report from [references/report-template.md](references/report-template.md).
-- Validate the completed report with `python scripts/validate_review_report.py <report-path>`.
+- Validate generation `0` with `python3 scripts/validate_review_report.py <report-path>`. Validate generation `1` with the additional `--parent-report <generation-0-report> --parent-resolution <resolution-report>` arguments.
 
 ## Hard Gates
 
@@ -25,15 +25,20 @@ The coordinating agent owns scope, final judgment, de-duplication, severity, and
 - If the environment has no subagent primitive, record `Subagent unavailable` and execute the same assessment protocol in the coordinator. Never claim a subagent ran when it did not.
 - Keep every review subagent read-only. Do not edit files, stage, commit, push, reset, checkout, rebase, or mutate Git state.
 - Do not make code changes during this skill unless the user explicitly changes the task from review to implementation.
+- Put every report in a review chain. Use generation `0` for the frozen initial scope and generation `1` only for the implementation delta plus affected execution chains after a `receiving-code-review` resolution.
+- Treat generation `1` as terminal: write the report, return remaining findings to the user or product owner, and do not automatically invoke `receiving-code-review`. Any later work requires an explicit user request and a new generation `0` chain.
+- Do not classify a disputed product choice as `Blocker`, `Major`, or `Minor` without an authoritative expected-behavior basis. Use `Question` when product intent is unconfirmed.
 
 ## Scope and Identity
 
 1. Resolve the requested scope: working tree, staged diff, commit range, branch diff, pull request, file set, or pasted code.
 2. Choose the narrowest reasonable scope when none is explicit. Prefer staged changes when present; otherwise compare the working tree with `HEAD`.
 3. Record the baseline and target precisely. Use commit SHAs when available.
-4. Compute a scope fingerprint when practical from the baseline, target, changed paths, and normalized diff hash. Record why a fingerprint is unavailable.
-5. Read requirements, issue text, PR description, design notes, migrations, and relevant contracts before judging intent.
-6. Do not silently widen scope. Mark unrelated context as supporting evidence rather than reviewed change.
+4. Create a review chain ID and record generation, trigger, parent resolution ID/path, and scope mode. Generation `1` must read the complete parent resolution before reviewing.
+5. Compute a scope fingerprint when practical from the baseline, target, changed paths, and normalized diff hash. Record why a fingerprint is unavailable.
+6. Read requirements, issue text, PR description, design notes, migrations, relevant contracts, and settled parent-resolution decisions before judging intent.
+7. Freeze generation `0` scope. For generation `1`, review the implementation delta and only the callers, callees, contracts, and execution chains it can affect; do not reopen the full original discovery frontier.
+8. Do not silently widen scope. Mark unrelated context as supporting evidence or a follow-up rather than a finding in the current chain.
 
 ## Orchestration
 
@@ -62,6 +67,14 @@ Review beyond changed lines whenever risk can propagate. Trace far enough to eva
 - runtime behavior through focused, non-destructive commands when it materially changes confidence
 - requirements and intentional behavior changes so intended changes are not misreported as defects
 
+Establish an expected-behavior basis before accepting a finding:
+
+1. Prefer explicit current user or product-owner decisions and acceptance criteria.
+2. Then use public contracts, approved design or migration decisions, and security, privacy, compliance, or data-integrity invariants.
+3. Treat tests, current code, and history as behavioral evidence, not product authority by themselves.
+4. When the disagreement is a product choice and no authoritative basis is available, emit an approval-affecting `Question` with a settlement criterion instead of a defect.
+5. In generation `1`, inherit `Intentional`, `Disproved`, `Stale`, and `Duplicate` decisions from the parent resolution. Reopen the same semantic issue only when relevant code, the governing contract, or material evidence changed. Record `kind:<code|contract|evidence>; ref:<concrete source>; change:<concrete delta>`; placeholder references or changes such as `None`, `unknown`, or template text do not authorize reopening.
+
 Use search, history, blame, runtime checks, or targeted tests only when they strengthen evidence. Passing lint, typecheck, or unrelated tests is hygiene evidence, not proof of behavioral safety.
 
 Stop only when every changed review-relevant or unknown-impact area is accounted for, meaningful candidates have been adjudicated, and remaining blind spots are explicit.
@@ -75,6 +88,7 @@ Stop only when every changed review-relevant or unknown-impact area is accounted
   - `Not review-relevant`
   - `Not covered`
 - Give every standalone test gap a stable `T#` ID and severity.
+- Give every `F#` and `T#` a canonical semantic issue key. Use `behavior; entry=<semantic entry>; contract=<stable expectation>; effect=<terminal failure>` for findings and `test-gap; entry=<semantic entry>; contract=<stable expectation>; gap=<missing coverage>` for standalone test gaps. Exclude line numbers, report-local IDs, generation, and current implementation symbols. Compute its fingerprint as `ifp-sha256:<sha256 of the exact UTF-8 issue key>` so the same claim can be recognized across generations.
 - Record meaningful dismissed or merged candidates in `Subagent Candidate Adjudication` or the evidence appendix.
 - Mark the report `Incomplete` and identify exact uncovered surfaces when context, credentials, runtime, diff size, or other limits prevent complete coverage.
 - Never present a partial review as complete.
@@ -98,6 +112,7 @@ For every accepted finding:
 - state assumptions and reduce confidence when proof is incomplete
 - include exactly one or two primary code links in `Look here first`
 - record which reviewer proposed it and how the coordinator verified it
+- record the structured expected-behavior basis, canonical issue key, and verified semantic issue fingerprint
 
 Do not invent defects. A clean result still requires a full coverage ledger, strongest blind spot, and verification record.
 
@@ -122,20 +137,23 @@ Downgrade an unproven suspected blocker rather than retaining a hand-wavy `Block
 - Generate a unique report ID and filename. Follow an existing repository report convention; otherwise use `tmp/reviews/YYYY-MM-DD-code-review-report-<random-id>.md`.
 - Never overwrite an existing report.
 - Persist scope identity, scope fingerprint, orchestration decision, specialist assignments, candidate adjudication, findings, test gaps, coverage, evidence, and a `Receiving Handoff` section.
+- Persist review-chain identity, generation, trigger, parent review and resolution, semantic issue keys and fingerprints, expected-behavior bases, and inherited-settlement reconciliation.
 - Treat the completed review report as a fixed input artifact. Do not rewrite it during receiving or implementation; record later dispositions and code changes in a separate `receiving-code-review` resolution report linked by Report ID.
+- A generation `0` report may be handed to `receiving-code-review`. A generation `1` report must use a terminal handoff and must not be consumed automatically.
+- Partition every non-Question finding and standalone test gap exactly once into actionable or deferred handoff IDs. List every `Question` and `Not covered` area in its matching open-ID field.
 - Run the validator and fix every error before claiming the report is complete.
 
 ## Workflow
 
-1. Resolve scope, baseline, target, and minimal diff inventory.
+1. Resolve review-chain identity, generation, trigger, scope, baseline, target, and minimal diff inventory.
 2. Launch the orchestration-assessment subagent.
 3. Record and execute the single-reviewer or specialist plan.
 4. Build the semantic diff inventory and `A#` coverage areas.
 5. Trace changed control, data, security, persistence, integration, and test paths.
 6. Run focused verification where it materially improves confidence.
 7. Collect candidate findings and specialist coverage results.
-8. Independently verify, de-duplicate, challenge, and classify every candidate.
-9. Assign final `F#`, `T#`, and `A#` IDs.
+8. Independently verify, de-duplicate, challenge, and classify every candidate against its expected-behavior basis and inherited settlements.
+9. Assign final `F#`, `T#`, and `A#` IDs plus semantic issue fingerprints.
 10. Derive the recommendation from unresolved items and coverage.
 11. Write the canonical report from the template.
 12. Run `scripts/validate_review_report.py` and correct all failures.
@@ -147,6 +165,8 @@ Downgrade an unproven suspected blocker rather than retaining a hand-wavy `Block
 - The orchestration decision is supported by scope and risk, not arbitrary agent count.
 - Every specialist candidate was verified, rejected, merged, or retained with evidence.
 - Every changed review-relevant or unknown-impact area has an `A#` row.
+- Every `F#` and `T#` has an authoritative expected-behavior basis or is an explicit `Question`, plus a unique semantic issue fingerprint.
+- Generation and handoff are consistent: generation `0` may allow receiving; generation `1` is terminal and links its parent resolution.
 - Every indexed finding has one matching card and every `Finding F#` area references a real finding.
 - Every `Not covered` row has a reason and concrete next step.
 - Recommendation mapping is exact.

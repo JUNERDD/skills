@@ -21,18 +21,21 @@ You are Cursor's coding agent acting as the downstream implementation executor t
 - Setting sources: <project | none | explicit list>
 
 ## Cursor Model
-- Model: composer-2.5 fast=true
-- SDK selection: `{ "id": "composer-2.5", "params": [{ "id": "fast", "value": "true" }] }`
-- Override authority: none unless an explicit user Cursor-model instruction is quoted here.
+- Wrapper profile: `grok-4.5-high`
+- Model: `Grok 4.5 High`
+- Model params: `catalog-resolved-high-default-speed`
+- SDK resolution: resolve the canonical id and one High effort parameter through `Cursor.models.list()`; the speed parameter is omitted so Cursor uses its current default.
+- Override authority: none unless an explicit user Cursor-model instruction is quoted here. For an authorized override, set Wrapper profile to `explicit`, Model to the exact SDK id, and Model params to `none` or a comma-separated exact `key=value` list matching the wrapper arguments.
 
 ## Cursor Internal Subagent Policy
 - Allowed: <disabled | read-only-analysis | verification | bounded-implementation>
-- Default model: composer-2.5 fast=true
+- Default requested model: Grok 4.5 High
+- Model verification: requested label only; exact High parameters are unverified, so use `disabled` when exact pinning is required
 - Max concurrent internal subagents: <0-4>
 - Allowed purposes:
   - <purpose or none>
 - Write policy: <forbidden | parent-only | owned-files-only>
-- Required evidence: description, model requested, scope, files read or touched, result, risks
+- Required evidence: description, model requested, model observed if supplied otherwise unverified, scope, files read or touched, result, risks
 
 ## Authorization
 - Cursor API-key state: <authorized | needs user authorization>
