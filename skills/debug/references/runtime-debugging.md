@@ -75,9 +75,9 @@ Use a unique session ID. The CLI starts the collector detached, waits for the re
   --session-id "checkout-$(date +%s)"
 ```
 
-The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. The session CLI waits for `dashboardFrontendOpenRecorded` and, when needed, makes at most two fallback open attempts. Use `--no-open-dashboard` or its `--headless` alias only for explicitly headless, CI, container-only, or remote operation. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
+The default is to open the live dashboard automatically. The collector publishes its ready file, starts serving HTTP, verifies the health endpoint, and only then asks the operating system to open the dashboard. The session CLI waits for `dashboardFrontendOpenRecorded` and, when needed, makes at most two fallback open attempts. Use `--no-open-dashboard` or its `--headless` alias only when the collector host is verified to have no usable local graphical browser, such as CI, container-only, or remote operation. A user-owned run, a wait for user reproduction, missing agent browser control, or a prohibition on agent-operated product browsing does not qualify. Add `--ide <IDE_ID>` only when source-opening from the dashboard is useful.
 
-Automatic browser opening is non-fatal and never part of the evidence gate. The `start` result adds `dashboardRecovery` with `frontendConfirmed`, `fallbackAttemptCount`, `dashboardUrl`, and `error`. Preserve those values and always show the refreshed dashboard status and URL before a user-owned reproduction, including confirmed, failed, disabled, and unavailable states. `dashboardOpenSucceeded` means an opener accepted the request, while `dashboardFrontendOpenRecorded` confirms that the page loaded. Neither field proves instrumentation coverage or that a tab remains open.
+Automatic browser opening is non-fatal and never part of the evidence gate. The `start` result adds `dashboardRecovery` with `frontendConfirmed`, `fallbackAttemptCount`, `dashboardUrl`, and `error`. Preserve those values and always show the refreshed dashboard status and URL before a user-owned reproduction. For a browser-capable local session, recover an accidental `disabled` state with `open-dashboard` before showing the refreshed line; proceed directly with `disabled` only for a verified no-local-GUI host. `dashboardOpenSucceeded` means an opener accepted the request, while `dashboardFrontendOpenRecorded` confirms that the page loaded. Neither field proves instrumentation coverage or that a tab remains open.
 
 The CLI writes session artifacts under `<workspace>/.debug-logs/` unless `--artifact-dir` is supplied. Capture the returned `readyFile` path and use it for every later command.
 
@@ -349,7 +349,7 @@ Use this manual recovery sequence for a reused session or when the dashboard lat
 5. If the page still does not load, surface the exact URL and errors. Do not restart a healthy collector merely to open the page.
 6. Continue evidence collection through the CLI and NDJSON file.
 
-Dashboard state must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Use `--no-open-dashboard` instead of relying on opener failure when the session is intentionally headless.
+Dashboard state must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Use `--no-open-dashboard` instead of relying on opener failure only when the collector host is verified to have no local graphical browser; do not use it merely because the user owns the reproduction.
 
 ## CORS and security
 
@@ -364,11 +364,11 @@ The collector binds to `127.0.0.1` by default.
 
 ## Reproduction handoff
 
-Apply the reproduction-run rules in `SKILL.md`; the steps below implement the default user-handoff path. Requesting the user to operate their own browser or application is a manual handoff, not agent-operated browser automation.
+Apply the reproduction-run rules in `SKILL.md`; the steps below implement the default user-handoff path. Requesting the user to operate their own browser or application is a manual handoff, not agent-operated browser automation, and does not justify disabling dashboard auto-open.
 
 For user-owned reproduction, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; and observer, volume, and privacy controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
 
-For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as the opening paragraph. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
+For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff. If a browser-capable local session reports `disabled`, run `debug_session.py open-dashboard --ready-file <READY_FILE>`, refresh `dashboard-status`, and then copy the refreshed `line` verbatim as the opening paragraph. Surface the exact URL and error if bounded recovery fails; do not block the reproduction. When commands are prohibited, derive the same line and recovery decision from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
 
 Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. For a validated agent-autonomous plan, execute the reproduction directly after the runtime gate instead of asking the user. Agent experiments outside that plan are supporting evidence only and do not satisfy the failing-run gate.
 
