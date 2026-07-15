@@ -364,13 +364,15 @@ The collector binds to `127.0.0.1` by default.
 
 ## Reproduction handoff
 
-When reproduction is user-owned, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; and observer, volume, and privacy controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
+Apply the reproduction-run rules in `SKILL.md`; the steps below implement the default user-handoff path. Requesting the user to operate their own browser or application is a manual handoff, not agent-operated browser automation.
+
+For user-owned reproduction, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; and observer, volume, and privacy controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
 
 For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff and copy its `line` verbatim as the opening paragraph. The command refreshes state, falls back to the ready payload when refresh fails, normalizes the status, and keeps errors on one line. When commands are prohibited, derive the same line from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL or confirmation status. Never collapse this handoff to reproduction steps alone.
 
-Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. When reproduction is agent-owned, execute it directly after the runtime gate instead of asking the user.
+Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. For a validated agent-autonomous plan, execute the reproduction directly after the runtime gate instead of asking the user. Agent experiments outside that plan are supporting evidence only and do not satisfy the failing-run gate.
 
-Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream.
+Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream. When the run completes, record its purpose, owner, delegation, evidence filter, and status in the ledger before changing the plan's `run` block. A subsequent request for the agent to investigate means analyze this evidence; it does not transfer reproduction ownership.
 
 ## In-scope root-cause repair verification
 
@@ -379,7 +381,8 @@ Use one `runId` for the clean initial reproduction. Do not mix setup activity wi
 - Treat change size as a constraint, not the objective. After establishing causal sufficiency, choose the narrowest safe, coherent repair; include every causally necessary file or layer and exclude unrelated cleanup.
 - Do not substitute a smaller downstream guard, fallback, or coercion while the proven causal mechanism remains active.
 - Use a new `runId`, such as `post-repair`.
-- Reproduce the same flow and compare the same probe IDs and invariants.
+- Default verification to user ownership. Apply a still-valid `remaining-runs` delegation or a new explicit verification delegation only after assigning the new verification `runId`; require its `effectiveRunId` to match.
+- Reproduce the same flow and compare the same probe IDs and invariants; for user ownership, issue the canonical handoff again and pause for completion.
 - Treat a missing post-repair symptom as insufficient when the flow itself did not complete.
 - If verification fails, preserve the failed-repair evidence and update the same investigation document.
 

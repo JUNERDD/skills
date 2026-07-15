@@ -7,6 +7,7 @@ Use one evolving Markdown ledger whenever repair is in scope or a debug session 
 - Creation and placement
 - Update rules
 - Status model
+- Reproduction-run history
 - Root-cause proof
 - Template
 - Retention and cleanup
@@ -39,6 +40,8 @@ Read the current ledger before every update. Append one investigation row for ea
 
 Preserve rejected and superseded paths with the evidence that displaced them. Do not retry one without new contradictory evidence. Separate verified facts from inference, and separate root cause from enabling conditions and downstream symptoms.
 
+Before replacing the coverage plan's current `run` block, append the completed run to the reproduction-run history. Never rewrite its ID, purpose, owner, delegation, evidence reference, or terminal status.
+
 ## Status model
 
 Use these document statuses:
@@ -64,6 +67,10 @@ Use these hypothesis statuses, matching the coverage plan:
 - `SUPERSEDED`
 
 Use `NOT_REACHED` only when enclosing evidence proves the flow terminated or branched before the hypothesized path. Treat an otherwise missing probe as `INCONCLUSIVE`.
+
+## Reproduction-run history
+
+Record every completed failing, blind-spot, and verification run. Treat ownership as run-scoped and immutable. For non-user ownership, record the delegation target, scope, effective run ID, and current-user directive. A request for the agent to investigate completed evidence changes neither the completed run nor any future run owner.
 
 ## Root-cause proof
 
@@ -97,7 +104,6 @@ For an in-scope repair, additionally record:
 - Coverage plan: `[path]`
 - Evidence file: `[NDJSON path]`
 - Status: `[status]`
-- Reproduction owner: `[agent | user | external]`
 - Reproduction cost: `[low | medium | high | single opportunity]`
 - Constraints: `[list]`
 
@@ -116,6 +122,10 @@ For an in-scope repair, additionally record:
 - Reviewed cause-family exclusions: `[families and reasons]`
 - Observer and privacy controls: `[summary]`
 - Residual ambiguities: `[list]`
+
+## Reproduction Runs
+
+- `[runId]` — purpose: `[failing | blind-spot | verification]`; owner: `[user | agent | external]`; delegation: `[not applicable | target, scope, effectiveRunId, current-user directive]`; status: `[completed | incomplete]`; evidence: `[path and bounded filter]`
 
 ## Current Root Cause
 

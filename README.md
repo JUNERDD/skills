@@ -363,7 +363,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides coverage-first, end-to-end runtime debugging and repair for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, proves the origin-to-symptom chain, repairs the causal mechanism, verifies the original failure contract in a separate run, and cleans up temporary instrumentation. Requests to debug, troubleshoot, fix, repair, or resolve follow this full loop unless the user explicitly asks for diagnosis-only work. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
+[`skills/debug/`](./skills/debug/) provides coverage-first, end-to-end runtime debugging and repair for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, proves the origin-to-symptom chain, repairs the causal mechanism, verifies the original failure contract in a separate run, and cleans up temporary instrumentation. Requests to debug, troubleshoot, fix, repair, or resolve follow this full loop unless the user explicitly asks for diagnosis-only work. Each runtime run uses a user handoff by default. A pre-run assignment of the runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
 
 Install:
 
@@ -393,7 +393,7 @@ Key entry points:
 
 The `debug` skill is designed to prevent speculative fixes by forcing a prove-it loop:
 
-1. Resolve scope without redundant approval: debug/fix requests run through repair and verification, while explicitly diagnosis-only requests stop before behavior changes; then choose an agent-, user-, or external-owned reproduction.
+1. Resolve scope without redundant approval: debug/fix requests run through repair and verification, while explicitly diagnosis-only requests stop before behavior changes. Default each run to a user handoff; before the first run, an explicit agent assignment may cover the remaining autonomous chain, while later ownership changes require explicit delegation of the applicable future run.
 2. Define the failure contract and terminal or long-lived observation condition, inspect the execution path, and build a causal-boundary map.
 3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
 4. Validate one coverage-plan file with a flow-start plus configured terminal or observation-checkpoint sentinel, then use it for location sync and expected-probe analysis.
@@ -511,7 +511,7 @@ Key entry points:
 
 ### `thermo-review`
 
-[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source threshold, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.
+[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source trigger for cohesion, dependency, and ownership analysis, severity-ordered maintainability findings, and a quality-gate recommendation while avoiding code changes unless the user explicitly asks for fixes. The threshold drives responsibility-boundary diagnosis rather than text compaction. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -522,7 +522,7 @@ npx skills@latest add JUNERDD/skills --skill thermo-review
 Best for:
 
 - reviewing whether a change makes the implementation more tangled, oversized, or indirect
-- finding missed simplification, decomposition, canonical-ownership, and type-boundary opportunities
+- finding missed simplification, cohesive responsibility splits, canonical-ownership moves, and type-boundary opportunities
 - producing a durable structural review artifact with candidate coverage and residual blind spots
 
 Key entry points:
@@ -533,7 +533,7 @@ Key entry points:
 
 ### `receiving-thermo-review`
 
-[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.
+[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) consumes a thermo report and builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, and candidate sweep entry before deciding whether to fix, challenge, justify, narrow, or carry it forward. For oversized maintained source, it maps responsibilities and dependencies before choosing an in-scope cohesive extraction or canonical-owner move, an evidence-backed waiver, or an approval-gated follow-up; a smaller count alone is not closure. It also checks behavior parity for touched user-visible or unknown-impact surfaces so structural cleanup does not quietly introduce regressions. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -544,7 +544,7 @@ npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
 Best for:
 
 - verifying harsh structural review findings against the current diff before changing code
-- resolving 350-line threshold concerns, decomposition gaps, and recursive coverage gaps
+- resolving 350-line concerns through clearer responsibility ownership and dependency seams, alongside decomposition and recursive coverage gaps
 - applying scoped structural fixes while preserving Git staging, checking behavior parity, and avoiding unapproved architecture refactors
 
 Key entry points:

@@ -1,4 +1,4 @@
 interface:
   display_name: "Coverage-First Debug & Repair"
   short_description: "Prove, repair, verify, and clean up runtime bugs"
-  default_prompt: "Use $debug to trace and repair this runtime bug with a validated coverage plan and evolving investigation ledger, format every visible handoff as scannable Markdown sections, verify the original failure contract in a separate run, and clean up temporary instrumentation."
+  default_prompt: "Use $debug to trace and repair this runtime bug with a validated coverage plan, request each runtime run from me by default, treat post-run requests for agent investigation as evidence analysis, use agent reproduction only for runs I explicitly delegate, maintain one ledger, and clean up temporary instrumentation."

@@ -148,7 +148,7 @@ Use this shape:
   ],
   "run": {
     "runId": "initial",
-    "reproductionOwner": "agent",
+    "reproductionOwner": "user",
     "steps": ["seed version 7", "submit A then B", "refresh after terminal events"],
     "completion": {"mode": "flow-terminal"}
   },
@@ -218,6 +218,26 @@ Use this shape:
 ```
 
 Use these probe roles: `flow-start`, `flow-terminal`, `observation-checkpoint`, `boundary`, `branch`, `state`, `async`, `external`, `exception`, `invariant`, or `observation`.
+
+Apply the reproduction-run rules in `SKILL.md`. For the exceptional agent-autonomous shape, record the current user's explicit delegation:
+
+```json
+{
+  "run": {
+    "runId": "initial",
+    "reproductionOwner": "agent",
+    "reproductionDelegation": {
+      "target": "agent",
+      "scope": "remaining-runs",
+      "effectiveRunId": "initial",
+      "currentUserDirective": "Have the agent investigate this runtime failure."
+    },
+    "steps": ["run the deterministic reproduction"]
+  }
+}
+```
+
+`run.reproductionOwner` applies only to the shown `runId`. For non-user ownership, set `reproductionDelegation.scope` to `single-run` or `remaining-runs` and require `effectiveRunId` to equal that `runId`. Preserve completed ownership in the investigation ledger before replacing the plan's current `run` block.
 
 Omitting `run.completion` preserves the default `flow-terminal` requirement. For an intentionally long-lived flow, set `run.completion` to `{"mode":"observation-checkpoint","condition":"<bounded observable stop condition>"}` and include an `observation-checkpoint` sentinel. The checkpoint closes only the evidence window; it does not claim that the business stream terminated.
 
@@ -293,7 +313,7 @@ Treat a missing probe as evidence only when flow sentinels, collector continuity
 
 Before the first failing reproduction, require:
 
-- [ ] The failure contract and reproduction owner are precise.
+- [ ] The failure contract and current run owner are precise; ownership is user by default, and every non-user delegation has an allowed scope plus an `effectiveRunId` matching the current `runId`.
 - [ ] Applicable cause families were reviewed and every exclusion has a reason.
 - [ ] Every relevant causal boundary has an invariant and mapped probe.
 - [ ] Every material hypothesis has both confirming and rejecting evidence.

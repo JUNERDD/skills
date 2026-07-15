@@ -51,7 +51,7 @@ Structural failure:
 - Current: `[what the reviewed change does instead]`
 
 Simpler path:
-- `[specific decomposition, ownership move, branch deletion, type model, helper reuse, or code-judo reframing]`
+- `[specific responsibility split, ownership move, branch deletion, type model, helper reuse, or code-judo reframing; for a threshold finding, explain how the dependency surface narrows]`
 
 Evidence:
 - `[line count, diff trace, call-site trace, duplicate search, canonical helper search, test/context evidence, or missing proof]`
@@ -80,7 +80,7 @@ Structural failure:
 - Current: `[what the reviewed change does instead]`
 
 Simpler path:
-- `[specific decomposition, ownership move, branch deletion, type model, helper reuse, or code-judo reframing]`
+- `[specific responsibility split, ownership move, branch deletion, type model, helper reuse, or code-judo reframing; for a threshold finding, explain how the dependency surface narrows]`
 
 Evidence:
 - `[what supports the concern and what is still missing]`
@@ -140,7 +140,7 @@ Reviewer action:
 ## Decomposition Gaps
 
 If none exist, write `None.`
-Otherwise list focused decomposition, extraction, or simplification gaps not already fully covered by a finding card.
+Otherwise list focused responsibility splits, ownership moves, extractions, or simplification gaps not already fully covered by a finding card.
 
 - `D1` `[changed surface or risk]` - `[missing decomposition, helper reuse, state model, or type boundary]` - `[link](/abs/path/file.ts#L10)`
 
@@ -162,9 +162,11 @@ Every changed structural or unknown-impact area and every discovered candidate f
 
 ### Line Count Ledger
 
-| File | Baseline lines | Current lines | Threshold status | Decision |
-| --- | ---: | ---: | --- | --- |
-| `[path]` | `[n]` | `[n]` | `[under 350 | crossed 350 | already over 350 | excluded]` | `[Finding F# | reviewed no issue | waived with reason | not covered]` |
+For every `crossed 350` or `already over 350` row, diagnose cohesion, dependency direction, and canonical ownership. A lower physical line count alone is not a valid resolution.
+
+| File | Baseline lines | Current lines | Threshold status | Boundary diagnosis | Decision |
+| --- | ---: | ---: | --- | --- | --- |
+| `[path]` | `[n]` | `[n]` | `[under 350 | crossed 350 | already over 350 | excluded]` | `[responsibilities, dependency seam, canonical owner, or cohesive-file evidence]` | `[reviewed no issue (under 350 only) | Finding F# | waived with reason | excluded | not covered]` |
 
 ### Recursive Candidate Sweep Log
 
@@ -199,5 +201,6 @@ Use this section for reviewed candidates, candidates added during recursion, dis
 - `[yes | no]` Every finding in a severity section appears in `Complete Findings Index`.
 - `[yes | no]` Every `Finding F#` ledger row has a matching card.
 - `[yes | no]` Every `Not covered` row has a reason and next verification step.
-- `[yes | no]` Every maintained source file over `350` lines is accounted for or explicitly waived.
+- `[yes | no]` Every maintained source file over `350` lines has a cohesion, dependency, and ownership diagnosis and maps to a finding or evidence-backed waiver.
+- `[yes | no]` No threshold decision relies only on formatting density, arbitrary relocation, or another count-only tactic.
 - `[yes | no]` Recommendation follows the mapping rules from the skill.

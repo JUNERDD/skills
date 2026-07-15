@@ -33,6 +33,7 @@ PROBE_ROLES = {
 }
 SENTINEL_ROLES = {"flow-start", "flow-terminal", "observation-checkpoint"}
 COMPLETION_MODES = {"flow-terminal", "observation-checkpoint"}
+DELEGATION_SCOPES = {"single-run", "remaining-runs"}
 COVERAGE_GATES = {
     "causeFamiliesReviewed",
     "observerCostReviewed",
@@ -236,10 +237,53 @@ def validate_plan(plan: Any) -> dict[str, Any]:
                 excluded_cause_family_count += 1
 
     run = validator.object_field(plan, "run", "")
-    validator.string_field(run, "runId", "run")
+    run_id = validator.string_field(run, "runId", "run")
     owner = validator.string_field(run, "reproductionOwner", "run")
     if owner and owner not in {"agent", "user", "external"}:
         validator.error("run.reproductionOwner", "must be one of: agent, user, external")
+    delegation_present = "reproductionDelegation" in run
+    raw_delegation = run.get("reproductionDelegation")
+    if owner == "user" and delegation_present:
+        validator.error(
+            "run.reproductionDelegation",
+            "must be omitted when run.reproductionOwner is user",
+        )
+    elif owner in {"agent", "external"}:
+        if not isinstance(raw_delegation, dict):
+            validator.error(
+                "run.reproductionDelegation",
+                "must be an object recording the current user's explicit delegation for non-user ownership",
+            )
+        else:
+            target = validator.string_field(
+                raw_delegation, "target", "run.reproductionDelegation"
+            )
+            scope = validator.string_field(
+                raw_delegation, "scope", "run.reproductionDelegation"
+            )
+            effective_run_id = validator.string_field(
+                raw_delegation, "effectiveRunId", "run.reproductionDelegation"
+            )
+            validator.string_field(
+                raw_delegation,
+                "currentUserDirective",
+                "run.reproductionDelegation",
+            )
+            if target and target != owner:
+                validator.error(
+                    "run.reproductionDelegation.target",
+                    "must match run.reproductionOwner",
+                )
+            if scope and scope not in DELEGATION_SCOPES:
+                validator.error(
+                    "run.reproductionDelegation.scope",
+                    "must be one of: remaining-runs, single-run",
+                )
+            if effective_run_id and run_id and effective_run_id != run_id:
+                validator.error(
+                    "run.reproductionDelegation.effectiveRunId",
+                    "must match run.runId",
+                )
     validator.string_list_field(run, "steps", "run", allow_empty=False)
     completion_mode = "flow-terminal"
     raw_completion = run.get("completion")

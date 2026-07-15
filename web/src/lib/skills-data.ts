@@ -589,7 +589,7 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A coverage-first debugging and repair system with a machine-validated hypothesis-and-probe plan, loss-auditable runtime evidence, an evolving investigation ledger, and separate post-repair verification.",
     overview:
-      "Use this skill when code reading is not enough and a runtime bug should be followed from failure contract to verified repair. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file with a terminal or observation-checkpoint completion mode, and reuses that plan for collector location sync and expected-probe analysis. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts. The dashboard log stream prefers an optional human-readable message and falls back to the structured event name or probe ID, keeping compact events readable without rewriting raw evidence. Required real-time events are never count-capped or sampled: the page transport assigns monotonic IDs, retains events until idempotent acknowledgement, and confirms a gap-free prefix checkpoint while later events continue. Correlated NDJSON is summarized by run, parent flow, operation, request, child correlation, and transport continuity before raw events are inspected. Requests to debug, troubleshoot, fix, repair, or resolve continue through the evidence-proven repair, a separate verification run, ledger completion, and cleanup unless the user explicitly requests diagnosis-only work.",
+      "Use this skill when code reading is not enough and a runtime bug should be followed from failure contract to verified repair. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file with a terminal or observation-checkpoint completion mode, and reuses that plan for collector location sync and expected-probe analysis. Each runtime run uses a user handoff by default. A pre-run assignment of runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts. The dashboard log stream prefers an optional human-readable message and falls back to the structured event name or probe ID, keeping compact events readable without rewriting raw evidence. Required real-time events are never count-capped or sampled: the page transport assigns monotonic IDs, retains events until idempotent acknowledgement, and confirms a gap-free prefix checkpoint while later events continue. Correlated NDJSON is summarized by run, parent flow, operation, request, child correlation, and transport continuity before raw events are inspected. Requests to debug, troubleshoot, fix, repair, or resolve continue through the evidence-proven repair, a separate verification run, ledger completion, and cleanup unless the user explicitly requests diagnosis-only work.",
     bestFor: [
       "Expensive, flaky, timing-sensitive, destructive, environment-specific, or user-only reproductions.",
       "Runtime failures that are easy to guess about but hard to prove across causal boundaries.",
@@ -600,7 +600,7 @@ export const SKILLS: SkillDetail[] = [
       "End-to-end bug-fix requests that must not stop at a root-cause report or unverified recommendation.",
     ],
     workflow: [
-      "Resolve scope without redundant approval: debug/fix requests include repair and verification unless the user explicitly limits the work to diagnosis; then choose the reproduction owner, define the failure contract plus terminal or bounded observation condition, and inspect the relevant execution path.",
+      "Resolve scope without redundant approval, default each runtime run to a user handoff, allow a pre-run agent assignment to cover the remaining autonomous chain, and require explicit run-scoped delegation for later ownership changes; then define the failure contract plus terminal or bounded observation condition and inspect the relevant execution path.",
       "Build a causal-boundary map and enumerate code-grounded material hypotheses with both confirming and rejecting evidence.",
       "Create and validate one coverage-plan file whose boundaries, hypotheses, probes, observer controls, privacy checks, and residual ambiguities agree.",
       "Start or attach a logging session; browser-capable local startup automatically attempts to open and confirm the dashboard, while explicitly headless, CI, container-only, or remote sessions opt out.",
@@ -619,6 +619,7 @@ export const SKILLS: SkillDetail[] = [
     ],
     guardrails: [
       "Do not claim a root cause without evidence for the originating fault, its propagation, and the reported symptom.",
+      "Do not rewrite completed run ownership or interpret a request to analyze completed evidence as delegation of a future reproduction; require an explicit run-scoped directive for ownership changes.",
       "Do not add a correlation header when it could change CORS, cache, routing, signing, authorization, or product behavior.",
       "Do not treat dashboard visibility as evidence or let a failed open block evidence collection or reproduction.",
       "Do not apply a repair when the request is diagnosis-only or retain a smaller workaround that leaves the causal mechanism active.",
@@ -827,15 +828,15 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "An extremely strict code-quality gate for structural simplification, file-size pressure, abstraction boundaries, and spaghetti growth.",
     overview:
-      "Use this skill when a change needs a thermonuclear maintainability review rather than a general correctness review. It reviews the relevant scope, writes a Markdown report, applies a 350-line threshold for maintained source files, recursively sweeps structural candidates until coverage reaches a fixed point or is marked incomplete, and avoids code changes unless explicitly asked for fixes. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.",
+      "Use this skill when a change needs a thermonuclear maintainability review rather than a general correctness review. It reviews the relevant scope, writes a Markdown report, uses 350 lines as a maintained-source trigger for cohesion, dependency, and ownership analysis, recursively sweeps structural candidates until coverage reaches a fixed point or is marked incomplete, and avoids code changes unless explicitly asked for fixes. The trigger calls for boundary diagnosis, not text compaction. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.",
     bestFor: [
       "Reviewing whether a diff makes the implementation more tangled, oversized, indirect, or hard to extend.",
-      "Finding missed code-judo simplifications, decomposition opportunities, canonical-ownership moves, and clearer type boundaries.",
+      "Finding missed code-judo simplifications, cohesive responsibility splits, canonical-ownership moves, and clearer type boundaries.",
       "Producing a durable structural review artifact with findings, recursive coverage, line-count evidence, and residual blind spots.",
     ],
     workflow: [
       "Set the review scope and baseline, preferring staged changes before the working tree when the user does not name a scope.",
-      "Build a diff and line-count inventory, including the 350-line maintained-source threshold check.",
+      "Build a diff and line-count inventory; for 350-line candidates, map responsibilities, dependency seams, and canonical owners.",
       "Seed a recursive candidate frontier from file growth, branches, helpers, abstractions, types, ownership boundaries, orchestration, tests, and duplicated blocks.",
       "Trace each candidate inward and outward through local flow, call sites, contracts, tests, and canonical helpers.",
       "Append newly discovered simplification candidates until the frontier reaches a fixed point or uncovered areas are explicitly marked.",
@@ -849,7 +850,8 @@ export const SKILLS: SkillDetail[] = [
     guardrails: [
       "Do not make code changes during review unless the user explicitly asks for fixes.",
       "Do not treat passing tests as proof that the implementation is structurally sound.",
-      "Do not silently waive the 350-line maintained-source threshold; account for oversized files or mark the area uncovered.",
+      "Do not silently waive a 350-line structural candidate; account for the boundary or mark the area uncovered.",
+      "Do not accept dense formatting, arbitrary relocation, or another count-only tactic as a threshold remedy.",
       "Use `code-review` instead when correctness, security, privacy, data loss, or merge safety is the main question.",
     ],
     entryPoints: [
@@ -878,16 +880,17 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A response workflow for consuming thermo reports without blindly turning harsh feedback into broad refactors or behavior regressions.",
     overview:
-      "Use this skill after a thermo report or equivalent structural review feedback. It builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, candidate sweep entry, and blind spot before changing code, adds a behavior-parity ledger for touched user-visible or unknown-impact surfaces, then fixes only verified structural issues while preserving Git staging and avoiding unapproved architecture refactors. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.",
+      "Use this skill after a thermo report or equivalent structural review feedback. It builds a disposition ledger for every finding, decomposition gap, recursive coverage row, line-count threshold item, candidate sweep entry, and blind spot before changing code, adds a behavior-parity ledger for touched user-visible or unknown-impact surfaces, and resolves oversized maintained source through cohesive boundaries rather than count-only edits. It fixes only verified structural issues while preserving Git staging and avoiding unapproved cross-boundary refactors. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.",
     bestFor: [
       "Verifying harsh structural findings against the current diff, line counts, call sites, and ownership boundaries.",
-      "Resolving 350-line threshold concerns, decomposition gaps, recursive coverage gaps, and candidate sweep items.",
+      "Resolving 350-line concerns through responsibility ownership and dependency seams, alongside decomposition, recursive coverage, and candidate sweep items.",
       "Applying scoped behavior-preserving simplifications while checking source, guard, output, and extension-point parity.",
     ],
     workflow: [
       "Read the full report and confirm scope, baseline, completion status, and current checkout still match.",
       "Create a disposition ledger from findings, decomposition gaps, recursive coverage rows, line-count rows, sweep rows, and blind spots.",
       "Resolve report inconsistencies or stale line counts before editing.",
+      "Map responsibilities and dependency seams for threshold items, then classify each remedy as contract-preserving local cleanup or an approval-gated boundary change.",
       "Present a structural change plan with behavior-parity, ownership, verification, and no-staging notes before changing code.",
       "Fix or disprove Blocker and Major items first, then decide Minor, Question, decomposition, and coverage items.",
       "Recompute affected line counts and run targeted verification for every touched surface.",
@@ -900,6 +903,7 @@ export const SKILLS: SkillDetail[] = [
     guardrails: [
       "Do not blindly apply thermo review feedback.",
       "Do not start broad architecture refactors without approved scope.",
+      "Do not treat a lower count, dense formatting, or a move into a catch-all module as resolution of a 350-line finding.",
       "Do not hide potential user-visible regressions behind structural cleanup.",
       "Do not stage changes unless the current request explicitly asks for staging, committing, or PR publication.",
       "Do not claim the thermo gate is resolved until every finding, decomposition gap, threshold item, and open coverage row is accounted for.",

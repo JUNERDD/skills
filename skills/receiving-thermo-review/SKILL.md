@@ -1,6 +1,6 @@
 ---
 name: receiving-thermo-review
-description: Consume a `thermo-review` Markdown report, PR feedback derived from one, or structural quality-gate feedback involving `Blocker`, `Major`, `Minor`, `Question`, `Complete Findings Index`, `Decomposition Gaps`, recursive coverage, line-count ledgers, candidate sweep logs, `Not covered` rows, or 350-line thresholds. Use when Codex must verify every structural item against the current checkout, build a disposition and behavior-parity ledger before editing, fix, disprove, narrow, waive, or carry forward each item with evidence, avoid user-visible regressions during structural cleanup, and leave Git staging untouched unless explicitly asked to stage, commit, or publish.
+description: Consume a `thermo-review` Markdown report, PR feedback derived from one, or structural quality-gate feedback involving `Blocker`, `Major`, `Minor`, `Question`, `Complete Findings Index`, `Decomposition Gaps`, recursive coverage, line-count ledgers, candidate sweep logs, `Not covered` rows, or 350-line thresholds. Use when Codex must verify every structural item against the current checkout, build disposition and behavior-parity ledgers before editing, resolve oversized maintained-source findings through cohesive responsibility boundaries rather than count-only edits, fix, disprove, narrow, waive, or carry forward each item with evidence, avoid user-visible regressions, and leave Git staging untouched unless explicitly asked to stage, commit, or publish.
 ---
 
 # Receiving Thermo Review
@@ -25,7 +25,8 @@ Account for every finding, decomposition gap, 350-line threshold item, recursive
 - Build a disposition ledger before editing code.
 - Verify harsh review language against current code, current diff, line counts, call sites, ownership boundaries, canonical helpers, tests, configs, and project constraints.
 - Prefer the narrowest behavior-preserving simplification that resolves the structural risk.
-- Pause before architecture-level boundary moves, module reshaping, framework changes, or large abstraction collapse unless the user has approved that scope.
+- Resolve size-pressure findings by reducing the file's responsibility span or dependency burden. Do not accept a lower line count as sufficient evidence.
+- Treat a cohesive extraction that stays inside both the current package and architectural layer as scoped cleanup when behavior and public contracts stay unchanged. Pause before crossing either boundary, changing a public API/type/state model, replacing a framework, reshaping the project layout, or collapsing a large abstraction unless the user has approved that scope.
 - Preserve Git staging. Do not run `git add`, `git add -A`, `git add -p`, `git add -N`, `git commit`, `git commit --amend`, or index-mutating equivalents unless the current request explicitly asks for staging, committing, or PR publication.
 - If staged changes already exist, preserve them exactly. Keep new fixes unstaged.
 
@@ -39,7 +40,7 @@ Account for every finding, decomposition gap, 350-line threshold item, recursive
    - every finding card in `Blocker`, `Major`, `Minor`, and `Questions`
    - every standalone `D#` in `Decomposition Gaps`
    - every recursive coverage row marked `Finding F#`, `Not covered`, unknown, or ambiguous
-   - every line-count row marked `crossed 350`, `already over 350`, `Finding F#`, `not covered`, or `waived with reason`
+   - every line-count row marked `crossed 350`, `already over 350`, `Finding F#`, `not covered`, or `waived with reason`, including any boundary diagnosis or its absence
    - every candidate sweep row marked `Finding F#`, `merged into F#`, `not covered`, or ambiguous
    - any mismatch between indexes, cards, ledgers, sweep logs, line counts, and self-checks
 5. Restate each item as a concrete structural risk: maintainability, future-change cost, ownership drift, type-contract muddiness, oversized-file pressure, duplicated concept, or unnecessary reasoning load.
@@ -76,6 +77,8 @@ Before changing code, tell the user:
 - the exact files/modules likely to change
 - why the fix is behavior-preserving or which visible changes are intentional
 - which behavior-parity surfaces need verification
+- for each threshold item, the current responsibility map, proposed owner or seam, and before/after dependency direction
+- whether each proposed split is contract-preserving local cleanup or an approval-gated boundary change
 - which line counts or structural ledgers will be recomputed
 - which tests, runtime checks, output inspections, or static traces will be run
 - that Git staging will remain untouched unless staging or publishing was requested
@@ -134,8 +137,13 @@ Treat recursive coverage and candidate sweep rows as gate evidence.
 Treat the 350-line threshold as a structural signal, not a mechanical ban.
 
 - Recompute current line counts before fixing or waiving a threshold item.
-- For `crossed 350`, reduce the file below the threshold, decompose the new behavior, or document a defensible waiver.
-- For `already over 350`, avoid adding more behavior unless the change improves decomposition or the waiver still holds.
+- Before choosing a remedy, map the file's independent reasons to change, shared state, side effects, callers, callees, dependency clusters, and concepts with an existing canonical owner.
+- When responsibilities are mixed, prefer returning a complete concern to its canonical owner or extracting one domain, policy, state, adapter, presentation, or orchestration responsibility behind a narrow contract. Delete code only when current evidence independently proves it redundant.
+- Accept a split only when the original file owns less, the destination has a clear domain purpose, dependencies stay one-way without cycles, and the change does not create another mixed-responsibility hotspot.
+- Reject dense formatting, compressed control flow, shortened names, removal of useful documentation or types, line-range extractions, thin forwarding modules, and moves into catch-all `utils`, `helpers`, or `common` files. None of these closes a threshold item.
+- For `crossed 350`, implement the smallest cohesive, behavior-preserving separation available within scope or document a defensible cohesive-file waiver. Crossing back below the number is supporting evidence, not the acceptance criterion.
+- For `already over 350`, avoid adding another responsibility; place new behavior with its rightful owner or narrow an existing responsibility when the approved scope permits it. If a cohesive file still grows, refresh its waiver against the added behavior.
+- Perform an extraction without additional approval only when it remains inside both the current package and architectural layer and keeps public contracts and dependency direction stable. Carry forward work that crosses either boundary with its proposed scope, risk, and verification plan when approval is still needed.
 - Exclude generated files, lockfiles, vendored artifacts, snapshots, fixtures, and intentionally monolithic external formats unless manually maintained source.
 
 ## Push Back When
@@ -143,7 +151,7 @@ Treat the 350-line threshold as a structural signal, not a mechanical ban.
 - The report was generated for a different scope, stale branch, stale baseline, or stale line count.
 - Completion is incomplete but presented as resolved.
 - Indexes, severity sections, decomposition gaps, ledgers, sweep logs, and self-checks disagree.
-- The suggested simpler path broadens behavior, moves architecture boundaries, weakens contracts, or increases code size without approval.
+- The suggested simpler path broadens behavior, moves architecture boundaries, weakens contracts, or merely relocates or compresses code without reducing structural load.
 - The alleged oversized file is generated, vendored, fixture-like, or intentionally external-format code.
 - The alleged duplicated or misplaced logic is actually the canonical owner.
 - Current code, call sites, tests, docs, project conventions, or behavior-parity tracing contradict the report.
@@ -156,14 +164,15 @@ Push back with evidence: code path, line count, owner, canonical helper, behavio
 1. Clarify stale or unclear scope.
 2. Build the disposition ledger and behavior-parity ledger.
 3. Resolve report inconsistencies and stale line counts.
-4. Present the pre-edit plan.
-5. Fix or disprove unresolved `Blocker` items.
-6. Resolve `Major` items with focused fixes, proof, waiver, or carry-forward decisions.
-7. Decide `Minor` and `Question` items.
-8. Close or carry forward standalone `D#` gaps and open coverage rows.
-9. Recompute affected line counts.
-10. Run targeted structural and behavior verification for every touched surface.
-11. Refresh the thermo gate or update the reviewer with concrete evidence when structure, coverage, line counts, or decomposition materially changed.
+4. For every threshold item, map responsibilities and dependency seams and classify the remedy as local or approval-gated.
+5. Present the pre-edit plan.
+6. Fix or disprove unresolved `Blocker` items.
+7. Resolve `Major` items with focused fixes, proof, waiver, or carry-forward decisions.
+8. Decide `Minor` and `Question` items.
+9. Close or carry forward standalone `D#` gaps and open coverage rows.
+10. Recompute affected line counts.
+11. Run targeted structural and behavior verification for every touched surface.
+12. Refresh the thermo gate or update the reviewer with concrete evidence when structure, coverage, line counts, or decomposition materially changed.
 
 ## Final Ledger
 
@@ -172,7 +181,7 @@ Use this shape when multiple items were consumed:
 ```md
 | ID / area | Original status | Disposition | Structural evidence | Behavior / regression evidence | Next action |
 | --- | --- | --- | --- | --- | --- |
-| F1 | Blocker | Fixed | Split checkout orchestration into a pure policy helper; file dropped from 382 to 319 lines. | Submit source, duplicate-submit guard, and persisted payment payload are unchanged; checkout tests pass. | None |
+| F1 | Blocker | Fixed | Moved discount policy into a cohesive domain owner; checkout now owns orchestration only, dependencies remain one-way, and the file dropped from 382 to 319 lines. | Submit source, duplicate-submit guard, and persisted payment payload are unchanged; checkout tests pass. | None |
 | F2 | Major | Narrowed | Shared adapter is the canonical owner; only the local wrapper was unnecessary. | API response shape is unchanged by static trace. | Remove wrapper |
 | D1 | Decomposition gap | Carried forward | Requires approved boundary change across three packages. | Not edited, so no behavior delta. | Propose scoped refactor |
 | app/page.tsx | Crossed 350 | Waived | Generated route table; not manually maintained source. | Not user-visible source logic. | Keep excluded |
@@ -186,7 +195,7 @@ Mention changed files are left unstaged unless the user asked otherwise.
 Use short technical acknowledgments:
 
 - `F1 still applies. The new branch duplicates the existing policy path, so I am deleting the wrapper and reusing the canonical helper.`
-- `F2 is narrower than reported. The file is over 350 lines, but this diff removes behavior and lowers the line count.`
+- `F2 is narrower than reported. The file remains over 350 lines, but this diff returns formatting policy to its canonical owner and leaves the route with one fewer reason to change.`
 - `D1 requires a cross-package boundary move. I am carrying it forward instead of starting an unapproved architecture refactor.`
 - `The state-machine candidate was Not covered; local fixtures do not exercise it, so I am leaving a concrete verification step.`
 - `The planned extraction touches checkout output formatting, so I am adding it to the behavior-parity ledger before editing.`
@@ -196,8 +205,8 @@ Use short technical acknowledgments:
 - Processing only `Must-review now` and ignoring the complete findings index.
 - Treating `D#`, line-count rows, sweep rows, or open coverage rows as background.
 - Starting broad architecture refactors without approved scope.
-- Reducing line count by making code denser or less readable.
-- Moving code into an arbitrary dumping ground to silence the 350-line threshold.
+- Treating a denser layout, compressed control flow, or a lower count as proof that structural pressure is gone.
+- Moving code into an arbitrary dumping ground or thin forwarding layer instead of extracting a coherent responsibility.
 - Dismissing structural findings only because tests pass.
 - Ignoring source, guard, output, or extension-point parity during structural cleanup.
 - Staging fixes without an explicit current staging, commit, or PR request.
