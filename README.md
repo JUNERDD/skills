@@ -35,7 +35,7 @@ If you are deciding what to install, start here:
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with delegation-first parallel subagent scheduling
-- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through Cursor SDK with reviewed packets
+- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through cursor-delegate with reviewed packets and owned cleanup
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - prove, repair, and separately verify runtime bugs with a validated coverage plan
 - [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
@@ -311,7 +311,7 @@ Key entry points:
 
 ### `delegate-to-cursor-sdk`
 
-[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through Cursor SDK with reviewed task packets. It keeps upstream ownership over scope, risk gates, model defaults, Cursor internal subagents, live monitoring, and final acceptance while letting Cursor execute the approved implementation slice. Hierarchical mode adds dependency-aware workstream scheduling, effective-concurrency limits, isolated writers, and integration gates without making direct or planned delegation heavier.
+[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through the independent `cursor-delegate` CLI with reviewed task packets. The skill owns delegation policy, templates, global authorization barriers, user link handoffs, review, acceptance, and a marker-validated private session for temporary packets/logs, while the separate TypeScript CLI owns all `@cursor/sdk` integration and the packaged Next.js authorization/dashboard frontend. Hierarchical mode adds dependency-aware workstream scheduling, effective-concurrency limits, isolated writers, and integration gates without coupling Cursor runtime code or dependencies into the skill.
 
 Install:
 
@@ -319,21 +319,27 @@ Install:
 npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 ```
 
+This installs the skill only. It does not bundle the independent `cursor-delegate` CLI or its `@cursor/sdk` runtime/dependencies, but it does include a Python-standard-library session/lease wrapper for temporary packet and log ownership. Install `cursor-delegate` from its own project first and verify `cursor-delegate --version`.
+
 Best for:
 
-- dispatching bounded implementation, proposal, or inspect-only packets through Cursor SDK
-- using catalog-resolved Grok 4.5 High for top-level Cursor runs while leaving speed to Cursor's default and treating internal-subagent model labels as requests rather than verified parameter selections
+- dispatching bounded implementation, proposal, or inspect-only packets through `delegation_session.py run --session-file ... --log-name ... -- cursor-delegate ...`, with a foreground lease on every run
+- using the catalog-resolved Grok 4.5 High non-Fast preset for top-level Cursor runs while treating optional SDK result evidence and internal-subagent model labels without overstating verification
 - coordinating independent hierarchical workstreams through a dependency ledger, event-driven readiness, isolated apply-mode writers, and upstream acceptance gates
+- having non-root workstreams fail closed on missing authorization, then letting root recursively stop the full descendant tree, start the packaged Next.js frontend/control plane, and present its local authorization URL plus Cursor API Keys together without automatically opening either link before resuming the recorded agents after verification
 - allowing Cursor task/Agent-tool subagents only under an explicit packet policy
 - monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
+- following step/turn/request/tool/task progress in a sequence-ordered execution tape whose streamed assistant/reasoning text cannot disappear when shorter terminal payloads arrive, with explicit watermarks and snapshot recovery across bounded replay windows
 - reviewing Cursor output, diffs, verification evidence, and repair loops before final acceptance
+- keeping copied packets and ordinary skill-managed CLI logs outside the target repository, while explicit `--retained-log-dir` audit logs remain caller-owned and are never cleaned; the marker-owned session is removed only after terminal frontend shutdown and final upstream acceptance or reconciled/user-authorized abandonment
 
 Key entry points:
 
 - Workflow and guardrails: [`skills/delegate-to-cursor-sdk/SKILL.md`](./skills/delegate-to-cursor-sdk/SKILL.md)
 - Cursor internal subagent policy: [`skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md)
 - Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-sdk/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-sdk/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-sdk/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-sdk/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-sdk/references/task-follow-up.md)
-- Cursor dispatch wrapper: [`skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs`](./skills/delegate-to-cursor-sdk/scripts/cursor_delegate.mjs)
+- Independent CLI contract: [`skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md`](./skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md)
+- Temporary-artifact lifecycle and leased dispatch wrapper: [`owned-artifact-cleanup.md`](./skills/delegate-to-cursor-sdk/references/owned-artifact-cleanup.md) and [`delegation_session.py`](./skills/delegate-to-cursor-sdk/scripts/delegation_session.py)
 - Optional runtime metadata: [`skills/delegate-to-cursor-sdk/agents/openai.yaml`](./skills/delegate-to-cursor-sdk/agents/openai.yaml)
 
 ### `plan-mode`
@@ -363,7 +369,7 @@ Key entry points:
 
 ### `debug`
 
-[`skills/debug/`](./skills/debug/) provides coverage-first, end-to-end runtime debugging and repair for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, proves the origin-to-symptom chain, repairs the causal mechanism, verifies the original failure contract in a separate run, and cleans up temporary instrumentation. Requests to debug, troubleshoot, fix, repair, or resolve follow this full loop unless the user explicitly asks for diagnosis-only work. Each runtime run uses a user handoff by default. A pre-run assignment of the runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts; user-owned reproduction never disables that default, and only a verified no-local-GUI host opts out. Browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
+[`skills/debug/`](./skills/debug/) provides coverage-first, end-to-end runtime debugging and repair for application bugs, regressions, flaky or expensive reproductions, long-lived real-time streams, and unclear failures. It builds a code-grounded causal map, validates one machine-readable hypothesis-and-probe plan, maximizes discriminating evidence from the first failing reproduction or bounded observation window, proves the origin-to-symptom chain, repairs the causal mechanism, verifies the original failure contract in a separate run, and cleans up temporary instrumentation. Requests to debug, troubleshoot, fix, repair, or resolve follow this full loop unless the user explicitly asks for diagnosis-only work. Each runtime run uses a user handoff by default. A pre-run assignment of the runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Lifecycle scope is explicit: one investigation and ledger may contain one or more collector sessions, and each collector session may contain multiple run IDs. Across user replies, evidence analysis, context compaction, repair, and new runs, the agent resumes the ledger's exact active ready file and reuses every healthy collector and dashboard instead of creating another port or UI. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts only when first established; user-owned reproduction never disables that default, and only a verified no-local-GUI host opts out. Browser streaming capture uses loss-auditable event sequences and acknowledged-prefix checkpoints instead of waiting for an intentionally open flow to terminate.
 
 Install:
 
@@ -379,7 +385,7 @@ Key entry points:
 - Browser and streaming instrumentation: [`skills/debug/references/browser-debugging.md`](./skills/debug/references/browser-debugging.md)
 - Root-cause report rules: [`skills/debug/references/root-cause-document.md`](./skills/debug/references/root-cause-document.md)
 - Coverage-plan validator: [`skills/debug/scripts/debug_plan.py`](./skills/debug/scripts/debug_plan.py)
-- Session helper: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
+- Session helper for start, exact-ready-file resume, status, and cleanup: [`skills/debug/scripts/debug_session.py`](./skills/debug/scripts/debug_session.py)
 - Page-local browser transport: [`skills/debug/assets/browser-debug-transport.mjs`](./skills/debug/assets/browser-debug-transport.mjs)
 - Log summarizer: [`skills/debug/scripts/summarize_debug_log.py`](./skills/debug/scripts/summarize_debug_log.py)
 - Local NDJSON collector: [`skills/debug/scripts/local_log_collector/`](./skills/debug/scripts/local_log_collector/)
@@ -397,11 +403,11 @@ The `debug` skill is designed to prevent speculative fixes by forcing a prove-it
 2. Define the failure contract and terminal or long-lived observation condition, inspect the execution path, and build a causal-boundary map.
 3. Enumerate code-grounded material hypotheses and map both confirming and rejecting evidence to shared probes.
 4. Validate one coverage-plan file with a flow-start plus configured terminal or observation-checkpoint sentinel, then use it for location sync and expected-probe analysis.
-5. Start or attach logging; browser-capable local startup automatically attempts to open and confirm the dashboard. User-owned reproduction is not headless; only a verified host without a usable local graphical browser opts out.
-6. Pass compile, observer-cost, privacy, correlation, transport-continuity, and collector gates; continuous streams prove an acknowledged event prefix without waiting for the live queue to become empty. Then run `debug_session.py dashboard-status` and copy its normalized status/URL line before every user-owned reproduction.
+5. Resume the current investigation's exact ready file before any start attempt. Reuse a healthy collector and existing dashboard across turns and run IDs without scanning the workspace or reopening UI; start a collector only when none is recorded, the recorded session is missing or unreachable, or the user or host explicitly requires isolation or replacement. Newly established browser-capable local sessions automatically attempt to open and confirm the dashboard; only a verified host without a usable local graphical browser opts out.
+6. Pass compile, observer-cost, privacy, correlation, transport-continuity, and collector gates; continuous streams prove an acknowledged event prefix without waiting for the live queue to become empty. Before the next pass, remove superseded debug logging and breakpoints, clear stale collector evidence, run `debug_session.py dashboard-status`, use `resume-recording` if recording is frozen, and copy the refreshed live status/URL line before every user-owned reproduction.
 7. Collect one clean terminal run or bounded observation window, summarize source and transport sequence continuity by run and correlation hierarchy, and classify every hypothesis.
 8. Prove origin, propagation, and symptom or add only probes for the smallest unresolved interval; keep one evolving ledger through every material transition.
-9. For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; otherwise treat the root-cause result as intermediate, repair the causal mechanism immediately, verify separately, and then clean owned artifacts.
+9. For diagnosis-only work, preserve evidence and remove temporary probes, debug logs, and breakpoints before reporting; otherwise treat the root-cause result as intermediate, repair the causal mechanism immediately, verify separately, then remove temporary instrumentation and clear or stop owned logging artifacts.
 
 This keeps the skill focused on evidence while carrying normal debug requests through a verified repair instead of stopping at a diagnosis.
 
@@ -434,7 +440,9 @@ flowchart LR
 - Parent-flow, operation, request, child-correlation, and run-aware log analysis
 - One evolving root-cause ledger across evidence collection, repair, verification, and cleanup
 - Local collector bootstrap when the host does not already provide logging
+- Ledger-first exact-ready-file session resume across user replies, analysis, context compaction, repair, and fresh run IDs, without duplicate ports or dashboard tabs
 - Automatic local dashboard startup, bounded confirmation recovery, and a deterministic `dashboard-status` line in every user-owned reproduction handoff
+- One mutually exclusive Freeze/Resume control backed by a collector-global recording gate: `FROZEN` discards new events instead of writing them, while every dashboard keeps refreshing and Clear remains available
 - Scannable Markdown handoffs for user-owned reproduction, evidence analysis, and repair verification, with blank-line-separated headings and lists
 - Readable dashboard summaries that prefer optional human messages and fall back to structured event names or probe IDs without rewriting raw evidence
 - Optional page-local browser transport with non-throwing probes, parent-flow context, unlimited event-count capture, idempotent acknowledged byte frames, live high-watermark checkpoints, and explicit navigation/reload evidence boundaries
@@ -457,7 +465,7 @@ If your runtime ignores [`skills/debug/agents/openai.yaml`](./skills/debug/agent
 
 ### `debug` Collector
 
-The bundled collector is a zero-dependency Python app built on the standard library. It accepts individual or byte-framed batch JSON log events, appends every accepted event to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. The log stream prefers the optional human-readable `message`, then falls back to the required structured `event`, then its `probeId`, so valid compact events remain readable without mutating the NDJSON evidence. A batch is only a finite throughput frame: events are queued immediately, retried with the same ID, and deleted only after acknowledgement. Continuous producers use an acknowledged-prefix checkpoint, while a queue-empty flush is reserved for after production stops; a Network-panel `Pending` row alone does not prove loss or deadlock. Browser-capable local startup automatically attempts to open and confirm the dashboard after HTTP readiness, with at most two fallback attempts. Use `--no-open-dashboard` only when the collector host is verified to have no usable local graphical browser; user-owned reproduction and missing agent browser control are not opt-out reasons, and a failed open never blocks evidence collection. Before every user-owned reproduction, the agent refreshes session state, recovers an accidental local `disabled` state, and shows the dashboard status and current URL.
+The bundled collector is a zero-dependency Python app built on the standard library. While recording is live, it accepts individual or byte-framed batch JSON log events, appends them to an NDJSON file without an event-count cap, and serves a same-origin dashboard for live inspection. Its single mutually exclusive Freeze/Resume button controls a collector-global recording gate: `Freeze` changes every dashboard to `FROZEN` and discards new events instead of writing them to NDJSON, while the UI continues refreshing and `Clear` and `Stop` remain available. Clear removes existing evidence without resuming recording. Because the collector owns this state, all tabs, page reloads, and later analysis turns that reuse the same collector observe the same gate; `Resume` re-enables writes globally. Any event discarded while frozen is an explicit evidence gap rather than a successful capture. The log stream prefers the optional human-readable `message`, then falls back to the required structured `event`, then its `probeId`, so valid compact events remain readable without mutating the NDJSON evidence. A batch is only a finite throughput frame: events are queued immediately, retried with the same ID, and deleted only after acknowledgement. Continuous producers use an acknowledged-prefix checkpoint, while a queue-empty flush is reserved for after production stops; a Network-panel `Pending` row alone does not prove loss or deadlock. On continuation, `debug_session.py resume --ready-file` validates only the exact active ready file recorded in the investigation ledger; it never scans for another session, starts a collector, or opens UI. A successful resume keeps the same endpoint, port, evidence file, and dashboard across fresh run IDs. A replacement is allowed only when the recorded ready file is missing or unreachable or the user or host explicitly requires isolation or replacement, and the transition stays in the same investigation ledger. Browser-capable local startup automatically attempts to open and confirm the dashboard after HTTP readiness, with at most two fallback attempts. Use `--no-open-dashboard` only when the collector host is verified to have no usable local graphical browser; user-owned reproduction and missing agent browser control are not opt-out reasons, and a failed open never blocks evidence collection. Before every user-owned reproduction, the agent refreshes the active session state, verifies that recording is live, runs `debug_session.py resume-recording --ready-file <READY_FILE>` when necessary, and shows the dashboard status and current URL without reopening a healthy resumed dashboard.
 
 For frontend and browser debugging, the intended transport is direct client-to-collector HTTP posting. The collector already handles CORS and preflight, so the skill should not create temporary Next.js API routes or other app-local proxy layers unless direct browser delivery has been proven blocked in the current host.
 
@@ -470,6 +478,8 @@ Collector endpoints:
 - `GET /api/logs`
 - `GET /api/logs/detail`
 - `POST /api/clear`
+- `POST /api/recording/freeze`
+- `POST /api/recording/resume`
 - `POST /api/shutdown`
 
 Minimal smoke test:

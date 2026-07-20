@@ -168,6 +168,9 @@ def append_entry_to_cache(
         and hasattr(service, 'seen_transport_batch_ids')
     ):
         service.seen_transport_batch_ids.add(transport_batch_id)
+        outcomes = getattr(service, 'transport_batch_outcomes', None)
+        if isinstance(outcomes, dict):
+            outcomes.setdefault(transport_batch_id, 'persisted')
     return entry
 
 
@@ -761,12 +764,25 @@ def flush_location_state_file(service: Any) -> None:
 
 
 def clear_log_file(service: Any) -> None:
+    outcomes = getattr(service, 'transport_batch_outcomes', None)
+    if isinstance(outcomes, dict):
+        for batch_id, disposition in tuple(outcomes.items()):
+            if disposition == 'persisted':
+                outcomes[batch_id] = 'discarded_cleared'
     service.log_file.write_text('', encoding='utf-8')
     reset_log_cache(service)
     service.ingest_request_count = 0
     service.ingest_accepted_event_count = 0
     service.ingest_accepted_bytes = 0
     service.ingest_last_accepted_at = None
+    service.ingest_frozen_discarded_request_count = 0
+    service.ingest_frozen_discarded_event_count = 0
+    service.ingest_frozen_discarded_bytes = 0
+    service.ingest_frozen_last_discarded_at = None
+    service.ingest_stale_discarded_request_count = 0
+    service.ingest_stale_discarded_event_count = 0
+    service.ingest_stale_discarded_bytes = 0
+    service.ingest_stale_last_discarded_at = None
     service.index_last_completed_at = None
     service.index_error_count = 0
     service.index_last_error = ''
@@ -814,6 +830,38 @@ def build_service_payload(service: Any) -> dict[str, Any]:
         ),
         'ingestAcceptedBytes': int(getattr(service, 'ingest_accepted_bytes', 0)),
         'ingestLastAcceptedAt': getattr(service, 'ingest_last_accepted_at', None),
+        'ingestFrozenDiscardedRequestCount': int(
+            getattr(service, 'ingest_frozen_discarded_request_count', 0),
+        ),
+        'ingestFrozenDiscardedEventCount': int(
+            getattr(service, 'ingest_frozen_discarded_event_count', 0),
+        ),
+        'ingestFrozenDiscardedBytes': int(
+            getattr(service, 'ingest_frozen_discarded_bytes', 0),
+        ),
+        'ingestFrozenLastDiscardedAt': getattr(
+            service,
+            'ingest_frozen_last_discarded_at',
+            None,
+        ),
+        'ingestStaleGenerationDiscardedRequestCount': int(
+            getattr(service, 'ingest_stale_discarded_request_count', 0),
+        ),
+        'ingestStaleGenerationDiscardedEventCount': int(
+            getattr(service, 'ingest_stale_discarded_event_count', 0),
+        ),
+        'ingestStaleGenerationDiscardedBytes': int(
+            getattr(service, 'ingest_stale_discarded_bytes', 0),
+        ),
+        'ingestStaleGenerationLastDiscardedAt': getattr(
+            service,
+            'ingest_stale_last_discarded_at',
+            None,
+        ),
+        'recordingFrozen': bool(getattr(service, 'recording_frozen', False)),
+        'recordingGeneration': int(getattr(service, 'recording_generation', 0)),
+        'recordingFrozenAt': getattr(service, 'recording_frozen_at', None),
+        'recordingResumedAt': getattr(service, 'recording_resumed_at', None),
         'indexedFileOffset': indexed_offset,
         'indexLagBytes': max(file_size_bytes - indexed_offset, 0),
         'indexLastCompletedAt': getattr(service, 'index_last_completed_at', None),
@@ -842,6 +890,8 @@ def build_service_payload(service: Any) -> dict[str, Any]:
         'dashboardFrontendOpenLastFailedUrl': service.dashboard_frontend_open_last_failed_url,
         'openLocationUrl': service.open_location_url,
         'clearUrl': service.clear_url,
+        'freezeRecordingUrl': service.freeze_recording_url,
+        'resumeRecordingUrl': service.resume_recording_url,
         'shutdownUrl': service.shutdown_url,
         'healthUrl': service.health_url,
         'dashboardAutoOpenEnabled': service.dashboard_auto_open_enabled,
@@ -896,7 +946,13 @@ def build_state_response(service: Any) -> dict[str, Any]:
 
     return {
         'ok': True,
-        'status': 'stopping' if service.shutdown_requested_at else 'running',
+        'status': (
+            'stopping'
+            if service.shutdown_requested_at
+            else 'frozen'
+            if getattr(service, 'recording_frozen', False)
+            else 'running'
+        ),
         'service': build_service_payload(service),
         'summary': summary,
     }

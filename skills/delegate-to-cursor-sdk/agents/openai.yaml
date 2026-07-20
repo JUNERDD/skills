@@ -1,7 +1,7 @@
 interface:
-  display_name: "Delegate to Cursor SDK"
-  short_description: "Route bounded coding work through Cursor SDK"
-  default_prompt: "Use $delegate-to-cursor-sdk to route bounded Cursor SDK work, default the top-level Cursor run to catalog-resolved Grok 4.5 High while leaving speed to Cursor's default unless explicitly overridden, treat internal-subagent model labels as unverified requests, request Cursor API-key authorization safely when missing, monitor status.json when useful, and keep acceptance upstream."
+  display_name: 'Delegate to Cursor SDK'
+  short_description: 'Route bounded work through cursor-delegate'
+  default_prompt: 'Use $delegate-to-cursor-sdk to route a bounded coding task through the root-owned delegation_session.py lease wrapper and cursor-delegate with a reviewed packet, a manual authorization handoff, and a chronological non-regressing local execution dashboard that opens only after key and model preflight; review the result upstream, preserve any explicitly caller-owned retained logs, then safely clean the session-owned packets and logs after final acceptance or reconciled abandonment.'
 
 policy:
   allow_implicit_invocation: false

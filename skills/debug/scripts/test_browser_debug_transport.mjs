@@ -200,6 +200,101 @@ async function testHungRequestIsAbortedAndRetriedWithoutDroppingEvents() {
   transport.stop()
 }
 
+async function testFrozenAcknowledgementDropsWithoutRetryAndBreaksContinuity() {
+  let requests = 0
+  const errors = []
+  const transport = createBrowserDebugTransport({
+    batchEndpoint: 'http://127.0.0.1:43125/ingest/batch',
+    sessionId: 'transport-frozen-test',
+    nativeFetch: async (_url, init) => {
+      requests += 1
+      const payload = JSON.parse(init.body)
+      return acceptedResponse(payload.events.length, {
+        batchId: payload.batchId,
+        persistedEvents: 0,
+        discardedEvents: payload.events.length,
+        discardedByFreeze: true,
+        recordingFrozen: true,
+        recordingGeneration: 1,
+      })
+    },
+    onError(status) {
+      errors.push(status)
+    },
+  })
+
+  await Promise.all([
+    transport.record({ probeId: 'freeze.one', event: 'frozen_event' }),
+    transport.record({ probeId: 'freeze.two', event: 'frozen_event' }),
+  ])
+
+  assert.equal(await transport.flush({ timeoutMs: 2_000 }), false)
+  assert.equal(requests, 1)
+  assert.equal(transport.queue.count(), 0)
+  const status = await transport.getStatus()
+  assert.equal(status.acceptedEvents, 2)
+  assert.equal(status.discardedEvents, 2)
+  assert.equal(status.firstDiscardedEventWatermark, 1)
+  assert.equal(status.acknowledgedEventWatermark, 2)
+  assert.equal(status.recordingFrozen, true)
+  assert.equal(status.recordingGeneration, 1)
+  assert.equal(status.continuityBroken, true)
+  assert.ok(errors.some((item) => item.type === 'batch_discarded'))
+
+  const checkpoint = await transport.checkpoint({ timeoutMs: 100 })
+  assert.equal(checkpoint.watermarkAcknowledged, true)
+  assert.equal(checkpoint.complete, false)
+  assert.equal(checkpoint.continuityBrokenAtCheckpoint, true)
+  transport.stop()
+}
+
+async function testTransportAdoptsGenerationAfterTerminalStaleDrop() {
+  const sentGenerations = []
+  let requestCount = 0
+  const transport = createBrowserDebugTransport({
+    batchEndpoint: 'http://127.0.0.1:43125/ingest/batch',
+    sessionId: 'transport-generation-test',
+    recordingGeneration: 0,
+    nativeFetch: async (_url, init) => {
+      requestCount += 1
+      const payload = JSON.parse(init.body)
+      sentGenerations.push(payload.events.map((event) => event.recordingGeneration))
+      if (requestCount === 1) {
+        return acceptedResponse(payload.events.length, {
+          batchId: payload.batchId,
+          persistedEvents: 0,
+          discardedEvents: payload.events.length,
+          discardedByFreeze: false,
+          discardedByStaleGeneration: true,
+          disposition: 'discarded_stale_generation',
+          recordingFrozen: false,
+          recordingGeneration: 2,
+        })
+      }
+      return acceptedResponse(payload.events.length, {
+        batchId: payload.batchId,
+        persistedEvents: payload.events.length,
+        discardedEvents: 0,
+        disposition: 'persisted',
+        recordingFrozen: false,
+        recordingGeneration: 2,
+      })
+    },
+  })
+
+  await transport.record({ probeId: 'old-generation', event: 'stale' })
+  assert.equal(await transport.flush({ timeoutMs: 2_000 }), false)
+  await transport.record({ probeId: 'current-generation', event: 'persist' })
+  while (transport.queue.count() > 0) await delay(1)
+
+  assert.deepEqual(sentGenerations, [[0], [2]])
+  const status = await transport.getStatus()
+  assert.equal(status.recordingGeneration, 2)
+  assert.equal(status.discardedEvents, 1)
+  assert.equal(status.acknowledgedEventWatermark, 2)
+  transport.stop()
+}
+
 async function testMemoryQueueFramesAndDeletesOnlyAcknowledgedPrefix() {
   const queue = createMemoryQueue()
   const keys = queue.appendMany([
@@ -653,6 +748,8 @@ async function testTransportUnwrapsAnExistingFetchInstrumentationWrapper() {
 await testNoEventCountCapAndSingleDrainRequest()
 await testCheckpointAcknowledgesSnapshotWhileTheStreamContinues()
 await testHungRequestIsAbortedAndRetriedWithoutDroppingEvents()
+await testFrozenAcknowledgementDropsWithoutRetryAndBreaksContinuity()
+await testTransportAdoptsGenerationAfterTerminalStaleDrop()
 await testMemoryQueueFramesAndDeletesOnlyAcknowledgedPrefix()
 await testRecordSerializesEachEventOnce()
 await testUndefinedSerializationIsRejectedAndSurfaced()
@@ -665,4 +762,4 @@ await testFetchFlowContextFailuresFallBackSilently()
 await testFetchRequestMappingCannotThrowIntoTheProductPath()
 await testLegacyTransportRecordRejectionsAreContained()
 await testTransportUnwrapsAnExistingFetchInstrumentationWrapper()
-console.log('browser debug transport: 15 tests passed')
+console.log('browser debug transport: 17 tests passed')

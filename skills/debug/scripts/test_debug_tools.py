@@ -48,6 +48,45 @@ class DebugToolTests(unittest.TestCase):
         with urllib.request.urlopen(request, timeout=5) as response:
             self.assertEqual(response.status, 202)
 
+    def _create_stop_fixture(
+        self,
+        workspace: Path,
+    ) -> tuple[Path, dict, list[Path], debug_session._ProcessIdentity]:
+        artifact_dir = workspace / ".debug-logs"
+        artifact_dir.mkdir()
+        log_file = artifact_dir / "stop.ndjson"
+        location_file = artifact_dir / "stop.locations.json"
+        ready_file = artifact_dir / "stop.json"
+        service_log_file = artifact_dir / "stop.service.log"
+        artifacts = [log_file, location_file, ready_file, service_log_file]
+        for artifact in artifacts:
+            artifact.write_text("fixture", encoding="utf-8")
+
+        pid = 4242
+        process_started_at = 1_000_000
+        payload = {
+            "sessionId": "stop",
+            "workspaceRoot": str(workspace),
+            "logFile": str(log_file),
+            "readyFile": str(ready_file),
+            "ownedArtifacts": [str(path) for path in artifacts],
+            "shutdownUrl": "http://127.0.0.1:43125/api/shutdown",
+            "healthUrl": "http://127.0.0.1:43125/health",
+            "dashboardToken": "test-token",
+            "pid": pid,
+            "startedAt": process_started_at + 5_000,
+        }
+        ready_file.write_text(json.dumps(payload), encoding="utf-8")
+        identity = debug_session._ProcessIdentity(
+            pid=pid,
+            started_at_ms=process_started_at,
+            command_line=(
+                f"{sys.executable} {debug_session.COLLECTOR_MAIN.resolve()} "
+                f"--ready-file {ready_file.resolve()} --session-id stop"
+            ),
+        )
+        return ready_file, payload, artifacts, identity
+
     def test_start_parser_opens_dashboard_by_default_with_explicit_headless_opt_out(self) -> None:
         parser = debug_session.build_parser()
         default_args = parser.parse_args(["start"])
@@ -57,6 +96,320 @@ class DebugToolTests(unittest.TestCase):
         self.assertTrue(default_args.open_dashboard)
         self.assertFalse(headless_args.open_dashboard)
         self.assertFalse(alias_args.open_dashboard)
+
+    def test_stop_waits_for_delayed_process_exit_before_deleting_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            ready_file, payload, artifacts, identity = self._create_stop_fixture(workspace)
+            args = debug_session.build_parser().parse_args(
+                [
+                    "stop",
+                    "--ready-file",
+                    str(ready_file),
+                    "--wait-seconds",
+                    "1",
+                ]
+            )
+            shutdown_returned = False
+            identity_reads = 0
+
+            def fake_http(*_args: object, **_kwargs: object) -> dict:
+                nonlocal shutdown_returned
+                shutdown_returned = True
+                return {"ok": True, "status": "stopping"}
+
+            def fake_identity(pid: int) -> debug_session._ProcessIdentity | None:
+                nonlocal identity_reads
+                identity_reads += 1
+                self.assertEqual(pid, payload["pid"])
+                if identity_reads == 1:
+                    return identity
+                self.assertTrue(shutdown_returned)
+                self.assertTrue(all(path.exists() for path in artifacts))
+                if identity_reads < 4:
+                    return identity
+                return None
+
+            with mock.patch.object(
+                debug_session,
+                "_http_json",
+                side_effect=fake_http,
+            ) as http_mock:
+                with mock.patch.object(
+                    debug_session,
+                    "_read_process_identity",
+                    side_effect=fake_identity,
+                ):
+                    with mock.patch.object(debug_session.time, "sleep"):
+                        result = debug_session.command_stop(args)
+
+            self.assertEqual(result["status"], "stopped")
+            self.assertEqual(identity_reads, 4)
+            self.assertTrue(all(not path.exists() for path in artifacts))
+            http_mock.assert_called_once_with(
+                payload["shutdownUrl"],
+                method="POST",
+                token="test-token",
+                timeout=args.timeout,
+            )
+
+    def test_stop_preserves_artifacts_when_original_process_does_not_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            ready_file, _payload, artifacts, identity = self._create_stop_fixture(workspace)
+            args = debug_session.build_parser().parse_args(
+                [
+                    "stop",
+                    "--ready-file",
+                    str(ready_file),
+                    "--wait-seconds",
+                    "1",
+                ]
+            )
+
+            with mock.patch.object(
+                debug_session,
+                "_http_json",
+                return_value={"ok": True, "status": "stopping"},
+            ):
+                with mock.patch.object(
+                    debug_session,
+                    "_read_process_identity",
+                    return_value=identity,
+                ):
+                    with mock.patch.object(
+                        debug_session.time,
+                        "monotonic",
+                        side_effect=(0.0, 2.0),
+                    ):
+                        with self.assertRaisesRegex(
+                            debug_session.SessionError,
+                            "collector process is still running",
+                        ):
+                            debug_session.command_stop(args)
+
+            self.assertTrue(all(path.exists() for path in artifacts))
+
+    def test_stop_accepts_pid_reuse_as_original_process_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            ready_file, payload, artifacts, identity = self._create_stop_fixture(workspace)
+            args = debug_session.build_parser().parse_args(
+                ["stop", "--ready-file", str(ready_file), "--wait-seconds", "1"]
+            )
+            reused_identity = debug_session._ProcessIdentity(
+                pid=payload["pid"],
+                started_at_ms=identity.started_at_ms + 10_000,
+                command_line="unrelated replacement process",
+            )
+
+            with mock.patch.object(
+                debug_session,
+                "_http_json",
+                return_value={"ok": True, "status": "stopping"},
+            ):
+                with mock.patch.object(
+                    debug_session,
+                    "_read_process_identity",
+                    side_effect=(identity, reused_identity),
+                ):
+                    result = debug_session.command_stop(args)
+
+            self.assertEqual(result["status"], "stopped")
+            self.assertTrue(all(not path.exists() for path in artifacts))
+
+    def test_resume_reuses_healthy_ready_file_without_process_or_dashboard_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            artifact_dir = workspace / ".debug-logs"
+            artifact_dir.mkdir()
+            ready_file = artifact_dir / "resume.json"
+            payload = {
+                "sessionId": "resume",
+                "workspaceRoot": str(workspace),
+                "logFile": str(artifact_dir / "resume.ndjson"),
+                "healthUrl": "http://127.0.0.1:43125/health",
+                "endpoint": "http://127.0.0.1:43125/ingest",
+                "dashboardUrl": "http://127.0.0.1:43125/",
+                "dashboardToken": "test-token",
+                "dashboardAutoOpenEnabled": True,
+                "dashboardFrontendOpenRecorded": True,
+                "pid": 4242,
+                "port": 43125,
+                "startedAt": 123456789,
+                "readyFile": str(ready_file),
+            }
+            ready_file.write_text(json.dumps(payload), encoding="utf-8")
+            health = {**payload, "ok": True, "status": "running"}
+            args = debug_session.build_parser().parse_args(
+                ["resume", "--ready-file", str(ready_file)]
+            )
+
+            with mock.patch.object(debug_session, "_http_json", return_value=health):
+                with mock.patch.object(debug_session.subprocess, "Popen") as popen_mock:
+                    with mock.patch.object(
+                        debug_session,
+                        "_recover_dashboard_after_start",
+                    ) as recover_mock:
+                        with mock.patch.object(
+                            debug_session,
+                            "open_dashboard_in_browser",
+                        ) as open_mock:
+                            result = debug_session.command_resume(args)
+
+            self.assertEqual(result["sessionAction"], "reused")
+            self.assertEqual(result["lifecycleMode"], "local-cli")
+            self.assertEqual(result["dashboardRecovery"]["fallbackAttemptCount"], 0)
+            self.assertEqual(result["dashboardRecovery"]["status"], "frontend_confirmed")
+            self.assertTrue(result["dashboardRecovery"]["frontendConfirmed"])
+            for key in ("sessionId", "pid", "port", "endpoint", "dashboardUrl", "startedAt"):
+                self.assertEqual(result[key], payload[key])
+            self.assertEqual(result["readyFile"], str(ready_file))
+            popen_mock.assert_not_called()
+            recover_mock.assert_not_called()
+            open_mock.assert_not_called()
+
+    def test_resume_rejects_copied_ready_file_without_health_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            artifact_dir = workspace / ".debug-logs"
+            artifact_dir.mkdir()
+            ready_file = artifact_dir / "copied.json"
+            payload = {
+                "sessionId": "resume",
+                "workspaceRoot": str(workspace),
+                "logFile": str(artifact_dir / "resume.ndjson"),
+                "readyFile": str(artifact_dir / "original.json"),
+                "healthUrl": "http://127.0.0.1:43125/health",
+                "dashboardToken": "test-token",
+                "pid": 4242,
+                "startedAt": 123456789,
+            }
+            ready_file.write_text(json.dumps(payload), encoding="utf-8")
+            args = debug_session.build_parser().parse_args(
+                ["resume", "--ready-file", str(ready_file)]
+            )
+
+            with mock.patch.object(debug_session, "_http_json") as http_mock:
+                with mock.patch.object(debug_session.subprocess, "Popen") as popen_mock:
+                    with self.assertRaisesRegex(
+                        debug_session.SessionError,
+                        "does not match the requested ready file",
+                    ):
+                        debug_session.command_resume(args)
+
+            http_mock.assert_not_called()
+            popen_mock.assert_not_called()
+
+    def test_resume_rejects_unhealthy_or_mismatched_session_without_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            artifact_dir = workspace / ".debug-logs"
+            artifact_dir.mkdir()
+            ready_file = artifact_dir / "resume.json"
+            payload = {
+                "sessionId": "resume",
+                "workspaceRoot": str(workspace),
+                "logFile": str(artifact_dir / "resume.ndjson"),
+                "healthUrl": "http://127.0.0.1:43125/health",
+                "dashboardToken": "test-token",
+                "pid": 4242,
+                "startedAt": 123456789,
+                "readyFile": str(ready_file),
+            }
+            ready_file.write_text(json.dumps(payload), encoding="utf-8")
+            original_ready = ready_file.read_text(encoding="utf-8")
+            args = debug_session.build_parser().parse_args(
+                ["resume", "--ready-file", str(ready_file)]
+            )
+            cases = (
+                {**payload, "ok": True, "status": "stopping"},
+                {**payload, "ok": True, "status": "running", "sessionId": "other"},
+                {
+                    **payload,
+                    "ok": True,
+                    "status": "running",
+                    "workspaceRoot": str(workspace / "other"),
+                },
+                {
+                    **payload,
+                    "ok": True,
+                    "status": "running",
+                    "logFile": str(artifact_dir / "other.ndjson"),
+                },
+                {**payload, "ok": True, "status": "running", "pid": 4243},
+                {**payload, "ok": True, "status": "running", "startedAt": 123456790},
+                {
+                    **payload,
+                    "ok": True,
+                    "status": "running",
+                    "dashboardToken": "other-token",
+                },
+            )
+
+            for health in cases:
+                with self.subTest(health=health):
+                    with mock.patch.object(debug_session, "_http_json", return_value=health):
+                        with mock.patch.object(debug_session.subprocess, "Popen") as popen_mock:
+                            with mock.patch.object(
+                                debug_session,
+                                "open_dashboard_in_browser",
+                            ) as open_mock:
+                                with self.assertRaises(debug_session.SessionError):
+                                    debug_session.command_resume(args)
+                    self.assertEqual(ready_file.read_text(encoding="utf-8"), original_ready)
+                    popen_mock.assert_not_called()
+                    open_mock.assert_not_called()
+
+    def test_start_requires_explicit_resume_for_healthy_same_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            artifact_dir = workspace / ".debug-logs"
+            artifact_dir.mkdir()
+            ready_file = artifact_dir / "same-session.json"
+            payload = {
+                "sessionId": "same-session",
+                "workspaceRoot": str(workspace),
+                "logFile": str(artifact_dir / "same-session.ndjson"),
+                "healthUrl": "http://127.0.0.1:43125/health",
+                "dashboardUrl": "http://127.0.0.1:43125/",
+                "dashboardToken": "test-token",
+                "pid": 4242,
+                "port": 43125,
+                "startedAt": 123456789,
+                "readyFile": str(ready_file),
+            }
+            ready_file.write_text(json.dumps(payload), encoding="utf-8")
+            health = {**payload, "ok": True, "status": "running"}
+            args = debug_session.build_parser().parse_args(
+                [
+                    "start",
+                    "--workspace-root",
+                    str(workspace),
+                    "--session-id",
+                    "same-session",
+                ]
+            )
+
+            with mock.patch.object(debug_session, "_http_json", return_value=health):
+                with mock.patch.object(debug_session.subprocess, "Popen") as popen_mock:
+                    with mock.patch.object(
+                        debug_session,
+                        "_recover_dashboard_after_start",
+                    ) as recover_mock:
+                        with mock.patch.object(
+                            debug_session,
+                            "open_dashboard_in_browser",
+                        ) as open_mock:
+                            with self.assertRaisesRegex(
+                                debug_session.SessionError,
+                                "resume --ready-file",
+                            ):
+                                debug_session.command_start(args)
+
+            popen_mock.assert_not_called()
+            recover_mock.assert_not_called()
+            open_mock.assert_not_called()
 
     def test_dashboard_startup_wait_tolerates_transient_ready_file_reads(self) -> None:
         ready_path = Path("/tmp/debug-ready.json")
@@ -251,36 +604,42 @@ class DebugToolTests(unittest.TestCase):
                     "dashboardUrl": "http://127.0.0.1:43125/",
                     "dashboardAutoOpenEnabled": True,
                     "dashboardFrontendOpenRecorded": True,
+                    "recordingFrozen": False,
+                    "recordingGeneration": 0,
                 },
                 "frontend_confirmed",
                 "Dashboard: frontend_confirmed — http://127.0.0.1:43125/ "
-                "(frontend confirmed: true)",
+                "(frontend confirmed: true; recording: live)",
             ),
             (
                 {
                     "dashboardUrl": "http://127.0.0.1:43125/",
                     "dashboardAutoOpenEnabled": False,
                     "dashboardFrontendOpenRecorded": False,
+                    "recordingFrozen": False,
                 },
                 "disabled",
                 "Dashboard: disabled — http://127.0.0.1:43125/ "
-                "(frontend confirmed: false)",
+                "(frontend confirmed: false; recording: live)",
             ),
             (
                 {
                     "dashboardUrl": "http://127.0.0.1:43125/",
                     "dashboardAutoOpenEnabled": True,
                     "dashboardFrontendOpenRecorded": False,
+                    "recordingFrozen": True,
+                    "recordingGeneration": 3,
                     "dashboardOpenError": "browser\nopen failed",
                 },
                 "frontend_not_confirmed",
                 "Dashboard: frontend_not_confirmed — http://127.0.0.1:43125/ "
-                "(frontend confirmed: false) — error: browser open failed",
+                "(frontend confirmed: false; recording: frozen) — error: browser open failed",
             ),
             (
                 {},
                 "unavailable",
-                "Dashboard: unavailable — unavailable (frontend confirmed: unknown)",
+                "Dashboard: unavailable — unavailable "
+                "(frontend confirmed: unknown; recording: unknown)",
             ),
         )
 
@@ -301,6 +660,8 @@ class DebugToolTests(unittest.TestCase):
                 self.assertEqual(result["status"], expected_status)
                 self.assertEqual(result["line"], expected_line)
 
+        self.assertEqual(result["recordingStatus"], "unknown")
+
     def test_dashboard_status_falls_back_to_ready_payload_when_state_refresh_fails(self) -> None:
         ready_path = Path("/tmp/debug-ready.json")
         ready_payload = {
@@ -308,6 +669,8 @@ class DebugToolTests(unittest.TestCase):
             "dashboardUrl": "http://127.0.0.1:43125/",
             "dashboardAutoOpenEnabled": True,
             "dashboardFrontendOpenRecorded": True,
+            "recordingFrozen": True,
+            "recordingGeneration": 7,
         }
         args = mock.Mock(ready_file=str(ready_path), timeout=1.0)
 
@@ -324,8 +687,65 @@ class DebugToolTests(unittest.TestCase):
                 result = debug_session.command_dashboard_status(args)
 
         self.assertEqual(result["status"], "frontend_confirmed")
+        self.assertEqual(result["recordingStatus"], "frozen")
+        self.assertEqual(result["recordingGeneration"], 7)
         self.assertIn("http://127.0.0.1:43125/", result["line"])
+        self.assertIn("recording: frozen", result["line"])
         self.assertIn("temporary state failure", result["line"])
+
+    def test_recording_commands_use_distinct_authenticated_endpoints(self) -> None:
+        ready_path = Path("/tmp/debug-ready.json")
+        ready_payload = {
+            "freezeRecordingUrl": "http://127.0.0.1:43125/api/recording/freeze",
+            "resumeRecordingUrl": "http://127.0.0.1:43125/api/recording/resume",
+            "dashboardToken": "test-token",
+        }
+        args = mock.Mock(ready_file=str(ready_path), timeout=1.0)
+
+        for frozen, command, url, generation in (
+            (
+                True,
+                debug_session.command_freeze_recording,
+                ready_payload["freezeRecordingUrl"],
+                1,
+            ),
+            (
+                False,
+                debug_session.command_resume_recording,
+                ready_payload["resumeRecordingUrl"],
+                2,
+            ),
+        ):
+            response = {
+                "service": {
+                    "recordingFrozen": frozen,
+                    "recordingGeneration": generation,
+                }
+            }
+            with self.subTest(frozen=frozen):
+                with mock.patch.object(
+                    debug_session,
+                    "_read_ready_file",
+                    return_value=(ready_path, ready_payload),
+                ):
+                    with mock.patch.object(
+                        debug_session,
+                        "_http_json",
+                        return_value=response,
+                    ) as request_mock:
+                        result = command(args)
+
+                request_mock.assert_called_once_with(
+                    url,
+                    method="POST",
+                    token="test-token",
+                    timeout=1.0,
+                )
+                self.assertEqual(result["recordingFrozen"], frozen)
+                self.assertEqual(
+                    result["recordingStatus"], "frozen" if frozen else "live"
+                )
+                self.assertEqual(result["recordingGeneration"], generation)
 
     def test_open_dashboard_skips_when_frontend_is_already_recorded(self) -> None:
         ready_path = Path("/tmp/debug-ready.json")
@@ -623,6 +1043,26 @@ class DebugToolTests(unittest.TestCase):
                     start_payload["dashboardRecovery"]["fallbackAttemptCount"],
                     0,
                 )
+                self.assertEqual(start_payload["sessionAction"], "started")
+
+                _, resume_payload = self._run_json(
+                    str(DEBUG_SESSION),
+                    "resume",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertEqual(resume_payload["sessionAction"], "reused")
+                self.assertEqual(resume_payload["lifecycleMode"], "local-cli")
+                self.assertEqual(resume_payload["dashboardRecovery"]["status"], "disabled")
+                for key in (
+                    "sessionId",
+                    "pid",
+                    "port",
+                    "endpoint",
+                    "dashboardUrl",
+                    "startedAt",
+                ):
+                    self.assertEqual(resume_payload[key], start_payload[key])
 
                 _, dashboard_status = self._run_json(
                     str(DEBUG_SESSION),
@@ -635,8 +1075,76 @@ class DebugToolTests(unittest.TestCase):
                 self.assertEqual(
                     dashboard_status["line"],
                     f"Dashboard: disabled — {start_payload['dashboardUrl']} "
-                    "(frontend confirmed: false)",
+                    "(frontend confirmed: false; recording: live)",
                 )
+                self.assertEqual(dashboard_status["recordingStatus"], "live")
+
+                _, frozen_payload = self._run_json(
+                    str(DEBUG_SESSION),
+                    "freeze-recording",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertTrue(frozen_payload["recordingFrozen"])
+                self.assertEqual(frozen_payload["recordingStatus"], "frozen")
+
+                _, reused_while_frozen = self._run_json(
+                    str(DEBUG_SESSION),
+                    "resume",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertEqual(reused_while_frozen["sessionAction"], "reused")
+                self.assertEqual(reused_while_frozen["pid"], start_payload["pid"])
+                self.assertEqual(reused_while_frozen["port"], start_payload["port"])
+                self.assertTrue(reused_while_frozen["recordingFrozen"])
+
+                _, frozen_status = self._run_json(
+                    str(DEBUG_SESSION),
+                    "dashboard-status",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertEqual(frozen_status["recordingStatus"], "frozen")
+                self.assertIn("recording: frozen", frozen_status["line"])
+
+                self._post_event(
+                    start_payload["endpoint"],
+                    {
+                        "sessionId": "integration",
+                        "runId": "discarded-while-frozen",
+                        "probeId": "frozen.event",
+                        "event": "state_observed",
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+                _, frozen_state = self._run_json(
+                    str(DEBUG_SESSION),
+                    "state",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertEqual(frozen_state["state"]["summary"]["totalEntries"], 0)
+
+                _, cleared_while_frozen = self._run_json(
+                    str(DEBUG_SESSION),
+                    "clear",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertEqual(cleared_while_frozen["state"]["status"], "frozen")
+                self.assertTrue(
+                    cleared_while_frozen["state"]["service"]["recordingFrozen"]
+                )
+
+                _, resumed_payload = self._run_json(
+                    str(DEBUG_SESSION),
+                    "resume-recording",
+                    "--ready-file",
+                    str(ready_file),
+                )
+                self.assertFalse(resumed_payload["recordingFrozen"])
+                self.assertEqual(resumed_payload["recordingStatus"], "live")
 
                 locations_file = workspace / "coverage-plan.json"
                 locations_file.write_text(

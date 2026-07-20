@@ -62,6 +62,8 @@ SENSITIVE_POST_PATHS = {
     '/api/dashboard-opened',
     '/api/locations/sync',
     '/api/open-location',
+    '/api/recording/freeze',
+    '/api/recording/resume',
     '/api/shutdown',
 }
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
@@ -104,6 +106,7 @@ class CollectorServer(ThreadingHTTPServer):
         self.ingest_lock = threading.Lock()
         self.write_lock = threading.Lock()
         self.location_state_flush_ms = max(int(location_state_flush_ms), 0)
+        self.ready_file_lock = threading.Lock()
         self.location_state_schedule_lock = threading.Lock()
         self.location_state_timer: threading.Timer | None = None
         self.location_state_dirty = False
@@ -129,10 +132,25 @@ class CollectorServer(ThreadingHTTPServer):
         self.ingest_accepted_event_count = 0
         self.ingest_accepted_bytes = 0
         self.ingest_last_accepted_at: int | None = None
+        self.ingest_frozen_discarded_request_count = 0
+        self.ingest_frozen_discarded_event_count = 0
+        self.ingest_frozen_discarded_bytes = 0
+        self.ingest_frozen_last_discarded_at: int | None = None
+        self.ingest_stale_discarded_request_count = 0
+        self.ingest_stale_discarded_event_count = 0
+        self.ingest_stale_discarded_bytes = 0
+        self.ingest_stale_last_discarded_at: int | None = None
         self.index_last_completed_at: int | None = None
         self.index_error_count = 0
         self.index_last_error = ''
+        self.recording_frozen = False
+        self.recording_generation = 0
+        self.recording_frozen_at: int | None = None
+        self.recording_resumed_at: int | None = None
         self.seen_transport_batch_ids: set[str] = set()
+        # Terminal outcomes survive Clear for the process lifetime so a lost
+        # acknowledgement cannot replay a resolved batch after Resume.
+        self.transport_batch_outcomes: dict[str, str] = {}
         self._index_wake_event = threading.Event()
         self._index_stop_event = threading.Event()
         self._index_thread: threading.Thread | None = None
@@ -261,6 +279,14 @@ class CollectorServer(ThreadingHTTPServer):
         return f'{self.base_url}/api/clear'
 
     @property
+    def freeze_recording_url(self) -> str:
+        return f'{self.base_url}/api/recording/freeze'
+
+    @property
+    def resume_recording_url(self) -> str:
+        return f'{self.base_url}/api/recording/resume'
+
+    @property
     def shutdown_url(self) -> str:
         return f'{self.base_url}/api/shutdown'
 
@@ -301,14 +327,36 @@ class CollectorServer(ThreadingHTTPServer):
         )
         return payload
 
+    def set_recording_frozen(self, frozen: bool) -> bool:
+        """Linearize the recording gate with every collector-owned append."""
+
+        changed = False
+        with self.ingest_lock:
+            if self.recording_frozen != frozen:
+                changed_at = int(time.time() * 1000)
+                self.recording_frozen = frozen
+                self.recording_generation += 1
+                if frozen:
+                    self.recording_frozen_at = changed_at
+                else:
+                    self.recording_resumed_at = changed_at
+                changed = True
+        if changed:
+            self.write_ready_file()
+        return changed
+
     def write_ready_file(self) -> None:
         if not self.ready_file:
             return
 
-        payload = build_ready_payload(self)
-        temp_path = self.ready_file.with_suffix(f'{self.ready_file.suffix}.tmp')
-        temp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding='utf-8')
-        os.replace(temp_path, self.ready_file)
+        with self.ready_file_lock:
+            payload = build_ready_payload(self)
+            temp_path = self.ready_file.with_suffix(f'{self.ready_file.suffix}.tmp')
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=True, indent=2),
+                encoding='utf-8',
+            )
+            os.replace(temp_path, self.ready_file)
 
     def record_dashboard_frontend_opened(self) -> None:
         if self.dashboard_frontend_opened_at is not None:
@@ -428,11 +476,27 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         if path in SENSITIVE_POST_PATHS and not self._require_dashboard_access():
             return
         if path == '/api/clear':
+            if not self._consume_request_body():
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'invalid_request_body'},
+                )
+                return
             # Prevent append/clear races without blocking normal dashboard reads
             # behind ingestion file I/O.
             with self.server.ingest_lock:
                 with self.server.write_lock:
                     clear_log_file(self.server)
+            self._json_response(HTTPStatus.OK, self.server.build_state())
+            return
+        if path in {'/api/recording/freeze', '/api/recording/resume'}:
+            if not self._consume_request_body():
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'invalid_request_body'},
+                )
+                return
+            self.server.set_recording_frozen(path.endswith('/freeze'))
             self._json_response(HTTPStatus.OK, self.server.build_state())
             return
         if path == '/api/config':
@@ -442,6 +506,12 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             self._handle_dashboard_open_failed()
             return
         if path == '/api/dashboard-opened':
+            if not self._consume_request_body():
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'invalid_request_body'},
+                )
+                return
             self._handle_dashboard_opened()
             return
         if path == '/api/locations/sync':
@@ -451,6 +521,12 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             self._handle_open_location()
             return
         if path == '/api/shutdown':
+            if not self._consume_request_body():
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'invalid_request_body'},
+                )
+                return
             self.server.shutdown_requested_at = int(time.time() * 1000)
             self._json_response(
                 HTTPStatus.OK,
@@ -462,6 +538,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             )
             threading.Thread(target=self.server.shutdown, daemon=True).start()
             return
+        self.close_connection = True
         self._json_response(HTTPStatus.NOT_FOUND, {'ok': False, 'error': 'not_found'})
 
     def _handle_ingest(self) -> None:
@@ -483,10 +560,24 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
 
         event = self._prepare_ingest_event(payload)
-        persisted_bytes, _ = self._append_ingest_events([event])
+        persisted_bytes, _, disposition = self._append_ingest_events([event])
+        discarded = disposition != 'persisted'
+        discarded_by_freeze = disposition == 'discarded_frozen'
         self._json_response(
             HTTPStatus.ACCEPTED,
-            {'ok': True, 'accepted': 1, 'persistedBytes': persisted_bytes},
+            {
+                'ok': True,
+                'accepted': 1,
+                'persistedBytes': persisted_bytes,
+                'persistedEvents': 0 if discarded else 1,
+                'discardedEvents': 1 if discarded else 0,
+                'discardedByFreeze': discarded_by_freeze,
+                'discardedByClear': disposition == 'discarded_cleared',
+                'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
+                'disposition': disposition,
+                'recordingFrozen': self.server.recording_frozen,
+                'recordingGeneration': self.server.recording_generation,
+            },
             cors_mode='ingest',
         )
 
@@ -529,17 +620,26 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         if batch_id:
             for event in events:
                 event.setdefault('transportBatchId', batch_id)
-        persisted_bytes, duplicate_batch = self._append_ingest_events(
+        persisted_bytes, duplicate_batch, disposition = self._append_ingest_events(
             events,
             batch_id=batch_id or None,
         )
+        discarded = disposition != 'persisted'
+        discarded_by_freeze = disposition == 'discarded_frozen'
         self._json_response(
             HTTPStatus.ACCEPTED,
             {
                 'ok': True,
                 'accepted': len(events),
                 'persistedBytes': persisted_bytes,
-                'persistedEvents': 0 if duplicate_batch else len(events),
+                'persistedEvents': 0 if duplicate_batch or discarded else len(events),
+                'discardedEvents': len(events) if discarded else 0,
+                'discardedByFreeze': discarded_by_freeze,
+                'discardedByClear': disposition == 'discarded_cleared',
+                'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
+                'disposition': disposition,
+                'recordingFrozen': self.server.recording_frozen,
+                'recordingGeneration': self.server.recording_generation,
                 'duplicateBatch': duplicate_batch,
                 'batchId': batch_id or None,
             },
@@ -562,7 +662,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         events: list[dict[str, Any]],
         *,
         batch_id: str | None = None,
-    ) -> tuple[int, bool]:
+    ) -> tuple[int, bool, str]:
         encoded_events = [
             f"{json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n".encode('utf-8')
             for event in events
@@ -570,21 +670,57 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         encoded_blob = b''.join(encoded_events)
         accepted_at = int(time.time() * 1000)
         with self.server.ingest_lock:
+            if batch_id and batch_id in self.server.transport_batch_outcomes:
+                return 0, True, self.server.transport_batch_outcomes[batch_id]
             if batch_id and batch_id in self.server.seen_transport_batch_ids:
-                return 0, True
+                return 0, True, 'persisted'
+
+            raw_generations = [event.get('recordingGeneration') for event in events]
+            tagged_generations = [value for value in raw_generations if value is not None]
+            valid_generation = (
+                len(tagged_generations) == len(events)
+                and all(isinstance(value, int) and not isinstance(value, bool) for value in tagged_generations)
+                and len(set(tagged_generations)) == 1
+            )
+            stale_generation = bool(tagged_generations) and (
+                not valid_generation
+                or tagged_generations[0] != self.server.recording_generation
+            )
+
+            if self.server.recording_frozen or stale_generation:
+                disposition = (
+                    'discarded_frozen'
+                    if self.server.recording_frozen
+                    else 'discarded_stale_generation'
+                )
+                if batch_id:
+                    self.server.seen_transport_batch_ids.add(batch_id)
+                    self.server.transport_batch_outcomes[batch_id] = disposition
+                if self.server.recording_frozen:
+                    self.server.ingest_frozen_discarded_request_count += 1
+                    self.server.ingest_frozen_discarded_event_count += len(events)
+                    self.server.ingest_frozen_discarded_bytes += len(encoded_blob)
+                    self.server.ingest_frozen_last_discarded_at = accepted_at
+                else:
+                    self.server.ingest_stale_discarded_request_count += 1
+                    self.server.ingest_stale_discarded_event_count += len(events)
+                    self.server.ingest_stale_discarded_bytes += len(encoded_blob)
+                    self.server.ingest_stale_last_discarded_at = accepted_at
+                return 0, False, disposition
             with self.server.log_file.open('ab') as file:
                 file.write(encoded_blob)
                 file.flush()
                 self.server.file_size_bytes = file.tell()
             if batch_id:
                 self.server.seen_transport_batch_ids.add(batch_id)
+                self.server.transport_batch_outcomes[batch_id] = 'persisted'
             self.server.file_updated_at = accepted_at
             self.server.ingest_request_count += 1
             self.server.ingest_accepted_event_count += len(events)
             self.server.ingest_accepted_bytes += len(encoded_blob)
             self.server.ingest_last_accepted_at = accepted_at
         self.server.wake_indexer()
-        return len(encoded_blob), False
+        return len(encoded_blob), False, 'persisted'
 
     def _handle_config_update(self) -> None:
         payload = self._read_json_body()
@@ -856,6 +992,8 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Length', str(len(body)))
+        if self.close_connection:
+            self.send_header('Connection', 'close')
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -875,6 +1013,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
     def _require_dashboard_access(self) -> bool:
         origin = self.headers.get('Origin', '').strip()
         if origin and origin != self.server.base_url:
+            self.close_connection = True
             self._json_response(
                 HTTPStatus.FORBIDDEN,
                 {'ok': False, 'error': 'dashboard_origin_forbidden'},
@@ -883,6 +1022,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
 
         provided_token = self.headers.get(DASHBOARD_TOKEN_HEADER, '').strip()
         if provided_token != self.server.dashboard_token:
+            self.close_connection = True
             self._json_response(
                 HTTPStatus.FORBIDDEN,
                 {'ok': False, 'error': 'dashboard_token_required'},
@@ -924,14 +1064,47 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             parsed = min(parsed, maximum)
         return parsed
 
-    def _read_json_body(self) -> Any | None:
-        try:
-            content_length = int(self.headers.get('Content-Length', '0'))
-        except (TypeError, ValueError):
+    def _read_request_body(self) -> bytes | None:
+        if self.headers.get_all('Transfer-Encoding', []):
+            self.close_connection = True
             return None
-        if content_length < 0 or content_length > MAX_JSON_BODY_BYTES:
+
+        content_length_headers = self.headers.get_all('Content-Length', [])
+        if len(content_length_headers) > 1:
+            self.close_connection = True
             return None
+
+        raw_content_length = content_length_headers[0].strip() if content_length_headers else '0'
+        if not raw_content_length.isascii() or not raw_content_length.isdecimal():
+            self.close_connection = True
+            return None
+
+        normalized_content_length = raw_content_length.lstrip('0') or '0'
+        maximum_content_length = str(MAX_JSON_BODY_BYTES)
+        if (
+            len(normalized_content_length) > len(maximum_content_length)
+            or (
+                len(normalized_content_length) == len(maximum_content_length)
+                and normalized_content_length > maximum_content_length
+            )
+        ):
+            self.close_connection = True
+            return None
+
+        content_length = int(normalized_content_length)
         raw_body = self.rfile.read(content_length) if content_length else b''
+        if len(raw_body) != content_length:
+            self.close_connection = True
+            return None
+        return raw_body
+
+    def _consume_request_body(self) -> bool:
+        return self._read_request_body() is not None
+
+    def _read_json_body(self) -> Any | None:
+        raw_body = self._read_request_body()
+        if raw_body is None:
+            return None
         try:
             return json.loads(raw_body.decode('utf-8') or '{}')
         except (UnicodeDecodeError, json.JSONDecodeError):

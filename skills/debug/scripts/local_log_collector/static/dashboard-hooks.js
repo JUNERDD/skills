@@ -1,9 +1,27 @@
 import { API_ROUTES, buildLogDetailUrl, buildLogsUrl, fetchJson } from './dashboard-api.js'
-import { PAGE_SIZE, ROW_HEIGHT_DESKTOP, ROW_HEIGHT_MOBILE, isMobile } from './dashboard-utils.js'
-import { useCallback, useEffect, useRef, useState, useSWR, useVirtualizer } from './dashboard-deps.js'
+import {
+  PAGE_SIZE,
+  ROW_HEIGHT_DESKTOP,
+  ROW_HEIGHT_MOBILE,
+  COLLECTOR_REFRESH_INTERVAL_MS,
+  deriveCollectorStatus,
+  getStableLogPageRequest,
+  isMobile,
+  toDescendingLogPage,
+} from './dashboard-utils.js'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSWR,
+  useVirtualizer,
+} from './dashboard-deps.js'
 
 export function useCollectorState() {
   const [actionStatus, setActionStatus] = useState(null)
+  const [actionBusy, setActionBusy] = useState(false)
+  const actionBusyRef = useRef(false)
   const [stopped, setStopped] = useState(false)
   const [shutdownComplete, setShutdownComplete] = useState(false)
   const dashboardOpenRecordAttemptedRef = useRef(false)
@@ -11,24 +29,22 @@ export function useCollectorState() {
     stopped ? null : API_ROUTES.state,
     (url) => fetchJson(url),
     {
-      refreshInterval: 1000,
+      refreshInterval: COLLECTOR_REFRESH_INTERVAL_MS,
       revalidateOnFocus: false,
       keepPreviousData: true,
     },
   )
-
   const service = data?.service ?? null
   const summary = data?.summary ?? null
   const logsVersion = `${summary?.totalEntries ?? 0}:${summary?.fileUpdatedAt ?? 0}:${summary?.invalidLines ?? 0}`
-  const status = error
-    ? 'error'
-    : shutdownComplete
-      ? 'stopped'
-      : stopped || data?.status === 'stopping'
-        ? 'stopping'
-        : data
-          ? 'running'
-          : 'loading'
+  const status = deriveCollectorStatus({
+    error: Boolean(error),
+    shutdownComplete,
+    stopped,
+    serviceStatus: data?.status,
+    recordingFrozen: Boolean(service?.recordingFrozen),
+    hasData: Boolean(data),
+  })
 
   useEffect(() => {
     if (!stopped || shutdownComplete) return
@@ -54,6 +70,9 @@ export function useCollectorState() {
   }, [mutate, service, stopped])
 
   async function invoke(url, successMessage, stopAfter = false, dashboardToken = '') {
+    if (actionBusyRef.current) return
+    actionBusyRef.current = true
+    setActionBusy(true)
     setActionStatus({ kind: 'busy', text: 'Working...' })
     try {
       const nextState = await fetchJson(url, {
@@ -72,6 +91,9 @@ export function useCollectorState() {
         kind: 'error',
         text: nextError.message || 'Action failed.',
       })
+    } finally {
+      actionBusyRef.current = false
+      setActionBusy(false)
     }
   }
 
@@ -82,7 +104,18 @@ export function useCollectorState() {
     status,
     logsVersion,
     actionStatus,
-    clearLogs: () => invoke(service?.clearUrl ?? API_ROUTES.clear, 'Log cleared.', false, service?.dashboardToken),
+    actionBusy,
+    clearLogs: () => actionBusyRef.current
+      ? undefined
+      : invoke(service?.clearUrl ?? API_ROUTES.clear, 'Log cleared.', false, service?.dashboardToken),
+    setRecordingFrozen: (nextFrozen) => invoke(
+      nextFrozen
+        ? service?.freezeRecordingUrl ?? API_ROUTES.freezeRecording
+        : service?.resumeRecordingUrl ?? API_ROUTES.resumeRecording,
+      nextFrozen ? 'Recording frozen.' : 'Recording resumed.',
+      false,
+      service?.dashboardToken,
+    ),
     shutdown: () => invoke(service?.shutdownUrl ?? API_ROUTES.shutdown, 'Shutting down.', true, service?.dashboardToken),
   }
 }
@@ -107,6 +140,7 @@ export function useVirtualLogs(totalEntries, logsVersion, logsUrl = API_ROUTES.l
 
   useEffect(() => {
     setEntryMap(new Map())
+    setLoading(false)
     requestedPagesRef.current.clear()
     if (parentRef.current) parentRef.current.scrollTop = 0
   }, [logsVersion])
@@ -147,9 +181,9 @@ export function useVirtualLogs(totalEntries, logsVersion, logsUrl = API_ROUTES.l
 
     Promise.all(
       pageStarts.map(async (pageStart) => {
-        const limit = Math.min(PAGE_SIZE, totalEntries - pageStart)
-        const payload = await fetchJson(buildLogsUrl(logsUrl, { offset: pageStart, limit, order: 'desc' }))
-        return { pageStart, entries: payload.entries ?? [] }
+        const request = getStableLogPageRequest(totalEntries, pageStart)
+        const payload = await fetchJson(buildLogsUrl(logsUrl, request))
+        return { pageStart, entries: toDescendingLogPage(payload.entries) }
       }),
     )
       .then((pages) => {
@@ -258,7 +292,7 @@ export function useLocationState(
     locationsUrl || null,
     (url) => fetchJson(url),
     {
-      refreshInterval: 1000,
+      refreshInterval: COLLECTOR_REFRESH_INTERVAL_MS,
       revalidateOnFocus: false,
       keepPreviousData: true,
     },

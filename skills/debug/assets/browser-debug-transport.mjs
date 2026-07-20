@@ -66,6 +66,10 @@ function normalizeFrameItems(records, startIndex, maxBytes) {
   let bytes = JSON_ENVELOPE_BYTES
   for (let index = startIndex; index < records.length; index += 1) {
     const record = records[index]
+    if (
+      items.length > 0
+      && record.recordingGeneration !== items[0].recordingGeneration
+    ) break
     const nextBytes = bytes + record.bytes + (items.length > 0 ? 1 : 0)
     if (items.length > 0 && nextBytes > maxBytes) break
     items.push(record)
@@ -92,7 +96,7 @@ export function createMemoryQueue() {
     }
   }
 
-  function appendSerialized(json, bytes = byteLength(json)) {
+  function appendSerialized(json, bytes = byteLength(json), metadata = {}) {
     if (typeof json !== 'string') throw new Error('debug_queue_json_required')
     const resolvedBytes = Number(bytes)
     if (!Number.isFinite(resolvedBytes) || resolvedBytes < 0) {
@@ -102,6 +106,7 @@ export function createMemoryQueue() {
       key: nextKey++,
       json,
       bytes: resolvedBytes,
+      recordingGeneration: metadata.recordingGeneration,
     }
     records.push(record)
     queuedBytes += resolvedBytes
@@ -113,7 +118,9 @@ export function createMemoryQueue() {
 
     append(event) {
       const json = JSON.stringify(event)
-      return appendSerialized(json, byteLength(json))
+      return appendSerialized(json, byteLength(json), {
+        recordingGeneration: event?.recordingGeneration,
+      })
     },
 
     appendMany(events) {
@@ -213,6 +220,7 @@ export function createBrowserDebugTransport({
   batchEndpoint,
   sessionId,
   runId = 'initial',
+  recordingGeneration = 0,
   nativeFetch,
   frameBytes = DEFAULT_FRAME_BYTES,
   maxEventBytes = DEFAULT_MAX_EVENT_BYTES,
@@ -224,6 +232,12 @@ export function createBrowserDebugTransport({
 } = {}) {
   if (!batchEndpoint || !sessionId) {
     throw new Error('batchEndpoint_and_sessionId_are_required')
+  }
+  if (
+    !Number.isSafeInteger(recordingGeneration)
+    || recordingGeneration < 0
+  ) {
+    throw new Error('recordingGeneration_must_be_a_non_negative_integer')
   }
 
   const configuredFetch = nativeFetch || globalThis.fetch
@@ -242,6 +256,7 @@ export function createBrowserDebugTransport({
   )
 
   let transportSequence = 0
+  let activeRecordingGeneration = recordingGeneration
   let drainPromise = null
   let inFlightFrame = null
   let requestActive = false
@@ -255,6 +270,9 @@ export function createBrowserDebugTransport({
   let acknowledgedEventWatermark = 0
   let failedRequests = 0
   let rejectedEvents = 0
+  let discardedEvents = 0
+  let firstDiscardedEventWatermark = null
+  let recordingFrozen = false
   let lastError = null
 
   function isCollectorUrl(input) {
@@ -289,6 +307,10 @@ export function createBrowserDebugTransport({
       acknowledgedEventWatermark,
       failedRequests,
       rejectedEvents,
+      discardedEvents,
+      firstDiscardedEventWatermark,
+      recordingFrozen,
+      recordingGeneration: activeRecordingGeneration,
       inFlightRequests: requestActive ? 1 : 0,
       retryPending: retryTimer !== null,
       currentBatchId: inFlightFrame?.batchId || null,
@@ -297,7 +319,7 @@ export function createBrowserDebugTransport({
       currentFrameBytes: inFlightFrame?.wireBytes || 0,
       retryAttempt,
       lastError,
-      continuityBroken: rejectedEvents > 0,
+      continuityBroken: rejectedEvents > 0 || discardedEvents > 0,
       eventCountLimited: false,
       ...extra,
     }
@@ -323,6 +345,7 @@ export function createBrowserDebugTransport({
           body,
           wireBytes,
           eventWatermark: keys[keys.length - 1],
+          recordingGeneration: items[0].recordingGeneration,
         }
       }
       items.pop()
@@ -375,6 +398,23 @@ export function createBrowserDebugTransport({
       if (acknowledgement.batchId !== batchId) {
         throw new Error('debug_transport_batch_id_mismatch')
       }
+      const discardedInFrame = acknowledgement.discardedEvents ?? 0
+      if (
+        !Number.isSafeInteger(discardedInFrame)
+        || discardedInFrame < 0
+        || discardedInFrame > frame.items.length
+      ) {
+        throw new Error('debug_transport_invalid_discard_count')
+      }
+      if (typeof acknowledgement.recordingFrozen === 'boolean') {
+        recordingFrozen = acknowledgement.recordingFrozen
+      }
+      if (
+        Number.isSafeInteger(acknowledgement.recordingGeneration)
+        && acknowledgement.recordingGeneration >= 0
+      ) {
+        activeRecordingGeneration = acknowledgement.recordingGeneration
+      }
       eventQueue.deleteKeys(keys)
       acknowledgedEventWatermark = Math.max(
         acknowledgedEventWatermark,
@@ -382,14 +422,31 @@ export function createBrowserDebugTransport({
       )
       acceptedEvents += frame.items.length
       acceptedBatches += 1
+      if (discardedInFrame > 0) {
+        discardedEvents += discardedInFrame
+        if (firstDiscardedEventWatermark === null) {
+          firstDiscardedEventWatermark = keys[0]
+        }
+      }
       retryAttempt = 0
       lastError = null
-      emit(onStatus, statusPayload('batch_acknowledged', {
-        batchId,
-        acknowledgedEvents: frame.items.length,
-        acknowledgedEventWatermark,
-        duplicateBatch: Boolean(acknowledgement.duplicateBatch),
-      }))
+      const acknowledgementStatus = statusPayload(
+        discardedInFrame > 0 ? 'batch_discarded' : 'batch_acknowledged',
+        {
+          batchId,
+          acknowledgedEvents: frame.items.length,
+          acknowledgedEventWatermark,
+          discardedEventsInBatch: discardedInFrame,
+          discardedByFreeze: Boolean(acknowledgement.discardedByFreeze),
+          discardedByClear: Boolean(acknowledgement.discardedByClear),
+          discardedByStaleGeneration: Boolean(
+            acknowledgement.discardedByStaleGeneration,
+          ),
+          persistedEventsInBatch: acknowledgement.persistedEvents ?? frame.items.length,
+          duplicateBatch: Boolean(acknowledgement.duplicateBatch),
+        },
+      )
+      emit(discardedInFrame > 0 ? onError : onStatus, acknowledgementStatus)
     } finally {
       clearTimeout(timeout)
       if (activeController === controller) activeController = null
@@ -444,6 +501,8 @@ export function createBrowserDebugTransport({
       transportClientId: clientId,
       transportId: randomId('event'),
       transportSequence: ++transportSequence,
+      transportRecordedAt: Date.now(),
+      recordingGeneration: activeRecordingGeneration,
       timestamp: event.timestamp || Date.now(),
     }
 
@@ -476,7 +535,9 @@ export function createBrowserDebugTransport({
       throw error
     }
 
-    eventQueue.appendSerialized(serialized, serializedBytes)
+    eventQueue.appendSerialized(serialized, serializedBytes, {
+      recordingGeneration: enrichedEvent.recordingGeneration,
+    })
     scheduleDrain()
     return enrichedEvent.transportId
   }
@@ -508,12 +569,20 @@ export function createBrowserDebugTransport({
       timeoutMs,
     )
     const complete = watermarkAcknowledged && rejectedEventsAtCheckpoint === 0
+      && (
+        firstDiscardedEventWatermark === null
+        || firstDiscardedEventWatermark > targetEventWatermark
+      )
     const status = statusPayload('transport_checkpoint', {
       complete,
       watermarkAcknowledged,
       targetEventWatermark,
       rejectedEventsAtCheckpoint,
-      continuityBrokenAtCheckpoint: rejectedEventsAtCheckpoint > 0,
+      discardedEventsAtCheckpoint: discardedEvents,
+      continuityBrokenAtCheckpoint: rejectedEventsAtCheckpoint > 0 || (
+        firstDiscardedEventWatermark !== null
+        && firstDiscardedEventWatermark <= targetEventWatermark
+      ),
     })
     emit(complete ? onStatus : onError, status)
     return status
@@ -523,7 +592,9 @@ export function createBrowserDebugTransport({
     const deadline = Date.now() + Math.max(timeoutMs, 0)
     while (true) {
       if (!stopped && eventQueue.count() > 0) scheduleDrain()
-      if (eventQueue.count() === 0 && !drainPromise) return rejectedEvents === 0
+      if (eventQueue.count() === 0 && !drainPromise) {
+        return rejectedEvents === 0 && discardedEvents === 0
+      }
       if (stopped || Date.now() >= deadline) return false
       await sleep(25)
     }

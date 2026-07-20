@@ -54,6 +54,7 @@ body::before {
   50% { opacity: 0.4; }
 }
 .status-dot { animation: status-pulse 2s ease-in-out infinite; }
+.status-dot[data-status="frozen"] { animation: none; opacity: 0.9; }
 .status-dot[data-status="error"],
 .status-dot[data-status="stopping"] { animation-duration: 0.8s; }
 
