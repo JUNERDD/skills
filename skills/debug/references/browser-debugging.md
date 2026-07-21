@@ -6,6 +6,7 @@ Use this reference only when evidence originates in browser code, when the failu
 
 - Transport choice
 - Setup
+- Recording generations and Freeze
 - Flow correlation
 - Custom probes
 - Complete fetch capture
@@ -21,11 +22,13 @@ Prefer an authoritative host-provided browser logger when one exists. Otherwise 
 
 Use the bundled transport for high-frequency streams or complete page-lifetime `fetch` coverage. Its batch is a finite network frame, not an evidence-reduction rule or a wait-for-stream-completion mechanism. Recording schedules delivery immediately; it does not wait to fill a batch. The transport provides:
 
-- one serialized in-memory copy of each event until acknowledgement;
+- one serialized in-memory copy of each event until terminal collector acknowledgement;
 - byte-framed batches without an event-count cap;
 - one collector request at a time;
-- timeout and deterministic batch retry;
+- timeout and deterministic retry with one stable `batchId`;
 - deletion only after complete acknowledgement;
+- a `recordingGeneration` stamp captured when each event enters the queue, with frames kept generation-homogeneous;
+- terminal discard handling for frozen or stale-generation events without delayed replay;
 - monotonic enqueue and acknowledgement watermarks for live checkpoints;
 - a captured native `fetch` and collector-URL exclusion to prevent recursion.
 
@@ -46,15 +49,26 @@ const debugTransport = createBrowserDebugTransport({
   batchEndpoint: '<BATCH_ENDPOINT>',
   sessionId: '<SESSION_ID>',
   runId: 'initial',
+  recordingGeneration: 0, // replace with the current authoritative value
   onError(status) {
     console.error('[debug transport]', status)
   },
 })
 ```
 
-Do not log the dashboard token in product code. The ingest endpoints use the session ID; operator APIs remain token-protected and same-origin.
+Read `recordingGeneration` from refreshed authoritative collector state or the active ready payload immediately before installing the transport. Do not log the dashboard token in product code. The ingest endpoints use the session ID; operator APIs remain token-protected and same-origin.
 
 Create one transport per page realm and run, then reuse it for every probe. During hot reload or reinstrumentation, restore wrapped APIs and stop the prior transport before installing a replacement. One transport issues at most one collector request at a time; simultaneous live batch requests therefore require checking for multiple page realms, duplicate transport instances, or stale/retried DevTools rows.
+
+## Recording generations and Freeze
+
+Dashboard `Freeze` controls the collector-wide HTTP-ingest write gate. The dashboard continues polling while frozen, and the mode survives other tabs, dashboard reloads, user replies, analysis turns, and new run IDs because it belongs to the collector session. `Clear` remains available and does not unfreeze recording. Before a reproduction, use `dashboard-status`; when it reports `recording: frozen`, run `resume-recording`, refresh state, and initialize the run's transport from the resulting live `recordingGeneration`. Session `resume` only reuses the collector and never changes this gate.
+
+The transport stamps `recordingGeneration` when `record` or `recordSafe` enqueues an event. It does not rewrite queued events when a later collector acknowledgement announces a newer generation, and it does not combine different generations in one frame. Therefore a frame recorded while frozen or before Resume remains identifiable as stale even if network delay or retry delivers it after Resume.
+
+The collector terminally acknowledges a frozen, stale-generation, or post-Clear retry frame with `discardedEvents` and a discard disposition, stores no corresponding NDJSON lines, and adds nothing to the index. The transport deletes that resolved FIFO prefix so it cannot replay later, retains the same stable `batchId` for any acknowledgement retry, increments discard status, and sets `continuityBroken`. A batch that persisted before Clear but retries after its evidence was truncated receives `discarded_cleared`; it is neither resurrected nor reported as still persisted. Terminal acknowledgement means queue resolution, not persisted evidence: legacy `accepted` / `acceptedEvents` counts include terminally discarded events, so use `persistedEvents` and `discardedEvents` to classify the outcome. If a required event is discarded, the affected run or checkpoint is incomplete.
+
+The collector response updates the transport's active generation for later events. If a transport did not observe a Freeze/Resume transition before enqueueing the first post-transition frame, that stale frame may be deliberately discarded while synchronizing to the current generation; do not count it as evidence. Refresh state and initialize the correct generation before a deliberate run rather than relying on that recovery path.
 
 ## Flow correlation
 
@@ -122,8 +136,9 @@ The transport separates event count from network framing:
 - Bound each serialized event with `maxEventBytes`.
 - Bound each collector request with `frameBytes`.
 - Keep one request active while allowing any number of application requests to enqueue evidence.
-- Retry the same deterministic `batchId` after timeout; collector acknowledgement is idempotent.
+- Retry the same deterministic `batchId` after timeout; never mint a new ID for the same frame. Collector acknowledgement is idempotent and preserves the frame's original persisted or discarded outcome across Clear and Resume.
 - Advance the acknowledged watermark only after the collector confirms the complete FIFO prefix; never delete an unacknowledged event.
+- Treat `discardedEvents` as a terminally resolved but unpersisted prefix and set `continuityBroken`; acknowledgement alone is not proof that NDJSON contains the frame.
 - Keep `keepalive: false` for the steady stream.
 
 Inspect:
@@ -132,9 +147,9 @@ Inspect:
 const status = await debugTransport.getStatus()
 ```
 
-Review `queuedEvents`, `queuedBytes`, `enqueuedEventWatermark`, `acknowledgedEventWatermark`, `inFlightRequests`, `failedRequests`, `rejectedEvents`, `continuityBroken`, `deliveryScope`, `durableQueue`, and `reloadSafe`.
+Review `queuedEvents`, `queuedBytes`, `enqueuedEventWatermark`, `acknowledgedEventWatermark`, `inFlightRequests`, `failedRequests`, `rejectedEvents`, `discardedEvents`, `firstDiscardedEventWatermark`, `recordingFrozen`, `recordingGeneration`, `continuityBroken`, `deliveryScope`, `durableQueue`, and `reloadSafe`.
 
-For a stream that continues producing, freeze and confirm only the prefix that exists at the observation boundary:
+For a stream that continues producing, snapshot and confirm only the prefix that exists at the observation boundary. Do not press dashboard Freeze as a substitute for a transport checkpoint:
 
 ```ts
 const checkpoint = await debugTransport.checkpoint({ timeoutMs: 30_000 })
@@ -143,7 +158,7 @@ if (!checkpoint.complete) {
 }
 ```
 
-`targetEventWatermark` and `rejectedEventsAtCheckpoint` are captured when `checkpoint` starts. Later events may continue to enqueue and do not invalidate that already-bounded prefix. Require `watermarkAcknowledged: true`, `rejectedEventsAtCheckpoint: 0`, `continuityBrokenAtCheckpoint: false`, and no transport-sequence gap through the target. A `/ingest/batch` request may appear as `Pending` while its acknowledgement is outstanding; use these fields and collector state instead of the Network-panel label to decide delivery.
+`targetEventWatermark` and `rejectedEventsAtCheckpoint` are captured when `checkpoint` starts. Later events may continue to enqueue and do not invalidate that already-bounded prefix. Require `watermarkAcknowledged: true`, `rejectedEventsAtCheckpoint: 0`, `discardedEventsAtCheckpoint: 0`, `continuityBrokenAtCheckpoint: false`, and no transport-sequence gap through the target. A `/ingest/batch` request may appear as `Pending` while its acknowledgement is outstanding; use these fields and collector state instead of the Network-panel label to decide delivery.
 
 After event production and instrumentation have stopped, drain the final queue before leaving the page:
 
@@ -152,7 +167,7 @@ restoreFetch()
 const drained = await debugTransport.flush({ timeoutMs: 30_000 })
 ```
 
-Claim final page-lifetime delivery only when `drained` is true, `queuedEvents` is zero, `inFlightRequests` is zero, `rejectedEvents` is zero, and no required source or transport sequence is missing.
+Claim final page-lifetime delivery only when `drained` is true, `queuedEvents` is zero, `inFlightRequests` is zero, `rejectedEvents` is zero, `discardedEvents` is zero, `continuityBroken` is false, and no required source or transport sequence is missing.
 
 Stop the reproduction and report incomplete delivery when backlog grows without draining. Do not block the product path or silently discard required events to protect the collector.
 
@@ -174,6 +189,8 @@ Do not automatically clone, tee, or consume `response.body` merely to observe it
 
 At the observation boundary, record the checkpoint sentinel and call `checkpoint`. The business stream may remain open. Only after the producer stops should `flush` require the entire queue to reach zero.
 
+If collector recording becomes frozen during a required stream, arriving frames are intentionally discarded rather than buffered for Resume. Stop using that interval as complete evidence, record the continuity break, and establish a live future generation before a new run.
+
 ## Lifecycle boundaries
 
 Navigation, reload, page termination, and memory exhaustion are evidence-loss boundaries. When the reproduction crosses one:
@@ -185,6 +202,8 @@ Navigation, reload, page termination, and memory exhaustion are evidence-loss bo
 5. Correlate both sides with an existing durable flow, operation, or request identifier.
 
 Do not claim that `sendBeacon`, `keepalive`, or the page-local queue provides authoritative cross-navigation continuity. A small teardown sentinel may use them only as supplemental evidence.
+
+Collector recording mode itself is not page-local: a new or reloaded page must read the collector's current `recordingGeneration` before installing a transport. Reloading a page does not unfreeze the collector, and a fresh page queue does not make an older generation current.
 
 ## Observer cost and security
 
@@ -205,7 +224,9 @@ Before the failing run, require:
 - [ ] Collector URLs cannot recurse through the wrapper.
 - [ ] Serialization failures and oversized events are surfaced through `recordSafe` status.
 - [ ] Expected peak event and byte volume can drain without unbounded backlog.
-- [ ] Every required source event has a monotonic source sequence, and the transport checkpoint proves an acknowledged gap-free prefix with zero rejected required events.
+- [ ] Authoritative collector state is `recording: live`, and the transport was initialized with its current `recordingGeneration`.
+- [ ] Every retry preserves the frame's stable `batchId`; no discarded frame can be renamed and replayed after Resume.
+- [ ] Every required source event has a monotonic source sequence, and the transport checkpoint proves an acknowledged gap-free prefix with zero rejected or discarded required events and `continuityBroken: false`.
 - [ ] Sensitive request fields are excluded.
 - [ ] Flow start, pre-boundary when applicable, and the configured terminal or observation-checkpoint sentinel are planned.
 - [ ] Instrumented client code passes the narrowest relevant syntax, type, or build check.

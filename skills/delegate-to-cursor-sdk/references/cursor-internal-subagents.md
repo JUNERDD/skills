@@ -8,6 +8,7 @@ Include this block in every Cursor packet:
 
 ```markdown
 ## Cursor Internal Subagent Policy
+
 - Allowed: <disabled | read-only-analysis | verification | bounded-implementation>
 - Default requested model: Grok 4.5 High
 - Model verification: requested label only; exact High parameters are unverified, so use `disabled` when exact pinning is required
@@ -17,7 +18,7 @@ Include this block in every Cursor packet:
   - <repo survey | test triage | independent review | scoped implementation | none>
 - Write policy: <forbidden | parent-only | owned-files-only>
 - Background mode: <forbidden | allowed with joined completion report>
-- Required evidence: description, model requested, scope, files read or touched, result, risks
+- Required evidence: description, model requested, model observed if supplied otherwise unverified, scope, files read or touched, result, risks
 ```
 
 `@cursor/sdk` 1.0.23 exposes the internal task/Agent-tool model field as a string. It does not expose the top-level structured `{ id, params }` selection for these child calls. Therefore the requested label is useful routing intent, but it is not proof that High reasoning was honored. Never report that internal selection as verified without independent structured SDK evidence.
@@ -51,6 +52,7 @@ Cursor's completion report must include:
 
 ```markdown
 ## Internal Subagents
+
 - <description>: <model requested>, <model observed if the SDK supplies one, otherwise unverified>, <mode>, <scope>, <result>, <files read/touched>, <risk or none>
 ```
 

@@ -4,23 +4,31 @@ import {
   cx,
   formatClock,
   formatDateTime,
+  getLogEntrySummary,
   METRICS,
   STATUS_BG,
   STATUS_COLOR,
+  STATUS_DOT_COLOR,
   STATUS_LABEL,
+  getFreezeControl,
 } from './dashboard-utils.js'
 
 /* ────────────────────────────────────────────
    Toolbar (top bar — always visible)
    ──────────────────────────────────────────── */
-export function Toolbar({ service, summary, status, error, actionStatus, onClear, onShutdown }) {
-  const dotColor = {
-    loading: 'bg-ghost',
-    running: 'bg-accent',
-    stopping: 'bg-warn',
-    stopped: 'bg-ghost',
-    error: 'bg-danger',
-  }[status]
+export function Toolbar({
+  service,
+  summary,
+  status,
+  frozen,
+  actionBusy,
+  error,
+  actionStatus,
+  onToggleFreeze,
+  onClear,
+  onShutdown,
+}) {
+  const freezeControl = getFreezeControl(status, frozen, actionBusy)
 
   return html`
     <header className="flex items-center gap-2 border-b border-border bg-surface-1 px-2 py-1.5 sm:gap-3 sm:px-3 sm:py-2 xl:px-4 shrink-0">
@@ -35,8 +43,12 @@ export function Toolbar({ service, summary, status, error, actionStatus, onClear
       </div>
 
       <!-- Status badge -->
-      <div className=${cx('flex items-center gap-1 sm:gap-1.5 rounded border px-1.5 sm:px-2 py-0.5 text-2xs font-mono font-semibold tracking-wider shrink-0', STATUS_BG[status])}>
-        <span className=${cx('status-dot h-1.5 w-1.5 rounded-full', dotColor)} data-status=${status}></span>
+      <div
+        className=${cx('flex items-center gap-1 sm:gap-1.5 rounded border px-1.5 sm:px-2 py-0.5 text-2xs font-mono font-semibold tracking-wider shrink-0', STATUS_BG[status])}
+        role="status"
+        aria-live="polite"
+      >
+        <span className=${cx('status-dot h-1.5 w-1.5 rounded-full', STATUS_DOT_COLOR[status])} data-status=${status}></span>
         <span className=${STATUS_COLOR[status]}>${STATUS_LABEL[status]}</span>
       </div>
 
@@ -69,14 +81,27 @@ export function Toolbar({ service, summary, status, error, actionStatus, onClear
       <!-- Buttons -->
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <button
+          className=${cx(
+            'rounded border px-2 sm:px-2.5 py-1 text-2xs font-mono font-semibold transition-colors disabled:opacity-40',
+            frozen
+              ? 'border-warn/40 bg-warn/10 text-warn hover:bg-warn/20'
+              : 'border-border bg-surface-2 text-pale hover:bg-surface-3 hover:text-bright',
+          )}
+          onClick=${onToggleFreeze}
+          disabled=${freezeControl.disabled}
+          aria-pressed=${freezeControl.pressed}
+          aria-label=${freezeControl.title}
+          title=${freezeControl.title}
+        >${freezeControl.label}</button>
+        <button
           className="rounded border border-border bg-surface-2 px-2 sm:px-2.5 py-1 text-2xs font-mono font-semibold text-pale hover:bg-surface-3 hover:text-bright transition-colors disabled:opacity-40"
           onClick=${onClear}
-          disabled=${status === 'stopping'}
+          disabled=${actionBusy || status === 'stopping' || status === 'stopped'}
         >Clear</button>
         <button
           className="rounded border border-danger/30 bg-danger/10 px-2 sm:px-2.5 py-1 text-2xs font-mono font-semibold text-danger hover:bg-danger/20 transition-colors disabled:opacity-40"
           onClick=${onShutdown}
-          disabled=${status === 'stopping' || status === 'stopped'}
+          disabled=${actionBusy || status === 'stopping' || status === 'stopped'}
         >Stop</button>
       </div>
     </header>
@@ -240,9 +265,9 @@ function LogRow({ row, entry, totalEntries, selectedEntryId, onSelect }) {
           ` : null}
         </div>
 
-        <!-- Message -->
+        <!-- Human message or structured-event summary -->
         <span className="text-[11px] sm:text-xs text-pale truncate min-w-0 flex-1 leading-tight">
-          ${entry.message || 'No message'}
+          ${getLogEntrySummary(entry)}
         </span>
 
         <!-- Mobile: location -->

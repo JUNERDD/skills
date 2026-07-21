@@ -18,7 +18,19 @@ import {
 import { METRICS } from './dashboard-utils.js'
 
 function App() {
-  const { service, summary, error, status, logsVersion, actionStatus, clearLogs, shutdown } = useCollectorState()
+  const {
+    service,
+    summary,
+    error,
+    status,
+    logsVersion,
+    actionStatus,
+    actionBusy,
+    clearLogs,
+    setRecordingFrozen,
+    shutdown,
+  } = useCollectorState()
+  const frozen = status === 'frozen'
   const totalEntries = summary?.totalEntries ?? 0
   const [selectedEntryId, setSelectedEntryId] = useState(null)
   const [mobileTab, setMobileTab] = useState('logs')
@@ -58,7 +70,11 @@ function App() {
     actionStatus: openActionStatus,
     openLocation,
     isLoading: locationsLoading,
-  } = useLocationState(service?.locationsUrl, service?.openLocationUrl, service?.dashboardToken)
+  } = useLocationState(
+    service?.locationsUrl,
+    service?.openLocationUrl,
+    service?.dashboardToken,
+  )
   const runCounts = summary?.runCounts ?? []
   const hypothesisCounts = summary?.hypothesisCounts ?? []
   const metrics = useMemo(
@@ -74,6 +90,10 @@ function App() {
       setHasDetailUpdate(false)
     }
   }, [])
+
+  const handleToggleFreeze = useCallback(() => {
+    void setRecordingFrozen(!frozen)
+  }, [frozen, setRecordingFrozen])
 
   useEffect(() => {
     if (isMobileRef.current && mobileTab === 'logs' && selectedEntryId != null) {
@@ -116,8 +136,11 @@ function App() {
         service=${service}
         summary=${summary}
         status=${status}
+        frozen=${frozen}
+        actionBusy=${actionBusy}
         error=${error}
         actionStatus=${actionStatus}
+        onToggleFreeze=${handleToggleFreeze}
         onClear=${clearLogs}
         onShutdown=${shutdown}
       />

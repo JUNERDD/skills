@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,8 @@ DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_DASHBOARD_FRONTEND_CONFIRM_SECONDS = 3.0
 DASHBOARD_FALLBACK_ATTEMPTS = 2
 DASHBOARD_RECOVERY_HTTP_TIMEOUT_SECONDS = 5.0
+PROCESS_START_CLOCK_SKEW_MS = 2_000
+PROCESS_STARTUP_MAX_MS = 60_000
 
 if str(COLLECTOR_DIR) not in sys.path:
     sys.path.insert(0, str(COLLECTOR_DIR))
@@ -33,6 +36,20 @@ from collector_browser import open_dashboard_in_browser  # noqa: E402
 
 class SessionError(RuntimeError):
     """Raised for safe, user-actionable session lifecycle failures."""
+
+
+@dataclass(frozen=True)
+class _ProcessIdentity:
+    pid: int
+    started_at_ms: int | None
+    command_line: str = ""
+
+
+@dataclass(frozen=True)
+class _CollectorProcessReference:
+    pid: int
+    started_at_ms: int | None
+    command_line: str
 
 
 def _json_dump(payload: Any, *, stream: Any = sys.stdout) -> None:
@@ -126,6 +143,89 @@ def _try_health(payload: dict[str, Any], timeout: float = 0.5) -> bool:
     return True
 
 
+def _matching_live_health(
+    ready_payload: dict[str, Any],
+    *,
+    timeout: float,
+) -> dict[str, Any]:
+    health_url = str(ready_payload.get("healthUrl") or "")
+    if not health_url:
+        raise SessionError("ready file does not contain healthUrl")
+
+    health = _http_json(health_url, timeout=timeout)
+    if health.get("ok") is not True or health.get("status") != "running":
+        raise SessionError("collector health is not running")
+
+    for key in ("sessionId", "pid", "startedAt", "dashboardToken"):
+        ready_value = ready_payload.get(key)
+        health_value = health.get(key)
+        if ready_value is None or health_value is None:
+            raise SessionError(f"collector identity is missing {key}")
+        if ready_value != health_value:
+            raise SessionError(f"collector identity mismatch for {key}")
+
+    for key in ("workspaceRoot", "logFile"):
+        ready_value = ready_payload.get(key)
+        health_value = health.get(key)
+        if not isinstance(ready_value, str) or not ready_value:
+            raise SessionError(f"ready file does not contain {key}")
+        if not isinstance(health_value, str) or not health_value:
+            raise SessionError(f"collector health does not contain {key}")
+        ready_path = Path(ready_value).expanduser().resolve()
+        health_path = Path(health_value).expanduser().resolve()
+        if ready_path != health_path:
+            raise SessionError(f"collector identity mismatch for {key}")
+
+    return health
+
+
+def _reused_session_payload(
+    ready_path: Path,
+    ready_payload: dict[str, Any],
+    *,
+    timeout: float,
+) -> dict[str, Any]:
+    recorded_ready_file = ready_payload.get("readyFile")
+    if not isinstance(recorded_ready_file, str) or not recorded_ready_file:
+        raise SessionError("ready file payload does not contain readyFile")
+    if Path(recorded_ready_file).expanduser().resolve() != ready_path.resolve():
+        raise SessionError("ready file payload does not match the requested ready file")
+
+    health = _matching_live_health(ready_payload, timeout=timeout)
+    result = {**ready_payload, **health}
+    result["readyFile"] = str(ready_path)
+    frontend_confirmed = result.get("dashboardFrontendOpenRecorded") is True
+    dashboard_url = str(result.get("dashboardUrl") or "")
+    if frontend_confirmed:
+        dashboard_status = "frontend_confirmed"
+        dashboard_error = ""
+    elif result.get("dashboardAutoOpenEnabled") is False:
+        dashboard_status = "disabled"
+        dashboard_error = str(
+            result.get("dashboardFrontendOpenLastError")
+            or result.get("dashboardOpenError")
+            or ""
+        )
+    else:
+        dashboard_status = "frontend_not_confirmed"
+        dashboard_error = str(
+            result.get("dashboardFrontendOpenLastError")
+            or result.get("dashboardOpenError")
+            or ""
+        )
+    result["dashboardRecovery"] = {
+        "status": dashboard_status,
+        "dashboardUrl": dashboard_url,
+        "frontendConfirmed": frontend_confirmed,
+        "fallbackAttemptCount": 0,
+        "fallbackAttempts": [],
+        "error": " ".join(dashboard_error.split()),
+    }
+    result["lifecycleMode"] = "local-cli"
+    result["sessionAction"] = "reused"
+    return result
+
+
 def _wait_for_dashboard_startup(
     ready_file: Path,
     *,
@@ -212,8 +312,8 @@ def command_start(args: argparse.Namespace) -> dict[str, Any]:
             existing = {}
         if existing and _try_health(existing):
             raise SessionError(
-                f"a healthy session already uses this ready file: {ready_file}; "
-                "reuse it or stop it first"
+                f"a reachable collector already uses this ready file: {ready_file}; "
+                f"run resume --ready-file {ready_file}"
             )
 
     existing_paths = [path for path in candidate_paths if path.exists()]
@@ -303,6 +403,7 @@ def command_start(args: argparse.Namespace) -> dict[str, Any]:
                 }
             payload["readyFile"] = str(ready_file)
             payload["lifecycleMode"] = "local-cli"
+            payload["sessionAction"] = "started"
             return payload
         if process.poll() is not None:
             detail = _tail_text(service_log_file)
@@ -327,6 +428,11 @@ def _session_url(payload: dict[str, Any], key: str) -> str:
     return url
 
 
+def command_resume(args: argparse.Namespace) -> dict[str, Any]:
+    ready_path, payload = _read_ready_file(args.ready_file)
+    return _reused_session_payload(ready_path, payload, timeout=args.timeout)
+
+
 def command_health(args: argparse.Namespace) -> dict[str, Any]:
     ready_path, payload = _read_ready_file(args.ready_file)
     result = _http_json(_session_url(payload, "healthUrl"), timeout=args.timeout)
@@ -348,16 +454,17 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
 
     ready_path, ready_payload = _read_ready_file(args.ready_file)
     service = ready_payload
+    refreshed_state: dict[str, Any] | None = None
     refresh_error = ""
     try:
-        state = _http_json(
+        refreshed_state = _http_json(
             _session_url(ready_payload, "stateUrl"),
             timeout=args.timeout,
         )
     except SessionError as exc:
         refresh_error = _single_line(exc)
     else:
-        current_service = state.get("service") if isinstance(state, dict) else None
+        current_service = refreshed_state.get("service")
         if isinstance(current_service, dict):
             service = current_service
 
@@ -389,9 +496,35 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
     frontend_text = (
         "unknown" if frontend_confirmed is None else str(frontend_confirmed).lower()
     )
+
+    recording_frozen: bool | None = None
+    recording_generation: int | None = None
+    service_recording_frozen = service.get("recordingFrozen")
+    if isinstance(service_recording_frozen, bool):
+        recording_frozen = service_recording_frozen
+    elif refreshed_state is not None:
+        state_status = refreshed_state.get("status")
+        if state_status == "frozen":
+            recording_frozen = True
+        elif state_status == "running":
+            recording_frozen = False
+    service_recording_generation = service.get("recordingGeneration")
+    if (
+        isinstance(service_recording_generation, int)
+        and not isinstance(service_recording_generation, bool)
+        and service_recording_generation >= 0
+    ):
+        recording_generation = service_recording_generation
+    recording_status = (
+        "unknown"
+        if recording_frozen is None
+        else "frozen"
+        if recording_frozen
+        else "live"
+    )
     line = (
         f"Dashboard: {status} — {dashboard_url or 'unavailable'} "
-        f"(frontend confirmed: {frontend_text})"
+        f"(frontend confirmed: {frontend_text}; recording: {recording_status})"
     )
     if error:
         line += f" — error: {error}"
@@ -402,6 +535,9 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
         "status": status,
         "dashboardUrl": dashboard_url,
         "frontendConfirmed": frontend_confirmed,
+        "recordingFrozen": recording_frozen,
+        "recordingStatus": recording_status,
+        "recordingGeneration": recording_generation,
         "error": error,
         "stateRefreshError": refresh_error,
         "line": line,
@@ -427,6 +563,51 @@ def command_clear(args: argparse.Namespace) -> dict[str, Any]:
         timeout=args.timeout,
     )
     return {"ok": True, "readyFile": str(ready_path), "state": result}
+
+
+def _command_set_recording_frozen(
+    args: argparse.Namespace,
+    *,
+    frozen: bool,
+) -> dict[str, Any]:
+    ready_path, payload = _read_ready_file(args.ready_file)
+    url_key = "freezeRecordingUrl" if frozen else "resumeRecordingUrl"
+    result = _http_json(
+        _session_url(payload, url_key),
+        method="POST",
+        token=str(payload.get("dashboardToken") or ""),
+        timeout=args.timeout,
+    )
+    service = result.get("service") if isinstance(result, dict) else None
+    recording_frozen = (
+        service.get("recordingFrozen") if isinstance(service, dict) else None
+    )
+    recording_generation = (
+        service.get("recordingGeneration") if isinstance(service, dict) else None
+    )
+    recording_status = (
+        "frozen"
+        if recording_frozen is True
+        else "live"
+        if recording_frozen is False
+        else "unknown"
+    )
+    return {
+        "ok": True,
+        "readyFile": str(ready_path),
+        "recordingFrozen": recording_frozen,
+        "recordingStatus": recording_status,
+        "recordingGeneration": recording_generation,
+        "state": result,
+    }
+
+
+def command_freeze_recording(args: argparse.Namespace) -> dict[str, Any]:
+    return _command_set_recording_frozen(args, frozen=True)
+
+
+def command_resume_recording(args: argparse.Namespace) -> dict[str, Any]:
+    return _command_set_recording_frozen(args, frozen=False)
 
 
 def _dashboard_frontend_recorded(state: dict[str, Any]) -> bool:
@@ -727,18 +908,205 @@ def command_sync_locations(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _wait_until_stopped(payload: dict[str, Any], *, wait_seconds: float) -> bool:
-    health_url = str(payload.get("healthUrl") or "")
-    if not health_url:
+def _pid_exists_posix(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
         return True
-    deadline = time.monotonic() + wait_seconds
-    while time.monotonic() < deadline:
-        try:
-            _http_json(health_url, timeout=0.25)
-        except SessionError:
+    except OSError:
+        # An unexpected inspection error must not authorize artifact deletion.
+        return True
+    return True
+
+
+def _read_windows_process_identity(pid: int) -> _ProcessIdentity | None:
+    """Read a Windows process birth time without sending it a signal."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+        ctypes.POINTER(wintypes.FILETIME),
+    ]
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        # ERROR_INVALID_PARAMETER means the PID does not exist. Access-denied and
+        # other failures remain conservatively "present but unidentified".
+        if ctypes.get_last_error() == 87:
+            return None
+        return _ProcessIdentity(pid=pid, started_at_ms=None)
+
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return _ProcessIdentity(pid=pid, started_at_ms=None)
+        if exit_code.value != still_active:
+            return None
+
+        creation = wintypes.FILETIME()
+        exit_time = wintypes.FILETIME()
+        kernel_time = wintypes.FILETIME()
+        user_time = wintypes.FILETIME()
+        if not kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            return _ProcessIdentity(pid=pid, started_at_ms=None)
+        filetime = (creation.dwHighDateTime << 32) | creation.dwLowDateTime
+        started_at_ms = int(filetime / 10_000 - 11_644_473_600_000)
+        return _ProcessIdentity(pid=pid, started_at_ms=started_at_ms)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _read_process_identity(pid: int) -> _ProcessIdentity | None:
+    if os.name == "nt":
+        return _read_windows_process_identity(pid)
+
+    command = [
+        "ps",
+        "-ww",
+        "-p",
+        str(pid),
+        "-o",
+        "lstart=",
+        "-o",
+        "stat=",
+        "-o",
+        "command=",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+            check=False,
+            env={**os.environ, "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        if not _pid_exists_posix(pid):
+            return None
+        return _ProcessIdentity(pid=pid, started_at_ms=None)
+
+    line = result.stdout.strip()
+    if result.returncode != 0 or not line:
+        if not _pid_exists_posix(pid):
+            return None
+        return _ProcessIdentity(pid=pid, started_at_ms=None)
+
+    fields = line.split(None, 6)
+    if len(fields) < 6:
+        return _ProcessIdentity(pid=pid, started_at_ms=None)
+    process_state = fields[5]
+    if process_state.startswith("Z"):
+        return None
+
+    started_at_ms: int | None = None
+    try:
+        started_at_ms = int(
+            time.mktime(time.strptime(" ".join(fields[:5]), "%a %b %d %H:%M:%S %Y"))
+            * 1000
+        )
+    except (OverflowError, ValueError):
+        pass
+    command_line = fields[6] if len(fields) > 6 else ""
+    return _ProcessIdentity(
+        pid=pid,
+        started_at_ms=started_at_ms,
+        command_line=command_line,
+    )
+
+
+def _capture_collector_process_reference(
+    payload: dict[str, Any],
+    ready_path: Path,
+) -> _CollectorProcessReference | None:
+    pid = payload.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise SessionError("ready file does not contain a valid collector pid")
+    ready_started_at = payload.get("startedAt")
+    if (
+        not isinstance(ready_started_at, int)
+        or isinstance(ready_started_at, bool)
+        or ready_started_at <= 0
+    ):
+        raise SessionError("ready file does not contain a valid collector startedAt")
+
+    identity = _read_process_identity(pid)
+    if identity is None:
+        return None
+
+    if identity.started_at_ms is not None:
+        startup_ms = ready_started_at - identity.started_at_ms
+        if startup_ms < -PROCESS_START_CLOCK_SKEW_MS or startup_ms > PROCESS_STARTUP_MAX_MS:
+            # The ready PID has already been reused by a differently born process.
+            return None
+
+    if identity.command_line:
+        expected_markers = (str(COLLECTOR_MAIN.resolve()), str(ready_path.resolve()))
+        if any(marker not in identity.command_line for marker in expected_markers):
+            # A live but unrelated process now owns the recorded PID.
+            return None
+
+    return _CollectorProcessReference(
+        pid=pid,
+        started_at_ms=identity.started_at_ms,
+        command_line=identity.command_line,
+    )
+
+
+def _same_process_is_running(reference: _CollectorProcessReference) -> bool:
+    current = _read_process_identity(reference.pid)
+    if current is None:
+        return False
+    if reference.started_at_ms is not None and current.started_at_ms is not None:
+        if reference.started_at_ms != current.started_at_ms:
+            return False
+    if reference.command_line and current.command_line:
+        if reference.command_line != current.command_line:
+            return False
+    # Missing current identity fields are inconclusive: the PID is still present,
+    # so fail closed and keep waiting instead of deleting collector artifacts.
+    return True
+
+
+def _wait_until_stopped(
+    reference: _CollectorProcessReference,
+    *,
+    wait_seconds: float,
+) -> bool:
+    deadline = time.monotonic() + max(wait_seconds, 0.0)
+    while True:
+        if not _same_process_is_running(reference):
             return True
-        time.sleep(0.1)
-    return False
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.1, remaining))
 
 
 def _safe_artifact_paths(payload: dict[str, Any], workspace_root: Path) -> list[Path]:
@@ -777,9 +1145,11 @@ def command_stop(args: argparse.Namespace) -> dict[str, Any]:
         raise SessionError("ready file does not contain workspaceRoot")
     workspace_root = _resolved_directory(workspace_value, label="workspaceRoot")
 
+    process_reference = _capture_collector_process_reference(payload, ready_path)
+
     shutdown_url = str(payload.get("shutdownUrl") or "")
     shutdown_result: dict[str, Any] | None = None
-    if shutdown_url:
+    if shutdown_url and process_reference is not None:
         try:
             shutdown_result = _http_json(
                 shutdown_url,
@@ -792,8 +1162,13 @@ def command_stop(args: argparse.Namespace) -> dict[str, Any]:
             if _try_health(payload):
                 raise
 
-    if not _wait_until_stopped(payload, wait_seconds=args.wait_seconds):
-        raise SessionError("collector is still reachable after shutdown; artifacts were not deleted")
+    if process_reference is not None and not _wait_until_stopped(
+        process_reference,
+        wait_seconds=args.wait_seconds,
+    ):
+        raise SessionError(
+            "collector process is still running after shutdown; artifacts were not deleted"
+        )
 
     artifacts = _safe_artifact_paths(payload, workspace_root)
     if args.keep_artifacts:
@@ -905,6 +1280,13 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--wait-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     start.set_defaults(handler=command_start)
 
+    resume = subparsers.add_parser(
+        "resume",
+        help="Reuse one exact healthy collector without starting a process or opening a dashboard.",
+    )
+    _add_ready_and_timeout(resume)
+    resume.set_defaults(handler=command_resume)
+
     health = subparsers.add_parser("health", help="Check collector health.")
     _add_ready_and_timeout(health)
     health.set_defaults(handler=command_health)
@@ -930,6 +1312,20 @@ def build_parser() -> argparse.ArgumentParser:
     clear = subparsers.add_parser("clear", help="Clear the active session log.")
     _add_ready_and_timeout(clear)
     clear.set_defaults(handler=command_clear)
+
+    freeze_recording = subparsers.add_parser(
+        "freeze-recording",
+        help="Discard new debug events at the collector while keeping Clear available.",
+    )
+    _add_ready_and_timeout(freeze_recording)
+    freeze_recording.set_defaults(handler=command_freeze_recording)
+
+    resume_recording = subparsers.add_parser(
+        "resume-recording",
+        help="Resume collector writes for future debug events.",
+    )
+    _add_ready_and_timeout(resume_recording)
+    resume_recording.set_defaults(handler=command_resume_recording)
 
     open_dashboard = subparsers.add_parser(
         "open-dashboard",

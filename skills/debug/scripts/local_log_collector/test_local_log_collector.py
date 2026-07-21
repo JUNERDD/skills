@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import http.client
 import json
 from pathlib import Path
 import subprocess
@@ -392,6 +393,545 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             body = exc.read()
             return exc.code, json.loads(body.decode('utf-8') or '{}')
 
+    def _request_json_on_connection(
+        self,
+        connection: http.client.HTTPConnection,
+        method: str,
+        path: str,
+        *,
+        payload: object | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[http.client.HTTPResponse, dict[str, object]]:
+        request_headers = {'Content-Type': 'application/json'}
+        if headers:
+            request_headers.update(headers)
+        data = json.dumps(payload).encode('utf-8') if payload is not None else None
+        connection.request(method, path, body=data, headers=request_headers)
+        response = connection.getresponse()
+        body = response.read()
+        return response, json.loads(body.decode('utf-8') or '{}')
+
+    def test_clear_body_does_not_corrupt_next_request_on_persistent_connection(self) -> None:
+        connection = http.client.HTTPConnection(
+            '127.0.0.1',
+            self.server.server_port,
+            timeout=5,
+        )
+        try:
+            clear_response, clear_payload = self._request_json_on_connection(
+                connection,
+                'POST',
+                '/api/clear',
+                payload={},
+                headers={
+                    collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+                },
+            )
+            self.assertEqual(clear_response.status, 200)
+            self.assertEqual(clear_response.version, 11)
+            self.assertFalse(clear_response.will_close)
+            self.assertEqual(clear_payload['summary']['totalEntries'], 0)
+            original_socket = connection.sock
+            self.assertIsNotNone(original_socket)
+
+            state_response, state_payload = self._request_json_on_connection(
+                connection,
+                'GET',
+                '/api/state',
+            )
+
+            self.assertEqual(state_response.status, 200)
+            self.assertTrue(state_payload['ok'])
+            self.assertIs(connection.sock, original_socket)
+        finally:
+            connection.close()
+
+    def test_freeze_body_preserves_persistent_connection(self) -> None:
+        connection = http.client.HTTPConnection(
+            '127.0.0.1',
+            self.server.server_port,
+            timeout=5,
+        )
+        try:
+            freeze_response, freeze_payload = self._request_json_on_connection(
+                connection,
+                'POST',
+                '/api/recording/freeze',
+                payload={},
+                headers={
+                    collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+                },
+            )
+            self.assertEqual(freeze_response.status, 200)
+            self.assertFalse(freeze_response.will_close)
+            self.assertEqual(freeze_payload['status'], 'frozen')
+            original_socket = connection.sock
+            self.assertIsNotNone(original_socket)
+
+            state_response, state_payload = self._request_json_on_connection(
+                connection,
+                'GET',
+                '/api/state',
+            )
+
+            self.assertEqual(state_response.status, 200)
+            self.assertEqual(state_payload['status'], 'frozen')
+            self.assertIs(connection.sock, original_socket)
+        finally:
+            connection.close()
+
+    def test_freeze_discards_events_clear_stays_available_and_resume_accepts_new_events(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        initial_status, initial_payload = self._request_json(
+            'POST',
+            '/ingest',
+            payload={'probeId': 'before-freeze', 'event': 'before_freeze'},
+        )
+        self.assertEqual(initial_status, 202)
+        self.assertEqual(initial_payload['persistedEvents'], 1)
+
+        freeze_status, freeze_payload = self._request_json(
+            'POST',
+            '/api/recording/freeze',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(freeze_status, 200)
+        self.assertEqual(freeze_payload['status'], 'frozen')
+        self.assertTrue(freeze_payload['service']['recordingFrozen'])
+        self.assertTrue(freeze_payload['service']['recordingFrozenAt'])
+
+        single_status, single_payload = self._request_json(
+            'POST',
+            '/ingest',
+            payload={'probeId': 'frozen-single', 'event': 'must_not_persist'},
+        )
+        self.assertEqual(single_status, 202)
+        self.assertEqual(single_payload['accepted'], 1)
+        self.assertEqual(single_payload['persistedEvents'], 0)
+        self.assertEqual(single_payload['discardedEvents'], 1)
+        self.assertTrue(single_payload['discardedByFreeze'])
+
+        frozen_batch = {
+            'batchId': 'freeze-client:1:2',
+            'events': [
+                {'probeId': 'frozen-batch', 'event': 'must_not_persist', 'sequence': 1},
+                {'probeId': 'frozen-batch', 'event': 'must_not_persist', 'sequence': 2},
+            ],
+        }
+        batch_status, batch_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=frozen_batch,
+        )
+        self.assertEqual(batch_status, 202)
+        self.assertEqual(batch_payload['accepted'], 2)
+        self.assertEqual(batch_payload['persistedEvents'], 0)
+        self.assertEqual(batch_payload['discardedEvents'], 2)
+        self.assertTrue(batch_payload['discardedByFreeze'])
+        self.assertFalse(batch_payload['duplicateBatch'])
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        self.assertEqual(state_payload['status'], 'frozen')
+        self.assertEqual(state_payload['summary']['totalEntries'], 1)
+        self.assertEqual(state_payload['service']['ingestFrozenDiscardedRequestCount'], 2)
+        self.assertEqual(state_payload['service']['ingestFrozenDiscardedEventCount'], 3)
+
+        health_status, health_payload = self._request_json('GET', '/health')
+        self.assertEqual(health_status, 200)
+        self.assertEqual(health_payload['status'], 'running')
+        self.assertTrue(health_payload['recordingFrozen'])
+
+        clear_status, clear_payload = self._request_json(
+            'POST',
+            '/api/clear',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(clear_status, 200)
+        self.assertEqual(clear_payload['status'], 'frozen')
+        self.assertTrue(clear_payload['service']['recordingFrozen'])
+        self.assertEqual(clear_payload['summary']['totalEntries'], 0)
+        self.assertEqual(clear_payload['service']['ingestFrozenDiscardedEventCount'], 0)
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        resume_status, resume_payload = self._request_json(
+            'POST',
+            '/api/recording/resume',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(resume_status, 200)
+        self.assertEqual(resume_payload['status'], 'running')
+        self.assertFalse(resume_payload['service']['recordingFrozen'])
+        self.assertTrue(resume_payload['service']['recordingResumedAt'])
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=frozen_batch,
+        )
+        self.assertEqual(retry_status, 202)
+        self.assertTrue(retry_payload['duplicateBatch'])
+        self.assertTrue(retry_payload['discardedByFreeze'])
+        self.assertEqual(retry_payload['persistedEvents'], 0)
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        resumed_status, resumed_payload = self._request_json(
+            'POST',
+            '/ingest',
+            payload={'probeId': 'after-resume', 'event': 'after_resume'},
+        )
+        self.assertEqual(resumed_status, 202)
+        self.assertEqual(resumed_payload['persistedEvents'], 1)
+        self.assertEqual(resumed_payload['discardedEvents'], 0)
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
+
+    def test_recording_controls_require_dashboard_access(self) -> None:
+        for path in ('/api/recording/freeze', '/api/recording/resume'):
+            with self.subTest(path=path):
+                status, payload = self._request_json('POST', path, payload={})
+                self.assertEqual(status, 403)
+                self.assertEqual(payload['error'], 'dashboard_token_required')
+
+    def test_stale_recording_generation_is_discarded_after_resume(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        freeze_status, freeze_payload = self._request_json(
+            'POST',
+            '/api/recording/freeze',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(freeze_status, 200)
+        self.assertEqual(freeze_payload['service']['recordingGeneration'], 1)
+
+        repeated_status, repeated_payload = self._request_json(
+            'POST',
+            '/api/recording/freeze',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(repeated_status, 200)
+        self.assertEqual(repeated_payload['service']['recordingGeneration'], 1)
+
+        resume_status, resume_payload = self._request_json(
+            'POST',
+            '/api/recording/resume',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(resume_status, 200)
+        current_generation = resume_payload['service']['recordingGeneration']
+        self.assertEqual(current_generation, 2)
+
+        stale_batch = {
+            'batchId': 'offline-client:1:1',
+            'events': [
+                {
+                    'probeId': 'offline-during-freeze',
+                    'event': 'must_not_replay',
+                    'recordingGeneration': 0,
+                },
+            ],
+        }
+        stale_status, stale_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=stale_batch,
+        )
+        self.assertEqual(stale_status, 202)
+        self.assertEqual(stale_payload['disposition'], 'discarded_stale_generation')
+        self.assertEqual(stale_payload['discardedEvents'], 1)
+        self.assertFalse(stale_payload['discardedByFreeze'])
+        self.assertTrue(stale_payload['discardedByStaleGeneration'])
+        self.assertEqual(stale_payload['recordingGeneration'], current_generation)
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=stale_batch,
+        )
+        self.assertEqual(retry_status, 202)
+        self.assertTrue(retry_payload['duplicateBatch'])
+        self.assertEqual(retry_payload['disposition'], 'discarded_stale_generation')
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        current_status, current_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={
+                'batchId': 'online-client:2:2',
+                'events': [
+                    {
+                        'probeId': 'online-after-resume',
+                        'event': 'persist_now',
+                        'recordingGeneration': current_generation,
+                    },
+                ],
+            },
+        )
+        self.assertEqual(current_status, 202)
+        self.assertEqual(current_payload['disposition'], 'persisted')
+        self.assertEqual(current_payload['persistedEvents'], 1)
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        self.assertEqual(
+            state_payload['service']['ingestStaleGenerationDiscardedEventCount'],
+            1,
+        )
+
+    def test_concurrent_recording_toggles_keep_ready_file_valid_and_current(self) -> None:
+        ready_file = self.workspace_root / 'collector.ready.json'
+        self.server.ready_file = ready_file
+        self.server.write_ready_file()
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+
+        def toggle_recording(index: int) -> tuple[int, dict[str, object]]:
+            action = 'freeze' if index % 2 == 0 else 'resume'
+            return self._request_json(
+                'POST',
+                f'/api/recording/{action}',
+                payload={},
+                headers=dashboard_headers,
+            )
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(toggle_recording, range(32)))
+
+        self.assertTrue(all(status == 200 for status, _ in results))
+        ready_payload = json.loads(ready_file.read_text(encoding='utf-8'))
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        self.assertEqual(
+            ready_payload['recordingGeneration'],
+            state_payload['service']['recordingGeneration'],
+        )
+        self.assertEqual(
+            ready_payload['recordingFrozen'],
+            state_payload['service']['recordingFrozen'],
+        )
+
+    def test_freeze_linearizes_with_concurrent_batches_without_partial_writes(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        batch_count = 24
+        events_per_batch = 3
+        start_gate = threading.Barrier(batch_count + 1)
+
+        def send_batch(index: int) -> tuple[int, dict[str, object]]:
+            start_gate.wait(timeout=5)
+            return self._request_json(
+                'POST',
+                '/ingest/batch',
+                payload={
+                    'batchId': f'concurrent-freeze:{index}',
+                    'events': [
+                        {
+                            'probeId': f'concurrent.{index}',
+                            'event': 'race_with_freeze',
+                            'sequence': sequence,
+                        }
+                        for sequence in range(events_per_batch)
+                    ],
+                },
+            )
+
+        def freeze() -> tuple[int, dict[str, object]]:
+            start_gate.wait(timeout=5)
+            return self._request_json(
+                'POST',
+                '/api/recording/freeze',
+                payload={},
+                headers=dashboard_headers,
+            )
+
+        with ThreadPoolExecutor(max_workers=batch_count + 1) as pool:
+            batch_futures = [pool.submit(send_batch, index) for index in range(batch_count)]
+            freeze_future = pool.submit(freeze)
+            batch_results = [future.result(timeout=10) for future in batch_futures]
+            freeze_status, freeze_payload = freeze_future.result(timeout=10)
+
+        self.assertEqual(freeze_status, 200)
+        self.assertEqual(freeze_payload['status'], 'frozen')
+        persisted_events = 0
+        for response_status, payload in batch_results:
+            self.assertEqual(response_status, 202)
+            self.assertIn(payload['persistedEvents'], (0, events_per_batch))
+            self.assertIn(payload['discardedEvents'], (0, events_per_batch))
+            self.assertEqual(
+                payload['persistedEvents'] + payload['discardedEvents'],
+                events_per_batch,
+            )
+            persisted_events += payload['persistedEvents']
+
+        persisted_lines = self.log_file.read_text(encoding='utf-8').splitlines()
+        self.assertEqual(len(persisted_lines), persisted_events)
+
+        post_freeze_status, post_freeze_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={
+                'batchId': 'concurrent-freeze:after',
+                'events': [
+                    {'probeId': 'after-freeze', 'event': 'must_not_persist'},
+                ],
+            },
+        )
+        self.assertEqual(post_freeze_status, 202)
+        self.assertEqual(post_freeze_payload['persistedEvents'], 0)
+        self.assertEqual(post_freeze_payload['discardedEvents'], 1)
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            persisted_events,
+        )
+
+    def test_dashboard_opened_body_preserves_persistent_connection(self) -> None:
+        connection = http.client.HTTPConnection(
+            '127.0.0.1',
+            self.server.server_port,
+            timeout=5,
+        )
+        try:
+            opened_response, opened_payload = self._request_json_on_connection(
+                connection,
+                'POST',
+                '/api/dashboard-opened',
+                payload={},
+                headers={
+                    collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+                },
+            )
+            self.assertEqual(opened_response.status, 200)
+            self.assertTrue(opened_payload['ok'])
+            original_socket = connection.sock
+            self.assertIsNotNone(original_socket)
+
+            state_response, state_payload = self._request_json_on_connection(
+                connection,
+                'GET',
+                '/api/state',
+            )
+
+            self.assertEqual(state_response.status, 200)
+            self.assertTrue(state_payload['ok'])
+            self.assertIs(connection.sock, original_socket)
+        finally:
+            connection.close()
+
+    def test_rejected_sensitive_post_closes_connection_with_unread_body(self) -> None:
+        cases = [
+            ('missing token', {}),
+            (
+                'untrusted origin',
+                {
+                    collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+                    'Origin': 'https://evil.example',
+                },
+            ),
+        ]
+
+        for label, headers in cases:
+            with self.subTest(label=label):
+                connection = http.client.HTTPConnection(
+                    '127.0.0.1',
+                    self.server.server_port,
+                    timeout=5,
+                )
+                try:
+                    connection.connect()
+                    original_socket = connection.sock
+                    rejected_response, rejected_payload = self._request_json_on_connection(
+                        connection,
+                        'POST',
+                        '/api/config',
+                        payload={'selectedIde': 'zed'},
+                        headers=headers,
+                    )
+                    self.assertEqual(rejected_response.status, 403)
+                    self.assertEqual(rejected_response.getheader('Connection'), 'close')
+                    self.assertTrue(rejected_response.will_close)
+                    self.assertIn(
+                        rejected_payload['error'],
+                        {'dashboard_token_required', 'dashboard_origin_forbidden'},
+                    )
+
+                    state_response, state_payload = self._request_json_on_connection(
+                        connection,
+                        'GET',
+                        '/api/state',
+                    )
+
+                    self.assertEqual(state_response.status, 200)
+                    self.assertTrue(state_payload['ok'])
+                    self.assertIsNot(connection.sock, original_socket)
+                finally:
+                    connection.close()
+
+    def test_non_ascii_content_length_is_rejected_and_closes_connection(self) -> None:
+        connection = http.client.HTTPConnection(
+            '127.0.0.1',
+            self.server.server_port,
+            timeout=5,
+        )
+        try:
+            connection.putrequest('POST', '/api/clear')
+            connection.putheader('Content-Type', 'application/json')
+            connection.putheader(
+                collector_server.DASHBOARD_TOKEN_HEADER,
+                self.server.dashboard_token,
+            )
+            connection.putheader('Content-Length', '²')
+            connection.endheaders()
+
+            response = connection.getresponse()
+            payload = json.loads(response.read().decode('utf-8'))
+
+            self.assertEqual(response.status, 400)
+            self.assertEqual(response.getheader('Connection'), 'close')
+            self.assertTrue(response.will_close)
+            self.assertEqual(payload['error'], 'invalid_request_body')
+        finally:
+            connection.close()
+
+    def test_any_transfer_encoding_is_rejected_and_closes_connection(self) -> None:
+        connection = http.client.HTTPConnection(
+            '127.0.0.1',
+            self.server.server_port,
+            timeout=5,
+        )
+        try:
+            connection.putrequest('POST', '/api/clear')
+            connection.putheader('Content-Type', 'application/json')
+            connection.putheader(
+                collector_server.DASHBOARD_TOKEN_HEADER,
+                self.server.dashboard_token,
+            )
+            connection.putheader('Transfer-Encoding', '')
+            connection.putheader('Transfer-Encoding', 'chunked')
+            connection.endheaders()
+
+            response = connection.getresponse()
+            payload = json.loads(response.read().decode('utf-8'))
+
+            self.assertEqual(response.status, 400)
+            self.assertEqual(response.getheader('Connection'), 'close')
+            self.assertTrue(response.will_close)
+            self.assertEqual(payload['error'], 'invalid_request_body')
+        finally:
+            connection.close()
+
     def test_batch_ingest_appends_structured_events(self) -> None:
         events = [
             {
@@ -434,6 +974,36 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             {'H2': 2, 'H1': 1},
         )
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
+
+    def test_message_less_event_remains_valid_for_dashboard_summary_fallback(self) -> None:
+        event = {
+            'runId': 'post-repair',
+            'probeId': 'flow.terminal',
+            'location': 'src/app.ts:12',
+            'event': 'flow_terminal',
+            'timestamp': 1_783_933_652_000,
+        }
+
+        status, payload = self._request_json('POST', '/ingest', payload=event)
+        self.assertEqual(status, 202)
+        self.assertTrue(payload['ok'])
+
+        logs_status, logs_payload = self._request_json('GET', '/api/logs')
+        self.assertEqual(logs_status, 200)
+        entry = logs_payload['entries'][0]
+        self.assertEqual(entry['message'], '')
+        self.assertEqual(entry['event'], 'flow_terminal')
+        self.assertEqual(entry['probeId'], 'flow.terminal')
+
+        detail_status, detail_payload = self._request_json(
+            'GET',
+            f"/api/logs/detail?entryIndex={entry['entryIndex']}",
+        )
+        self.assertEqual(detail_status, 200)
+        raw_payload = detail_payload['entry']['payload']
+        self.assertNotIn('message', raw_payload)
+        self.assertEqual(raw_payload['event'], event['event'])
+        self.assertEqual(raw_payload['probeId'], event['probeId'])
 
     def test_batch_ingest_has_no_event_count_cap(self) -> None:
         events = [
@@ -493,6 +1063,45 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(second_payload['persistedEvents'], 0)
         self.assertTrue(second_payload['duplicateBatch'])
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
+
+    def test_clear_marks_preclear_persisted_batch_as_terminally_discarded(self) -> None:
+        events = [
+            {'probeId': 'before.clear', 'event': 'persist_then_clear'},
+            {'probeId': 'before.clear', 'event': 'persist_then_clear'},
+        ]
+        body = {'batchId': 'client-clear:1:2', 'events': events}
+        first_status, first_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=body,
+        )
+        self.assertEqual(first_status, 202)
+        self.assertEqual(first_payload['persistedEvents'], len(events))
+
+        clear_status, clear_payload = self._request_json(
+            'POST',
+            '/api/clear',
+            payload={},
+            headers={
+                collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+            },
+        )
+        self.assertEqual(clear_status, 200)
+        self.assertEqual(clear_payload['summary']['totalEntries'], 0)
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=body,
+        )
+        self.assertEqual(retry_status, 202)
+        self.assertTrue(retry_payload['duplicateBatch'])
+        self.assertEqual(retry_payload['disposition'], 'discarded_cleared')
+        self.assertEqual(retry_payload['persistedEvents'], 0)
+        self.assertEqual(retry_payload['discardedEvents'], len(events))
+        self.assertTrue(retry_payload['discardedByClear'])
+        self.assertFalse(retry_payload['discardedByFreeze'])
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
     def test_ingest_ack_is_not_blocked_by_dashboard_index_lock(self) -> None:
         self.server.write_lock.acquire()

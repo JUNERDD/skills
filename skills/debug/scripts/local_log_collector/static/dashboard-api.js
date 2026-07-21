@@ -8,6 +8,8 @@ export const API_ROUTES = {
   dashboardOpened: '/api/dashboard-opened',
   openLocation: '/api/open-location',
   clear: '/api/clear',
+  freezeRecording: '/api/recording/freeze',
+  resumeRecording: '/api/recording/resume',
   shutdown: '/api/shutdown',
 }
 

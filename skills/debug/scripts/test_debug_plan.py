@@ -36,7 +36,7 @@ def valid_plan() -> dict:
         ],
         "run": {
             "runId": "initial-race-reproduction",
-            "reproductionOwner": "agent",
+            "reproductionOwner": "user",
             "steps": ["Open search.", "Issue two queries before the first returns."],
         },
         "boundaries": [
@@ -164,6 +164,89 @@ class DebugPlanTests(unittest.TestCase):
         self.assertIn("failureContract.observed", errors)
         self.assertIn("run.steps", errors)
         self.assertIn("probes[1].dataFields", errors)
+
+    def test_agent_reproduction_requires_current_user_delegation(self) -> None:
+        plan = valid_plan()
+        plan["run"]["reproductionOwner"] = "agent"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("run.reproductionDelegation", errors)
+
+        plan["run"]["reproductionDelegation"] = {
+            "target": "agent",
+            "scope": "remaining-runs",
+            "effectiveRunId": plan["run"]["runId"],
+            "currentUserDirective": (
+                "Have the agent investigate this runtime failure."
+            ),
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+
+    def test_reproduction_delegation_must_match_non_user_owner(self) -> None:
+        plan = valid_plan()
+        plan["run"]["reproductionDelegation"] = None
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("must be omitted", errors)
+
+        plan = valid_plan()
+        plan["run"]["reproductionDelegation"] = {
+            "target": "agent",
+            "scope": "single-run",
+            "effectiveRunId": plan["run"]["runId"],
+            "currentUserDirective": "Investigate this yourself.",
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("must be omitted", errors)
+
+        plan = valid_plan()
+        plan["run"]["reproductionOwner"] = "external"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("run.reproductionDelegation", errors)
+
+        plan["run"]["reproductionDelegation"] = {
+            "target": "agent",
+            "scope": "single-run",
+            "effectiveRunId": plan["run"]["runId"],
+            "currentUserDirective": "Ask the designated external operator to reproduce.",
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("must match run.reproductionOwner", errors)
+
+        plan["run"]["reproductionDelegation"]["target"] = "external"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+
+    def test_reproduction_delegation_is_scoped_to_current_run(self) -> None:
+        plan = valid_plan()
+        plan["run"]["reproductionOwner"] = "agent"
+        plan["run"]["reproductionDelegation"] = {
+            "target": "agent",
+            "scope": "future",
+            "effectiveRunId": "different-run",
+            "currentUserDirective": "Have the agent run the verification.",
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("run.reproductionDelegation.scope", errors)
+        self.assertIn("must match run.runId", errors)
+
+        plan["run"]["reproductionDelegation"]["scope"] = "single-run"
+        plan["run"]["reproductionDelegation"]["effectiveRunId"] = plan["run"][
+            "runId"
+        ]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
 
     def test_probe_location_must_be_workspace_relative_with_numeric_line(self) -> None:
         plan = valid_plan()

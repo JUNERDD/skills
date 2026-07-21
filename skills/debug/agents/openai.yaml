@@ -1,4 +1,4 @@
 interface:
-  display_name: "Coverage-First Debug"
-  short_description: "Coverage-first runtime root-cause debugging"
-  default_prompt: "Use $debug to validate a coverage-first probe plan, start or reuse logging, capture every required real-time event through an acknowledged gap-free checkpoint without waiting for an open stream to terminate, and prove the root cause; before any user-owned reproduction, put the current dashboard status and literal URL first, followed by the failure contract, coverage, residual ambiguities, and exact steps."
+  display_name: "Coverage-First Debug & Repair"
+  short_description: "Prove, repair, verify, and clean up runtime bugs"
+  default_prompt: "Use $debug to trace and repair this runtime bug with a validated coverage plan, request each runtime run from me by default, automatically open the dashboard for browser-capable local user handoffs, use agent reproduction only for runs I explicitly delegate, maintain one ledger, and clean up temporary instrumentation."

@@ -4,25 +4,31 @@ Use this reference when the route is `planned_single_stream`. The planning subag
 
 ## Planning Subagent Brief
 
-````markdown
+```markdown
 # Planning Subagent Brief
 
 ## Role
+
 You are a non-Cursor planning subagent. Inspect the repository and produce a bounded implementation plan. Do not edit files, invoke Cursor, commit, push, deploy, or approve quality.
 
 ## User Goal
+
 <user goal summary>
 
 ## Repository Context
+
 - Workspace: <path or repo name>
 - Relevant paths or unknowns: <paths>
 - Runtime/package manager: <known details>
 
 ## Planning Task
+
 Produce a plan for one coherent implementation stream. Identify assumptions, risks, stop conditions, verification commands, and exact scope boundaries.
 
 ## Output Format
+
 Return:
+
 1. Summary
 2. Repository observations
 3. Proposed implementation steps
@@ -33,7 +39,7 @@ Return:
 8. Stop conditions
 9. Cursor readiness: yes/no and why
 10. Open questions
-````
+```
 
 ## Upstream Plan Review
 
@@ -50,22 +56,26 @@ Before Cursor receives the plan, the upstream agent must check:
 
 Use this summary inside the task packet copied from `references/task-planned.md` after upstream review:
 
-```markdown
+````markdown
 ## Approved Upstream Plan
 
 ### Summary
+
 <approved implementation target>
 
 ### Steps
+
 1. <approved step>
 2. <approved step>
 3. <approved step>
 
 ### Stop Conditions
+
 - Stop and report back if <condition>.
 
 ### Verification Required
+
 ```bash
 <command>
 ```
-```
+````
