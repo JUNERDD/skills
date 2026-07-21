@@ -4,6 +4,16 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.7-beta2] - 2026-07-21
+
+### Changed
+
+- Decoupled delegate-to-cursor-sdk from the bundled Cursor SDK wrapper onto the independent cursor-delegate CLI, with a leased Python session helper, owned artifact cleanup, and updated catalog/install guidance.
+- Carried debug through end-to-end verified repair by default: evolving investigation ledgers, exact ready-file resume across turns, structured Markdown handoffs, and separate verification before cleanup.
+- Added debug collector Freeze/Resume recording controls so frozen sessions discard new events while dashboards keep refreshing, plus clearer dashboard event summaries.
+- Kept the local debug dashboard open for user-owned reproductions instead of treating those handoffs as headless, and made reproduction ownership changes explicit and run-scoped.
+- Strengthened thermo-review boundary diagnosis and synced README plus website catalog copy for debug and delegate-to-cursor-sdk.
+
 ## [0.2.7-beta] - 2026-07-13
 
 ### Changed
