@@ -411,6 +411,25 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         body = response.read()
         return response, json.loads(body.decode('utf-8') or '{}')
 
+    def _assert_transport_batch_conflict(
+        self,
+        status: int,
+        payload: dict[str, object],
+        *,
+        batch_id: str,
+        expected_events: int | None,
+        received_events: int,
+    ) -> None:
+        self.assertEqual(status, 409)
+        self.assertFalse(payload['ok'])
+        self.assertEqual(payload['error'], 'transport_batch_id_conflict')
+        self.assertEqual(payload['batchId'], batch_id)
+        self.assertEqual(payload['expectedEventCount'], expected_events)
+        self.assertEqual(payload['receivedEventCount'], received_events)
+        self.assertNotIn('accepted', payload)
+        self.assertNotIn('duplicateBatch', payload)
+        self.assertNotIn('persistedEvents', payload)
+
     def test_clear_body_does_not_corrupt_next_request_on_persistent_connection(self) -> None:
         connection = http.client.HTTPConnection(
             '127.0.0.1',
@@ -1051,9 +1070,24 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             for i in range(25)
         ]
         body = {'batchId': 'client-a:1:25', 'events': events}
+        reordered_body = {
+            'batchId': body['batchId'],
+            'events': [
+                {
+                    'transportId': event['transportId'],
+                    'event': event['event'],
+                    'probeId': event['probeId'],
+                }
+                for event in events
+            ],
+        }
 
         first_status, first_payload = self._request_json('POST', '/ingest/batch', payload=body)
-        second_status, second_payload = self._request_json('POST', '/ingest/batch', payload=body)
+        second_status, second_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=reordered_body,
+        )
 
         self.assertEqual(first_status, 202)
         self.assertEqual(first_payload['persistedEvents'], len(events))
@@ -1063,6 +1097,191 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(second_payload['persistedEvents'], 0)
         self.assertTrue(second_payload['duplicateBatch'])
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
+
+    def test_outer_batch_id_survives_spoofed_inner_id_and_restart(self) -> None:
+        outer_batch_id = 'client-restart:1:1'
+        original_events = [
+            {
+                'probeId': 'restart.identity',
+                'event': 'persist_once',
+                'transportBatchId': 'spoofed-inner-original',
+            },
+        ]
+        body = {'batchId': outer_batch_id, 'events': original_events}
+        first_status, first_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=body,
+        )
+        self.assertEqual(first_status, 202)
+        self.assertEqual(first_payload['persistedEvents'], 1)
+
+        changed_inner_events = [dict(original_events[0])]
+        changed_inner_events[0]['transportBatchId'] = 'spoofed-inner-retry'
+        duplicate_status, duplicate_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': outer_batch_id, 'events': changed_inner_events},
+        )
+        self.assertEqual(duplicate_status, 202)
+        self.assertTrue(duplicate_payload['duplicateBatch'])
+        self.assertEqual(duplicate_payload['persistedEvents'], 0)
+
+        persisted_before_restart = [
+            json.loads(line)
+            for line in self.log_file.read_text(encoding='utf-8').splitlines()
+        ]
+        self.assertEqual(len(persisted_before_restart), 1)
+        self.assertEqual(
+            persisted_before_restart[0]['transportBatchId'],
+            outer_batch_id,
+        )
+
+        previous_server = self.server
+        previous_thread = self._thread
+        previous_server.shutdown()
+        previous_server.server_close()
+        previous_thread.join(timeout=5)
+
+        restarted_server = collector_server.CollectorServer(
+            ('127.0.0.1', 0),
+            self.log_file,
+            self.workspace_root,
+            '',
+            self.location_state_file,
+            None,
+            'test-session',
+            None,
+        )
+        collector_state.hydrate_log_cache(restarted_server)
+        restarted_thread = threading.Thread(
+            target=restarted_server.serve_forever,
+            daemon=True,
+        )
+        restarted_thread.start()
+        self.server = restarted_server
+        self._thread = restarted_thread
+
+        self.assertIn(outer_batch_id, restarted_server.seen_transport_batch_ids)
+        self.assertNotIn('spoofed-inner-original', restarted_server.seen_transport_batch_ids)
+        self.assertNotIn(outer_batch_id, restarted_server.transport_batch_identities)
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=body,
+        )
+        self._assert_transport_batch_conflict(
+            retry_status,
+            retry_payload,
+            batch_id=outer_batch_id,
+            expected_events=None,
+            received_events=1,
+        )
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            1,
+        )
+
+    def test_persisted_batch_id_rejects_every_different_frame(self) -> None:
+        batch_id = 'client-persisted-conflict:1:2'
+        events = [
+            {'probeId': 'persisted.conflict', 'event': 'original', 'sequence': 1},
+            {'probeId': 'persisted.conflict', 'event': 'original', 'sequence': 2},
+        ]
+        first_status, first_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': events},
+        )
+        self.assertEqual(first_status, 202)
+        self.assertEqual(first_payload['persistedEvents'], len(events))
+
+        different_count_status, different_count_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': events[:1]},
+        )
+        self._assert_transport_batch_conflict(
+            different_count_status,
+            different_count_payload,
+            batch_id=batch_id,
+            expected_events=len(events),
+            received_events=1,
+        )
+
+        different_body = [dict(event) for event in events]
+        different_body[1]['event'] = 'changed-with-same-count'
+        different_body_status, different_body_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': different_body},
+        )
+        self._assert_transport_batch_conflict(
+            different_body_status,
+            different_body_payload,
+            batch_id=batch_id,
+            expected_events=len(events),
+            received_events=len(different_body),
+        )
+
+        persisted = [
+            json.loads(line)
+            for line in self.log_file.read_text(encoding='utf-8').splitlines()
+        ]
+        self.assertEqual([event['event'] for event in persisted], ['original', 'original'])
+
+    def test_discarded_batch_id_rejects_a_different_frame(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        freeze_status, _ = self._request_json(
+            'POST',
+            '/api/recording/freeze',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(freeze_status, 200)
+
+        batch_id = 'client-discarded-conflict:1:2'
+        events = [
+            {'probeId': 'discarded.conflict', 'event': 'original', 'sequence': 1},
+            {'probeId': 'discarded.conflict', 'event': 'original', 'sequence': 2},
+        ]
+        first_status, first_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': events},
+        )
+        self.assertEqual(first_status, 202)
+        self.assertEqual(first_payload['disposition'], 'discarded_frozen')
+        self.assertEqual(first_payload['discardedEvents'], len(events))
+
+        changed_events = [dict(event) for event in events]
+        changed_events[0]['event'] = 'changed-with-same-count'
+        conflict_status, conflict_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': changed_events},
+        )
+        self._assert_transport_batch_conflict(
+            conflict_status,
+            conflict_payload,
+            batch_id=batch_id,
+            expected_events=len(events),
+            received_events=len(changed_events),
+        )
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': batch_id, 'events': events},
+        )
+        self.assertEqual(retry_status, 202)
+        self.assertTrue(retry_payload['duplicateBatch'])
+        self.assertEqual(retry_payload['disposition'], 'discarded_frozen')
+        self.assertEqual(retry_payload['discardedEvents'], len(events))
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
     def test_clear_marks_preclear_persisted_batch_as_terminally_discarded(self) -> None:
         events = [
@@ -1101,6 +1320,127 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(retry_payload['discardedEvents'], len(events))
         self.assertTrue(retry_payload['discardedByClear'])
         self.assertFalse(retry_payload['discardedByFreeze'])
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        changed_events = [dict(event) for event in events]
+        changed_events[0]['event'] = 'changed_after_clear'
+        conflict_status, conflict_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'batchId': body['batchId'], 'events': changed_events},
+        )
+        self._assert_transport_batch_conflict(
+            conflict_status,
+            conflict_payload,
+            batch_id=str(body['batchId']),
+            expected_events=len(events),
+            received_events=len(changed_events),
+        )
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+    def test_clear_waits_for_persisted_batch_ack_before_truncating(self) -> None:
+        class ContentionLock:
+            def __init__(self) -> None:
+                self._lock = threading.Lock()
+                self.contended = threading.Event()
+
+            def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+                if self._lock.locked():
+                    self.contended.set()
+                return self._lock.acquire(blocking, timeout)
+
+            def release(self) -> None:
+                self._lock.release()
+
+            def __enter__(self) -> ContentionLock:
+                self.acquire()
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                self.release()
+
+        ingest_lock = ContentionLock()
+        self.server.ingest_lock = ingest_lock
+        events = [
+            {'probeId': 'ack.clear', 'event': 'persist_before_ack', 'sequence': 1},
+            {'probeId': 'ack.clear', 'event': 'persist_before_ack', 'sequence': 2},
+        ]
+        batch_id = 'client-ack-clear:1:2'
+        body = {'batchId': batch_id, 'events': events}
+        append_completed = threading.Event()
+        allow_ack = threading.Event()
+        ack_flushed = threading.Event()
+        original_json_response = collector_server.CollectorRequestHandler._json_response
+
+        def hold_persisted_ack(
+            handler: collector_server.CollectorRequestHandler,
+            status: collector_server.HTTPStatus,
+            payload: dict[str, object],
+            *,
+            cors_mode: str = 'none',
+        ) -> None:
+            if payload.get('batchId') == batch_id and payload.get('persistedEvents') == len(events):
+                append_completed.set()
+                if not allow_ack.wait(timeout=5):
+                    raise AssertionError('timed out waiting to release the persisted ACK')
+            original_json_response(handler, status, payload, cors_mode=cors_mode)
+            if payload.get('batchId') == batch_id and payload.get('persistedEvents') == len(events):
+                ack_flushed.set()
+
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        with mock.patch.object(
+            collector_server.CollectorRequestHandler,
+            '_json_response',
+            new=hold_persisted_ack,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    ingest_future = pool.submit(
+                        self._request_json,
+                        'POST',
+                        '/ingest/batch',
+                        payload=body,
+                    )
+                    self.assertTrue(append_completed.wait(timeout=5))
+                    self.assertEqual(
+                        len(self.log_file.read_text(encoding='utf-8').splitlines()),
+                        len(events),
+                    )
+
+                    clear_future = pool.submit(
+                        self._request_json,
+                        'POST',
+                        '/api/clear',
+                        payload={},
+                        headers=dashboard_headers,
+                    )
+                    self.assertTrue(ingest_lock.contended.wait(timeout=5))
+                    self.assertFalse(clear_future.done())
+
+                    allow_ack.set()
+                    ingest_status, ingest_payload = ingest_future.result(timeout=5)
+                    clear_status, clear_payload = clear_future.result(timeout=5)
+                finally:
+                    allow_ack.set()
+
+        self.assertTrue(ack_flushed.is_set())
+        self.assertEqual(ingest_status, 202)
+        self.assertEqual(ingest_payload['persistedEvents'], len(events))
+        self.assertEqual(clear_status, 200)
+        self.assertEqual(clear_payload['summary']['totalEntries'], 0)
+
+        retry_status, retry_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload=body,
+        )
+        self.assertEqual(retry_status, 202)
+        self.assertTrue(retry_payload['duplicateBatch'])
+        self.assertEqual(retry_payload['disposition'], 'discarded_cleared')
+        self.assertEqual(retry_payload['persistedEvents'], 0)
+        self.assertEqual(retry_payload['discardedEvents'], len(events))
         self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
     def test_ingest_ack_is_not_blocked_by_dashboard_index_lock(self) -> None:

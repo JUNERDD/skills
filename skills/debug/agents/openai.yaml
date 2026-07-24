@@ -1,4 +1,4 @@
 interface:
   display_name: "Coverage-First Debug & Repair"
-  short_description: "Prove, repair, verify, and clean up runtime bugs"
-  default_prompt: "Use $debug to trace and repair this runtime bug with a validated coverage plan, request each runtime run from me by default, automatically open the dashboard for browser-capable local user handoffs, use agent reproduction only for runs I explicitly delegate, maintain one ledger, and clean up temporary instrumentation."
+  short_description: "Prove and repair bugs with all-occurrence evidence"
+  default_prompt: "Use $debug to continue the existing debug process, preserve every active probe occurrence through acknowledged persistence without sampling or direct fire-and-forget ingestion, then prove, repair, verify, and clean up the bug."

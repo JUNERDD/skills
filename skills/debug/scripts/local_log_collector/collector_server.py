@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 import json
 import os
 import secrets
@@ -67,6 +68,40 @@ SENSITIVE_POST_PATHS = {
     '/api/shutdown',
 }
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
+_TransportBatchIdentity = tuple[int, str]
+
+
+class _TransportBatchIdentityConflict(Exception):
+    """Raised when one batch ID is reused for a different logical frame."""
+
+    def __init__(
+        self,
+        batch_id: str,
+        expected: _TransportBatchIdentity | None,
+        received: _TransportBatchIdentity,
+    ) -> None:
+        super().__init__(f'transport_batch_id_conflict:{batch_id}')
+        self.batch_id = batch_id
+        self.expected = expected
+        self.received = received
+
+
+def _build_transport_batch_identity(
+    events: list[dict[str, Any]],
+    batch_id: str,
+) -> _TransportBatchIdentity:
+    """Bind a batch ID to canonical events with its collector-owned ID field."""
+
+    authoritative_events = [dict(event) for event in events]
+    for event in authoritative_events:
+        event['transportBatchId'] = batch_id
+    canonical_events = json.dumps(
+        authoritative_events,
+        ensure_ascii=True,
+        separators=(',', ':'),
+        sort_keys=True,
+    ).encode('utf-8')
+    return len(events), hashlib.sha256(canonical_events).hexdigest()
 
 
 class CollectorServer(ThreadingHTTPServer):
@@ -151,6 +186,9 @@ class CollectorServer(ThreadingHTTPServer):
         # Terminal outcomes survive Clear for the process lifetime so a lost
         # acknowledgement cannot replay a resolved batch after Resume.
         self.transport_batch_outcomes: dict[str, str] = {}
+        # The matching frame identities also survive Clear. A batch ID can
+        # confirm only the exact event array that originally resolved it.
+        self.transport_batch_identities: dict[str, _TransportBatchIdentity] = {}
         self._index_wake_event = threading.Event()
         self._index_stop_event = threading.Event()
         self._index_thread: threading.Thread | None = None
@@ -560,26 +598,30 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             return
 
         event = self._prepare_ingest_event(payload)
-        persisted_bytes, _, disposition = self._append_ingest_events([event])
-        discarded = disposition != 'persisted'
-        discarded_by_freeze = disposition == 'discarded_frozen'
-        self._json_response(
-            HTTPStatus.ACCEPTED,
-            {
-                'ok': True,
-                'accepted': 1,
-                'persistedBytes': persisted_bytes,
-                'persistedEvents': 0 if discarded else 1,
-                'discardedEvents': 1 if discarded else 0,
-                'discardedByFreeze': discarded_by_freeze,
-                'discardedByClear': disposition == 'discarded_cleared',
-                'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
-                'disposition': disposition,
-                'recordingFrozen': self.server.recording_frozen,
-                'recordingGeneration': self.server.recording_generation,
-            },
-            cors_mode='ingest',
-        )
+        # Clear and Freeze must observe this append only after its persistence
+        # acknowledgement has been written and flushed to the client socket.
+        with self.server.ingest_lock:
+            persisted_bytes, _, disposition = self._append_ingest_events_locked([event])
+            discarded = disposition != 'persisted'
+            self._json_response(
+                HTTPStatus.ACCEPTED,
+                {
+                    'ok': True,
+                    'accepted': 1,
+                    'persistedBytes': persisted_bytes,
+                    'persistedEvents': 0 if discarded else 1,
+                    'discardedEvents': 1 if discarded else 0,
+                    'discardedByFreeze': disposition == 'discarded_frozen',
+                    'discardedByClear': disposition == 'discarded_cleared',
+                    'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
+                    'disposition': disposition,
+                    'recordingFrozen': self.server.recording_frozen,
+                    'recordingGeneration': self.server.recording_generation,
+                },
+                cors_mode='ingest',
+            )
+        if disposition == 'persisted':
+            self.server.wake_indexer()
 
     def _handle_ingest_batch(self) -> None:
         payload = self._read_json_body()
@@ -616,35 +658,63 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        batch_identity = (
+            _build_transport_batch_identity(raw_events, batch_id)
+            if batch_id
+            else None
+        )
         events = [self._prepare_ingest_event(item) for item in raw_events]
         if batch_id:
             for event in events:
-                event.setdefault('transportBatchId', batch_id)
-        persisted_bytes, duplicate_batch, disposition = self._append_ingest_events(
-            events,
-            batch_id=batch_id or None,
-        )
-        discarded = disposition != 'persisted'
-        discarded_by_freeze = disposition == 'discarded_frozen'
-        self._json_response(
-            HTTPStatus.ACCEPTED,
-            {
-                'ok': True,
-                'accepted': len(events),
-                'persistedBytes': persisted_bytes,
-                'persistedEvents': 0 if duplicate_batch or discarded else len(events),
-                'discardedEvents': len(events) if discarded else 0,
-                'discardedByFreeze': discarded_by_freeze,
-                'discardedByClear': disposition == 'discarded_cleared',
-                'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
-                'disposition': disposition,
-                'recordingFrozen': self.server.recording_frozen,
-                'recordingGeneration': self.server.recording_generation,
-                'duplicateBatch': duplicate_batch,
-                'batchId': batch_id or None,
-            },
-            cors_mode='ingest',
-        )
+                event['transportBatchId'] = batch_id
+        # Keep the idempotent batch outcome stable through the acknowledgement;
+        # Clear may rewrite it only after this response write has completed.
+        with self.server.ingest_lock:
+            try:
+                persisted_bytes, duplicate_batch, disposition = (
+                    self._append_ingest_events_locked(
+                        events,
+                        batch_id=batch_id or None,
+                        batch_identity=batch_identity,
+                    )
+                )
+            except _TransportBatchIdentityConflict as conflict:
+                self._json_response(
+                    HTTPStatus.CONFLICT,
+                    {
+                        'ok': False,
+                        'error': 'transport_batch_id_conflict',
+                        'batchId': conflict.batch_id,
+                        'expectedEventCount': (
+                            conflict.expected[0] if conflict.expected is not None else None
+                        ),
+                        'receivedEventCount': conflict.received[0],
+                    },
+                    cors_mode='ingest',
+                )
+                return
+            discarded = disposition != 'persisted'
+            self._json_response(
+                HTTPStatus.ACCEPTED,
+                {
+                    'ok': True,
+                    'accepted': len(events),
+                    'persistedBytes': persisted_bytes,
+                    'persistedEvents': 0 if duplicate_batch or discarded else len(events),
+                    'discardedEvents': len(events) if discarded else 0,
+                    'discardedByFreeze': disposition == 'discarded_frozen',
+                    'discardedByClear': disposition == 'discarded_cleared',
+                    'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
+                    'disposition': disposition,
+                    'recordingFrozen': self.server.recording_frozen,
+                    'recordingGeneration': self.server.recording_generation,
+                    'duplicateBatch': duplicate_batch,
+                    'batchId': batch_id or None,
+                },
+                cors_mode='ingest',
+            )
+        if disposition == 'persisted' and not duplicate_batch:
+            self.server.wake_indexer()
 
     def _prepare_ingest_event(self, payload: dict[str, Any]) -> dict[str, Any]:
         event = dict(payload)
@@ -657,69 +727,87 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             event['timestamp'] = int(time.time() * 1000)
         return event
 
-    def _append_ingest_events(
+    def _append_ingest_events_locked(
         self,
         events: list[dict[str, Any]],
         *,
         batch_id: str | None = None,
+        batch_identity: _TransportBatchIdentity | None = None,
     ) -> tuple[int, bool, str]:
+        """Append one frame while the caller owns the ingest linearization lock."""
+
         encoded_events = [
             f"{json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n".encode('utf-8')
             for event in events
         ]
         encoded_blob = b''.join(encoded_events)
         accepted_at = int(time.time() * 1000)
-        with self.server.ingest_lock:
-            if batch_id and batch_id in self.server.transport_batch_outcomes:
+        if batch_id:
+            if batch_identity is None:
+                raise ValueError('batch_identity_required')
+            known_batch = (
+                batch_id in self.server.transport_batch_outcomes
+                or batch_id in self.server.seen_transport_batch_ids
+                or batch_id in self.server.transport_batch_identities
+            )
+            expected_identity = self.server.transport_batch_identities.get(batch_id)
+            if known_batch and expected_identity != batch_identity:
+                raise _TransportBatchIdentityConflict(
+                    batch_id,
+                    expected_identity,
+                    batch_identity,
+                )
+            if batch_id in self.server.transport_batch_outcomes:
                 return 0, True, self.server.transport_batch_outcomes[batch_id]
-            if batch_id and batch_id in self.server.seen_transport_batch_ids:
+            if batch_id in self.server.seen_transport_batch_ids:
                 return 0, True, 'persisted'
 
-            raw_generations = [event.get('recordingGeneration') for event in events]
-            tagged_generations = [value for value in raw_generations if value is not None]
-            valid_generation = (
-                len(tagged_generations) == len(events)
-                and all(isinstance(value, int) and not isinstance(value, bool) for value in tagged_generations)
-                and len(set(tagged_generations)) == 1
-            )
-            stale_generation = bool(tagged_generations) and (
-                not valid_generation
-                or tagged_generations[0] != self.server.recording_generation
-            )
+        raw_generations = [event.get('recordingGeneration') for event in events]
+        tagged_generations = [value for value in raw_generations if value is not None]
+        valid_generation = (
+            len(tagged_generations) == len(events)
+            and all(isinstance(value, int) and not isinstance(value, bool) for value in tagged_generations)
+            and len(set(tagged_generations)) == 1
+        )
+        stale_generation = bool(tagged_generations) and (
+            not valid_generation
+            or tagged_generations[0] != self.server.recording_generation
+        )
 
-            if self.server.recording_frozen or stale_generation:
-                disposition = (
-                    'discarded_frozen'
-                    if self.server.recording_frozen
-                    else 'discarded_stale_generation'
-                )
-                if batch_id:
-                    self.server.seen_transport_batch_ids.add(batch_id)
-                    self.server.transport_batch_outcomes[batch_id] = disposition
-                if self.server.recording_frozen:
-                    self.server.ingest_frozen_discarded_request_count += 1
-                    self.server.ingest_frozen_discarded_event_count += len(events)
-                    self.server.ingest_frozen_discarded_bytes += len(encoded_blob)
-                    self.server.ingest_frozen_last_discarded_at = accepted_at
-                else:
-                    self.server.ingest_stale_discarded_request_count += 1
-                    self.server.ingest_stale_discarded_event_count += len(events)
-                    self.server.ingest_stale_discarded_bytes += len(encoded_blob)
-                    self.server.ingest_stale_last_discarded_at = accepted_at
-                return 0, False, disposition
-            with self.server.log_file.open('ab') as file:
-                file.write(encoded_blob)
-                file.flush()
-                self.server.file_size_bytes = file.tell()
+        if self.server.recording_frozen or stale_generation:
+            disposition = (
+                'discarded_frozen'
+                if self.server.recording_frozen
+                else 'discarded_stale_generation'
+            )
             if batch_id:
                 self.server.seen_transport_batch_ids.add(batch_id)
-                self.server.transport_batch_outcomes[batch_id] = 'persisted'
-            self.server.file_updated_at = accepted_at
-            self.server.ingest_request_count += 1
-            self.server.ingest_accepted_event_count += len(events)
-            self.server.ingest_accepted_bytes += len(encoded_blob)
-            self.server.ingest_last_accepted_at = accepted_at
-        self.server.wake_indexer()
+                self.server.transport_batch_identities[batch_id] = batch_identity
+                self.server.transport_batch_outcomes[batch_id] = disposition
+            if self.server.recording_frozen:
+                self.server.ingest_frozen_discarded_request_count += 1
+                self.server.ingest_frozen_discarded_event_count += len(events)
+                self.server.ingest_frozen_discarded_bytes += len(encoded_blob)
+                self.server.ingest_frozen_last_discarded_at = accepted_at
+            else:
+                self.server.ingest_stale_discarded_request_count += 1
+                self.server.ingest_stale_discarded_event_count += len(events)
+                self.server.ingest_stale_discarded_bytes += len(encoded_blob)
+                self.server.ingest_stale_last_discarded_at = accepted_at
+            return 0, False, disposition
+        with self.server.log_file.open('ab') as file:
+            file.write(encoded_blob)
+            file.flush()
+            self.server.file_size_bytes = file.tell()
+        if batch_id:
+            self.server.seen_transport_batch_ids.add(batch_id)
+            self.server.transport_batch_identities[batch_id] = batch_identity
+            self.server.transport_batch_outcomes[batch_id] = 'persisted'
+        self.server.file_updated_at = accepted_at
+        self.server.ingest_request_count += 1
+        self.server.ingest_accepted_event_count += len(events)
+        self.server.ingest_accepted_bytes += len(encoded_blob)
+        self.server.ingest_last_accepted_at = accepted_at
         return len(encoded_blob), False, 'persisted'
 
     def _handle_config_update(self) -> None:

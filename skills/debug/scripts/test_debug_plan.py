@@ -15,6 +15,14 @@ import unittest
 SCRIPT = Path(__file__).resolve().with_name("debug_plan.py")
 
 
+def payload_control(field_bounds: dict | None = None) -> dict:
+    return {
+        "maxEventBytes": 4096,
+        "fieldBounds": field_bounds if field_bounds is not None else {},
+        "overflowPolicy": "reject-run",
+    }
+
+
 def valid_plan() -> dict:
     return {
         "failureContract": {
@@ -63,8 +71,16 @@ def valid_plan() -> dict:
                 "role": "flow-start",
                 "boundaryIds": [],
                 "hypothesisIds": [],
-                "expectedEvents": ["Exactly once per correlated search flow."],
-                "volumeControl": {"strategy": "once-per-flow", "estimatedEvents": 1},
+                "expectedOccurrence": "every-execution",
+                "eventPolicy": {
+                    "mode": "all-occurrences",
+                    "payloadControl": payload_control(
+                        {
+                            "runId": {"maxBytes": 128},
+                            "correlationId": {"maxBytes": 128},
+                        }
+                    ),
+                },
                 "dataFields": ["runId", "correlationId", "generation"],
                 "redactions": ["query"],
             },
@@ -75,8 +91,11 @@ def valid_plan() -> dict:
                 "role": "invariant",
                 "boundaryIds": ["B-search-flow"],
                 "hypothesisIds": ["H-stale-overwrite"],
-                "expectedEvents": ["One event for every commit attempt, including rejection."],
-                "volumeControl": "bounded fields; no count suppression",
+                "expectedOccurrence": "every-execution",
+                "eventPolicy": {
+                    "mode": "all-occurrences",
+                    "payloadControl": payload_control(),
+                },
                 "dataFields": ["generation", "activeGeneration", "accepted"],
                 "redactions": [],
             },
@@ -87,8 +106,13 @@ def valid_plan() -> dict:
                 "role": "flow-terminal",
                 "boundaryIds": [],
                 "hypothesisIds": [],
-                "expectedEvents": ["Exactly one terminal outcome per correlated flow."],
-                "volumeControl": {"strategy": "once-per-flow", "estimatedEvents": 1},
+                "expectedOccurrence": "every-execution",
+                "eventPolicy": {
+                    "mode": "all-occurrences",
+                    "payloadControl": payload_control(
+                        {"outcome": {"maxBytes": 256}}
+                    ),
+                },
                 "dataFields": ["outcome", "queuedEvents"],
                 "redactions": [],
             },
@@ -99,6 +123,7 @@ def valid_plan() -> dict:
             "privacyReviewed": True,
             "transportChecked": True,
             "correlationChecked": True,
+            "eventCardinalityReviewed": True,
             "residualAmbiguities": [],
         },
     }
@@ -117,8 +142,17 @@ def valid_observation_checkpoint_plan() -> dict:
         "role": "observation-checkpoint",
         "boundaryIds": [],
         "hypothesisIds": [],
-        "expectedEvents": ["Exactly once when run.completion.condition is met."],
-        "volumeControl": {"strategy": "required-sentinel", "estimatedEvents": 1},
+        "expectedOccurrence": "every-execution",
+        "eventPolicy": {
+            "mode": "all-occurrences",
+            "payloadControl": payload_control(
+                {
+                    "observationWindowId": {"maxBytes": 128},
+                    "checkpointReason": {"maxBytes": 512},
+                    "businessStreamState": {"maxBytes": 256, "maxDepth": 4},
+                }
+            ),
+        },
         "dataFields": [
             "observationWindowId",
             "checkpointReason",
@@ -259,6 +293,229 @@ class DebugPlanTests(unittest.TestCase):
             errors,
         )
 
+    def test_probe_event_policy_is_required_and_strict(self) -> None:
+        plan = valid_plan()
+        del plan["probes"][1]["eventPolicy"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("probes[1].eventPolicy: must be an object", errors)
+
+        plan = valid_plan()
+        plan["probes"][1]["eventPolicy"]["payloadControl"] = (
+            "emit every other occurrence"
+        )
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("eventPolicy.payloadControl: must be an object", errors)
+
+    def test_expected_occurrence_is_required_and_fixed(self) -> None:
+        plan = valid_plan()
+        del plan["probes"][1]["expectedOccurrence"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("probes[1].expectedOccurrence: must be a non-empty string", errors)
+
+        for value in ("every-other-execution", "once-per-key", "when-value-changes"):
+            with self.subTest(value=value):
+                plan = valid_plan()
+                plan["probes"][1]["expectedOccurrence"] = value
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("must be 'every-execution'", errors)
+
+    def test_probe_event_policy_rejects_every_suppressing_mode(self) -> None:
+        for mode in (
+            "sampled",
+            "once-per-key",
+            "change-only",
+            "aggregated",
+            "suppressed",
+            "deduplicated",
+        ):
+            with self.subTest(mode=mode):
+                plan = valid_plan()
+                plan["probes"][1]["eventPolicy"]["mode"] = mode
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("must be 'all-occurrences'", errors)
+
+    def test_legacy_free_text_occurrence_policy_is_always_rejected(self) -> None:
+        smuggled_policies = (
+            "emit every other occurrence",
+            "only emit when the value changes",
+            "filter occurrences by key",
+            "keep events whose sequence is even",
+            "只记录值发生变化的事件",
+        )
+        for value in smuggled_policies:
+            with self.subTest(legacy_field="expectedEvents", value=value):
+                plan = valid_plan()
+                plan["probes"][1]["expectedEvents"] = [value]
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("legacy free-text occurrence policy is forbidden", errors)
+
+            with self.subTest(legacy_field="payloadControl", value=value):
+                plan = valid_plan()
+                plan["probes"][1]["eventPolicy"]["payloadControl"] = value
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("payloadControl: must be an object", errors)
+
+    def test_structured_payload_control_accepts_only_payload_bounds(self) -> None:
+        plan = valid_plan()
+        plan["probes"][1]["eventPolicy"]["payloadControl"] = payload_control(
+            {
+                "generation": {"maxBytes": 32, "maxItems": 4, "maxDepth": 2},
+                "accepted": {"maxBytes": 8},
+            }
+        )
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+
+        invalid_max_values = (0, -1, True, 1.5, "4096")
+        for value in invalid_max_values:
+            with self.subTest(maxEventBytes=value):
+                plan = valid_plan()
+                plan["probes"][1]["eventPolicy"]["payloadControl"][
+                    "maxEventBytes"
+                ] = value
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("maxEventBytes: must be a positive integer", errors)
+
+        plan = valid_plan()
+        plan["probes"][1]["eventPolicy"]["payloadControl"]["fieldBounds"] = {
+            "unlistedField": {"maxBytes": 64}
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("must name a field listed in probes[1].dataFields", errors)
+
+        for field_bound in ({}, {"maxEvents": 1}, {"maxBytes": 0}):
+            with self.subTest(field_bound=field_bound):
+                plan = valid_plan()
+                plan["probes"][1]["eventPolicy"]["payloadControl"][
+                    "fieldBounds"
+                ] = {"generation": field_bound}
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+
+        plan = valid_plan()
+        plan["probes"][1]["eventPolicy"]["payloadControl"][
+            "overflowPolicy"
+        ] = "drop-event"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("must be 'reject-run'", errors)
+
+    def test_unsafe_extra_policy_keys_are_rejected_at_every_level(self) -> None:
+        mutations = (
+            lambda probe: probe.update({"samplingPolicy": "every other event"}),
+            lambda probe: probe["eventPolicy"].update({"sampleRate": 0.5}),
+            lambda probe: probe["eventPolicy"]["payloadControl"].update(
+                {"maxEvents": 10}
+            ),
+            lambda probe: probe["eventPolicy"]["payloadControl"][
+                "fieldBounds"
+            ].update({"generation": {"eventLimit": 10}}),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                plan = valid_plan()
+                mutation(plan["probes"][1])
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertTrue(
+                    "unsupported fields" in errors or "unexpected:" in errors,
+                    errors,
+                )
+
+    def test_occurrence_controls_cannot_move_to_other_schema_objects(self) -> None:
+        cases = (
+            ("plan", lambda plan: plan.update({"sampleRate": 0.5})),
+            (
+                "failureContract",
+                lambda plan: plan["failureContract"].update({"firstN": 10}),
+            ),
+            (
+                "excludedCauseFamilies[0]",
+                lambda plan: plan["excludedCauseFamilies"][0].update(
+                    {"deduplicate": True}
+                ),
+            ),
+            (
+                "run",
+                lambda plan: plan["run"].update(
+                    {"samplingPolicy": "every-other"}
+                ),
+            ),
+            (
+                "boundaries[0]",
+                lambda plan: plan["boundaries"][0].update({"maxEvents": 1}),
+            ),
+            (
+                "hypotheses[0]",
+                lambda plan: plan["hypotheses"][0].update({"changeOnly": True}),
+            ),
+            ("coverage", lambda plan: plan["coverage"].update({"oncePerKey": True})),
+        )
+        for expected_path, mutation in cases:
+            with self.subTest(expected_path=expected_path):
+                plan = valid_plan()
+                mutation(plan)
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn(f"{expected_path}: contains unsupported fields", errors)
+
+        plan = valid_observation_checkpoint_plan()
+        plan["run"]["completion"]["sampled"] = True
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("run.completion: contains unsupported fields", errors)
+
+        plan = valid_plan()
+        plan["run"]["reproductionOwner"] = "agent"
+        plan["run"]["reproductionDelegation"] = {
+            "target": "agent",
+            "scope": "single-run",
+            "effectiveRunId": plan["run"]["runId"],
+            "currentUserDirective": "Investigate this run yourself.",
+            "sampleRate": 0.5,
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn(
+            "run.reproductionDelegation: contains unsupported fields",
+            errors,
+        )
+
+    def test_legacy_volume_control_is_rejected(self) -> None:
+        plan = valid_plan()
+        plan["probes"][1]["volumeControl"] = {
+            "strategy": "sampled",
+            "maxEvents": 1,
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("probes[1].volumeControl", errors)
+        self.assertIn("legacy event filtering is forbidden", errors)
+
     def test_duplicate_ids_are_rejected(self) -> None:
         plan = valid_plan()
         duplicate = deepcopy(plan["hypotheses"][0])
@@ -349,6 +606,14 @@ class DebugPlanTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("coverage.privacyReviewed: must be true", errors)
+
+    def test_event_cardinality_review_is_required(self) -> None:
+        plan = valid_plan()
+        del plan["coverage"]["eventCardinalityReviewed"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("coverage.eventCardinalityReviewed: must be true", errors)
 
     def test_residual_ambiguities_warn_from_the_coverage_gate(self) -> None:
         plan = valid_plan()

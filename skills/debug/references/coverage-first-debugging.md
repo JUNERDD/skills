@@ -9,7 +9,7 @@ Use this reference to maximize the probability that one clean failing reproducti
 - Causal map
 - Material hypotheses
 - Cause-family checklist
-- Deduplication
+- Hypothesis deduplication
 - Coverage plan
 - Probe graph
 - Observer cost
@@ -113,7 +113,7 @@ Cover only applicable families and record a reason for material exclusions:
 - **UI and event systems:** duplicate handlers, stale closures, reconciliation, hydration, propagation, focus, composition, navigation, or stale async commits.
 - **Build and dependency boundaries:** stale artifacts, generated code, module duplication, conditional exports, incompatible versions, or source/bundle mismatch.
 
-## Deduplication
+## Hypothesis deduplication
 
 Keep hypotheses separate when the originating boundary, expected order, confirming value, responsible owner, or required repair differs.
 
@@ -176,8 +176,18 @@ Use this shape:
       "role": "flow-start",
       "boundaryIds": [],
       "hypothesisIds": [],
-      "expectedEvents": ["exactly one per failing flow"],
-      "volumeControl": "required sentinel; never sampled",
+      "expectedOccurrence": "every-execution",
+      "eventPolicy": {
+        "mode": "all-occurrences",
+        "payloadControl": {
+          "maxEventBytes": 4096,
+          "fieldBounds": {
+            "flowId": {"maxBytes": 128},
+            "sourceRevision": {"maxBytes": 128}
+          },
+          "overflowPolicy": "reject-run"
+        }
+      },
       "dataFields": ["flowId", "sourceRevision"],
       "redactions": []
     },
@@ -188,8 +198,17 @@ Use this shape:
       "role": "invariant",
       "boundaryIds": ["B-commit"],
       "hypothesisIds": ["H-race-overwrite"],
-      "expectedEvents": ["once per save attempt"],
-      "volumeControl": "bounded selected fields",
+      "expectedOccurrence": "every-execution",
+      "eventPolicy": {
+        "mode": "all-occurrences",
+        "payloadControl": {
+          "maxEventBytes": 4096,
+          "fieldBounds": {
+            "operationId": {"maxBytes": 128}
+          },
+          "overflowPolicy": "reject-run"
+        }
+      },
       "dataFields": ["operationId", "baseVersion", "currentVersion", "accepted"],
       "redactions": ["hash record identity"]
     },
@@ -200,8 +219,18 @@ Use this shape:
       "role": "flow-terminal",
       "boundaryIds": [],
       "hypothesisIds": [],
-      "expectedEvents": ["exactly one per completed flow"],
-      "volumeControl": "required sentinel; never sampled",
+      "expectedOccurrence": "every-execution",
+      "eventPolicy": {
+        "mode": "all-occurrences",
+        "payloadControl": {
+          "maxEventBytes": 4096,
+          "fieldBounds": {
+            "flowId": {"maxBytes": 128},
+            "outcome": {"maxBytes": 256}
+          },
+          "overflowPolicy": "reject-run"
+        }
+      },
       "dataFields": ["flowId", "outcome", "queuedEvents"],
       "redactions": []
     }
@@ -212,6 +241,7 @@ Use this shape:
     "privacyReviewed": true,
     "transportChecked": true,
     "correlationChecked": true,
+    "eventCardinalityReviewed": true,
     "residualAmbiguities": []
   }
 }
@@ -243,6 +273,16 @@ Omitting `run.completion` preserves the default `flow-terminal` requirement. For
 
 Write every probe location as a workspace-relative source path followed by a positive numeric line, for example `src/save.ts:88`. Revalidate after instrumentation moves a probe.
 
+Give every probe the fixed `expectedOccurrence: "every-execution"` value and an `eventPolicy` object containing exactly `mode` and `payloadControl`. Set `mode` to `all-occurrences`; neither field accepts free-form cardinality policy.
+
+`payloadControl` is a strict object containing exactly:
+
+- `maxEventBytes`: a positive integer limiting the encoded size of one event.
+- `fieldBounds`: an object whose keys must also appear in that probe's `dataFields`. Each entry must contain at least one positive integer bound from `maxBytes`, `maxItems`, or `maxDepth`, and no other keys. Use an empty object when the whole-event byte limit is sufficient.
+- `overflowPolicy`: the fixed value `reject-run`. An overflow makes the evidence run incomplete; it must not silently drop, merge, or replace the occurrence.
+
+The validator rejects unknown keys at every plan object, including the top level, failure contract, exclusions, run/delegation/completion, boundaries, hypotheses, probes, policies, and coverage gate, rather than letting occurrence controls move to an ignored field. The legacy free-text `expectedEvents`, string `payloadControl`, and `volumeControl` forms are invalid. Free text remains necessary for the failure contract, reproduction steps, evidence, redactions, and ambiguities, so machine validation cannot infer whether every sentence is descriptive or imperative. Perform a mandatory semantic contradiction review: descriptions may identify throttling, filtering, or deduplication in product behavior, but any prose instruction to apply such behavior to debug instrumentation fails the plan and cannot override `expectedOccurrence` or `eventPolicy`. Choose and enforce payload bounds before activation so every execution can enqueue its distinct event; never add a second occurrence/cardinality policy in prose or another field.
+
 Map every boundary and hypothesis from at least one probe through `boundaryIds` and `hypothesisIds`. Run:
 
 ```bash
@@ -266,30 +306,23 @@ Use stable semantic probe IDs.
 
 ## Observer cost
 
-Estimate dynamic events and bytes, not static statement count. Prefer:
+Estimate dynamic event cardinality and payload bytes, not static statement count. Every runtime occurrence of every active probe must produce one distinct debug event. Keep cardinality intact while bounding strings, arrays, stack depth, and canonical non-secret hashes as declared by `eventPolicy.payloadControl`.
 
-- once per correlation, identity, version, or state change;
-- invariant failures and selected branch decisions;
-- end-of-flow aggregates with recorded and suppressed counts;
-- deterministic sampling by correlation only when the failing flow remains represented;
-- bounded strings, arrays, stack depth, and canonical non-secret hashes;
-- byte-framed transport and explicit backlog monitoring.
+Never sample, rate-limit, throttle, debounce, filter, coalesce, aggregate, suppress, deduplicate, or replace active probe occurrences. Never apply once-per-key, once-per-correlation, once-per-flow, change-only, failure-only, or event-count-cap behavior. When the failure contract depends on an upstream event count, place its source probe at the authoritative callback or dispatch before any pre-existing reduction; observing only a downstream throttled or filtered callback does not prove upstream cardinality. Reduce observer cost only by choosing fewer probe locations before the run or by shrinking each event's fields; after a probe is active, send every occurrence.
 
-Never silently suppress all evidence from a required probe. Record the control in `volumeControl` and emit enough metadata to distinguish absence from suppression.
-
-When the contract requires every application `fetch` or every source event from a real-time flow, preserve every required event during the covered page lifetime. Bound fields and transport frames rather than imposing an event-count cap. Follow [browser-debugging.md](./browser-debugging.md).
+For every application `fetch` and every source event from a real-time flow, preserve one debug event per occurrence throughout the covered page lifetime. Follow [browser-debugging.md](./browser-debugging.md).
 
 ## Long-lived flows
 
 Treat SSE, WebSocket, subscription, long-poll, and `ReadableStream` flows as first-class when they are intentionally open:
 
 1. Distinguish connection/request state from evidence delivery. A browser Network-panel `Pending` row can be a live business stream or an unacknowledged debug frame; it is not itself proof of a stall or lost event.
-2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every required source event with a monotonic source sequence, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
+2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every source-event occurrence at each active probe with a monotonic source sequence, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
 3. Choose a checkpoint condition tied to an observable assertion, event count, protocol state, operator action, or justified product deadline. Do not wait for an intentionally open business stream to terminate.
-4. At the checkpoint, snapshot the debug transport's current event watermark and wait only until that complete FIFO prefix is acknowledged. Let later events continue to enqueue. Require zero required-event rejections and no source or transport sequence gap through the target watermark.
+4. At the checkpoint, snapshot the debug transport's current event watermark and wait only until that complete FIFO prefix is acknowledged. Let later events continue to enqueue. Require zero event rejections and no source or transport sequence gap through the target watermark.
 5. Use a final queue-empty flush only after the producer is stopped. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unacknowledged event, use an authoritative producer/server-side logger or mark continuity incomplete.
 
-No finite page-local memory queue can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: never intentionally count-cap, sample, overwrite, or delete a successfully serialized required event before acknowledgement; never claim a wider lossless interval than the acknowledged continuous prefix proves.
+No finite page-local memory queue can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: emit every active probe occurrence, retain every successfully serialized event until acknowledgement, and never filter, coalesce, aggregate, suppress, deduplicate, overwrite, or delete it; never claim a wider lossless interval than the acknowledged continuous prefix proves.
 
 ## Correlation and absence
 
@@ -307,7 +340,7 @@ Reuse existing identifiers. Do not introduce headers or parameters that alter pr
 
 Do not infer strict distributed order from wall-clock timestamps alone. Capture wall time for cross-process alignment and monotonic time for local duration and ordering.
 
-Treat a missing probe as evidence only when flow sentinels, collector continuity, enclosing branch or boundary execution, current source locations and endpoint, transport acknowledgement, and suppression metadata prove it should have arrived. Otherwise mark it `INCONCLUSIVE` or `NOT_REACHED`.
+Treat a missing probe as evidence only when flow sentinels, collector continuity, enclosing branch or boundary execution, current source locations and endpoint, `all-occurrences` policy, and transport acknowledgement prove it should have arrived. Otherwise mark it `INCONCLUSIVE` or `NOT_REACHED`.
 
 ## Coverage gate
 
@@ -320,13 +353,15 @@ Before the first failing reproduction, require:
 - [ ] Every boundary and hypothesis is covered by at least one probe, and every probe reference resolves.
 - [ ] A flow-start sentinel and the configured flow-terminal or observation-checkpoint sentinel exist.
 - [ ] Correlation and ordering survive every relevant async or service boundary.
-- [ ] Event cardinality, bytes, perturbation risk, and suppression visibility were reviewed.
+- [ ] `coverage.eventCardinalityReviewed` is true after proving that every active probe uses `expectedOccurrence: every-execution` plus `eventPolicy.mode: all-occurrences` and emits one event for every execution.
+- [ ] Every free-text plan field passed semantic contradiction review; none instructs the debug instrumentation to select, cap, combine, or suppress occurrences.
+- [ ] Payload bytes and perturbation risk were reviewed without introducing any event-cardinality control.
 - [ ] Sensitive fields are excluded or redacted.
 - [ ] Logging is failure-tolerant and cannot block the product path.
 - [ ] The plan validator succeeds.
 - [ ] Instrumented code passes the narrowest relevant compile, type, or syntax check.
 - [ ] Collector health, ingest acknowledgement, endpoint freshness, and expected-probe sync succeed.
-- [ ] Required source and transport sequences, acknowledgement watermarks, and browser/process lifecycle evidence-loss boundaries are covered or declared residual.
+- [ ] Every active source and transport sequence, acknowledgement watermark, and browser/process lifecycle evidence-loss boundary is covered or declared residual.
 - [ ] The run ID is unique and stale evidence is cleared.
 
 Do not include dashboard visibility in this gate. A dashboard can improve operator experience but does not prove evidence delivery.
@@ -335,7 +370,7 @@ Do not include dashboard visibility in this gate. A dashboard can improve operat
 
 1. Summarize the exact run before reading raw volume.
 2. Select the failing parent correlation, operation, request, and attempt.
-3. Verify the start and configured completion sentinels, acknowledged delivery prefix, missing expected probes, required-event rejections, suppression counters, and source/transport sequence gaps. Require a queue-empty drain only when production has stopped.
+3. Verify the start and configured completion sentinels, one-to-one source/probe cardinality, acknowledged delivery prefix, missing expected probes, event rejections, and source/transport sequence gaps. Require a queue-empty drain only when production has stopped.
 4. Evaluate every hypothesis against its confirming and rejecting evidence.
 5. Identify the earliest invalid value, decision, ordering, or external result.
 6. Trace it forward through boundaries to the observed symptom.

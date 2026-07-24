@@ -17,7 +17,7 @@ Use this reference for exact collector, instrumentation, evidence-reading, and c
 - Structured log format
 - Browser routing
 - Non-JavaScript guidance
-- Volume controls
+- Event cardinality and payload controls
 - Evidence summarization
 - Reading raw evidence
 - Dashboard startup and recovery
@@ -35,7 +35,7 @@ Prefer this order:
 1. For a continuing investigation, read its ledger and run `scripts/debug_session.py resume --ready-file <READY_FILE>` with the exact active ready file recorded there. A successful resume must reuse its endpoint, session ID, log path, token, port, dashboard, and cleanup ownership without starting another collector or reopening browser UI.
 2. When establishing the investigation's initial session, reuse an authoritative session supplied by the host or user and record it in the ledger.
 3. Otherwise use the bundled `scripts/debug_session.py` CLI to start the local collector once.
-4. Use direct file append only when HTTP ingestion is unavailable and the runtime has no lightweight HTTP client.
+4. If the runtime cannot use the collector's acknowledged HTTP contract, stop at the instrumentation gate. Do not append planned-probe evidence directly to the NDJSON file or substitute an unacknowledged emitter.
 
 Never scan `.debug-logs/`, the workspace, process lists, or port ranges to guess which session belongs to an investigation. The ledger's exact active ready file is the only automatic continuation source. Start a replacement only when that file is missing or its collector is unreachable, or when the user or host explicitly requires isolation or replacement. Preserve the previous evidence and append both the prior session and the replacement reason to the same investigation ledger.
 
@@ -147,19 +147,21 @@ When the collector restarts on another port, replace stale endpoint constants in
 
 The dashboard state response keeps high-cardinality count lists small so polling does not compete with ingestion. Read `summary.countCardinality`, `summary.countListLimit`, and `summary.countListsTruncated` when a list such as `correlationCounts` is abbreviated. This is a presentation bound only: `summary.totalEntries`, the paginated logs API, and the NDJSON evidence file still represent every persisted event.
 
-`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Continue with subsequent acknowledged frames without sampling or dropping required events. For a live producer, use the browser transport's checkpoint target and acknowledged watermarks instead of waiting for its queue to become empty; require a final empty drain only after production stops. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`; ingestion acknowledgement is intentionally independent from dashboard indexing.
+`ingestEventCountLimited: false` means the collector does not reject a batch because it contains more than an arbitrary number of events. `ingestMaxJsonBodyBytes` is a network-frame byte boundary, not a total log-count boundary. Split oversized frames by bytes while preserving one independently serialized event for every active-probe occurrence. For a live producer, compare its occurrence and enqueue checkpoint with the transport's acknowledged watermark instead of waiting for the queue to become empty; require a final empty drain only after production stops. During high-volume capture, inspect `ingestAcceptedEventCount`, `ingestRequestCount`, `indexLagBytes`, `indexErrorCount`, and `indexLastError`, but do not use accepted-request counters or index progress as proof of persistence. Successful evidence requires the checkpoint's occurrence count, enqueued event count, and persisted NDJSON record count to agree with zero rejected, discarded, or missing events.
 
 ## Collector-wide recording gate
 
 The dashboard's single `Freeze` / `Resume` control operates the collector-wide HTTP-ingest write gate, not a tab-local snapshot. The UI continues polling authoritative state while frozen. Every open dashboard tab, a reloaded dashboard, later user replies, analysis turns, and fresh run IDs observe the same collector recording mode and generation. Freezing does not stop or disconnect the collector: `/health` remains `running`, while dashboard state reports `frozen` and the badge shows `FROZEN`.
 
-`Freeze` is linearized with `/ingest` and `/ingest/batch` writes. Once it takes effect, events that arrive through those endpoints receive a terminal acknowledgement with `discardedEvents` and a discard disposition, but they are not appended to NDJSON and are not added to the index. Legacy `accepted` / `acceptedEvents` counts mean terminally resolved, not necessarily persisted; classify evidence with `persistedEvents` and `discardedEvents`. For a generation-aware frame with a stable `batchId`, a terminal discard resolves the transport frame so it cannot be delayed and replayed as evidence; it does not prove evidence delivery and must make the affected transport interval `continuityBroken`.
+`Freeze` is an explicit user-controlled action linearized with `/ingest` and `/ingest/batch` writes. Once it takes effect, events that arrive through those endpoints receive a terminal acknowledgement with `discardedEvents` and a discard disposition, but they are not appended to NDJSON and are not added to the index. Legacy `accepted` / `acceptedEvents` counts mean terminally resolved, not necessarily persisted; classify evidence with `persistedEvents` and `discardedEvents`. For a generation-aware frame with a stable `batchId`, a terminal discard resolves the transport frame so it cannot be delayed and replayed as evidence. Any discarded active-probe event makes the run incomplete, sets or implies `continuityBroken`, and can never count as successful evidence.
 
 Each real Freeze or Resume transition advances `recordingGeneration`; repeating the operation in its already-current state is idempotent. The bundled transport stamps the generation when an event enters its queue and keeps one stable `batchId` across retries. `Resume` opens writes only for the future generation. Queued or retried events stamped with an older generation remain terminally discarded after Resume, including when the original frozen acknowledgement was lost. A client that has not yet observed the new generation must refresh authoritative state or accept that its stale frame will be discarded and reported as a continuity break.
 
-`Clear` remains available while frozen. It truncates the current NDJSON evidence and resets the documented current-log counters, but it neither unfreezes recording nor advances the generation. Resolved batch IDs remain protected from replay: retrying a batch that had persisted before Clear returns the terminal `discarded_cleared` disposition, rather than resurrecting old evidence or falsely claiming that the cleared evidence is still persisted. `Stop` still stops the collector.
+`Clear` remains available while frozen. It truncates the current NDJSON evidence and resets the documented current-log counters, but it neither unfreezes recording nor advances the generation. The collector linearizes Clear against the complete ingest commit, including the persistence-acknowledgement response write and flush: Clear occurs either before the append or after that acknowledgement attempt, never between the append and its reported `persistedEvents`. Resolved batch IDs remain protected from replay: retrying a batch that had persisted before Clear returns the terminal `discarded_cleared` disposition, rather than resurrecting old evidence or falsely claiming that the cleared evidence is still persisted. `Stop` still stops the collector.
 
-`FROZEN` is not collector-health failure, a completed run, an acknowledged evidence checkpoint, or proof that all required events arrived. `dashboard-status` reports frontend confirmation plus an independent `recording: live`, `recording: frozen`, or `recording: unknown`. Before a deliberate reproduction, run `resume-recording` when it reports frozen and then rerun `dashboard-status` until recording is live. Do not use session `resume` for this purpose: `resume` only validates and reuses the existing collector, whereas `resume-recording` changes its write gate without creating a process, port, dashboard, or session.
+Every non-empty outer `batchId` is authoritative. The collector overwrites any caller-supplied per-event `transportBatchId` with that outer ID before persistence and binds the ID at its first terminal outcome to both the event count and a SHA-256 digest of the canonicalized parsed event array. An idempotent retry must match that complete frame identity exactly whether the original outcome was persisted, discarded, or later changed to `discarded_cleared`. Reusing the ID with a different count or any different event content returns HTTP `409` with `transport_batch_id_conflict`; it never returns an accepted or duplicate-confirmed acknowledgement and never changes the recorded outcome or evidence. When a replacement collector hydrates a resolved outer ID from NDJSON but cannot recover its original canonical input digest, retries fail closed with the same conflict and make the run incomplete; they must never be re-appended or falsely confirmed as persisted.
+
+`FROZEN` is not collector-health failure, a completed run, an acknowledged evidence checkpoint, or proof that all active probe events arrived. It is a user-controlled decision to stop persisting newly arriving evidence. `dashboard-status` reports frontend confirmation plus an independent `recording: live`, `recording: frozen`, or `recording: unknown`. Before a deliberate reproduction, run `resume-recording` when it reports frozen and then rerun `dashboard-status` until recording is live. Do not use session `resume` for this purpose: `resume` only validates and reuses the existing collector, whereas `resume-recording` changes its write gate without creating a process, port, dashboard, or session. If the user freezes during an active run, end that run as incomplete whenever any active-probe occurrence was discarded; Resume starts only a future valid interval and cannot rehabilitate the discarded interval.
 
 ## Session commands
 
@@ -226,6 +228,7 @@ Before every deliberate recording pass:
 8. Run `clear` on the active session so the next pass does not inherit the prior run's log records or counters. Clear is valid while frozen and does not change recording mode or generation.
 9. Run `dashboard-status`. If it reports `recording: frozen`, run `resume-recording --ready-file <READY_FILE>` and then rerun `dashboard-status`; require `recording: live` before reproduction. If it remains `unknown`, refresh authoritative state and report the exact error rather than assuming writes are enabled.
 10. Use a fresh `runId` within that session and initialize generation-aware transports from the refreshed `recordingGeneration`.
+11. Inspect every active emitter and the initial transport status. Require one shared acknowledged transport for every browser or repeating producer, observable occurrence/enqueue/persistence counts, no direct `/ingest` path in those producers, and no multiple `/ingest` requests already pending. Fail the gate before reproduction when any condition is unmet.
 
 A fresh `runId` separates evidence; it never requests or implies a fresh collector session.
 
@@ -262,7 +265,7 @@ The collector accepts and validates `location`, `hypothesisIds`, and `probeId` o
 
 Each location must be relative to `workspaceRoot`, include a line number, resolve to an existing file, and remain inside the workspace.
 
-The location-state sidecar is a near-real-time operational view. Runtime updates are debounced to avoid rewriting a large JSON file for every event; sync, clear, startup, and shutdown force a current write. Use the NDJSON file as evidence of record.
+The location-state sidecar is a near-real-time operational view. Only sidecar-file rewrites are debounced to avoid rewriting a large JSON file for every event; this never delays, replaces, combines, or suppresses event ingestion or NDJSON records. Sync, clear, startup, and shutdown force a current sidecar write. Use the NDJSON file as evidence of record.
 
 ## Structured log format
 
@@ -313,45 +316,43 @@ Required when work crosses async, concurrent, process, service, queue, persisten
 - `sequence`
 - attempt/generation/version metadata in `data`
 
-Keep values bounded and JSON-serializable. Log serialization must not throw into product code.
+Keep values bounded and JSON-serializable. Log serialization must not throw into product code, but a contained serialization failure must increment the transport's rejection count and make the run incomplete. Every execution occurrence of an active probe owns a separate immutable event object and, for repeating producers, a monotonic source or transport sequence; never reuse a mutable payload or storage slot for a later occurrence.
 
 ## Browser routing
 
 Read [browser-debugging.md](./browser-debugging.md) before adding client instrumentation, wrapping `fetch`, collecting long-lived or high-frequency browser streams, or crossing navigation and reload boundaries. Keep browser-specific transport details out of non-browser investigations.
 
+All browser probes, including a probe expected to execute only once, must acquire the registry-owned acknowledged transport through `getOrCreateBrowserDebugTransport` and enqueue through that one instance for the page realm and collector session. HMR must reuse it. Assign the only acquisition to one top-level canonical `const`; keep direct sinks and producer installers in that module, and export narrow functions instead of rebinding the transport in probe modules. Give replaceable wrappers, listeners, timers, and other producers a stable realm-owned key, a token-safe lease/disposer, and realm-persistent source sequence. Acquisition while the key is active must fail before cleanup; release the current lease before HMR reacquisition, which preserves state and source sequence without letting one source silently replace another. Do not issue browser `/ingest` requests directly. Call the shared transport exactly once for every active-probe occurrence and validate its occurrence, enqueue, acknowledgement, rejection, abandonment, discard, registry-conflict, fatal-protocol, and persisted-record counts at the planned checkpoint.
+
 ## Non-JavaScript guidance
 
-Use `batchEndpoint` for high-throughput serialized frames and `endpoint` for a single event. A batch is only a finite wire envelope: do not wait for the business stream to close, and do not impose an event-count cap when complete request or source-event coverage is required. Give events monotonic delivery sequences, split only by request bytes or runtime-specific payload constraints, retain each event until acknowledgement, and confirm an acknowledged continuous prefix at live observation checkpoints. For replay-safe collector semantics, stamp every event with the current authoritative `recordingGeneration` and retry the same non-empty `batchId`. Events from an older generation receive a terminal discard rather than becoming post-Resume evidence.
+Route every producer whose active probe can execute more than once through one shared, acknowledged transport for that process and run. This includes loops, callbacks, listeners, retries, workers, scheduled work, request handlers, and streams. Reuse the project's existing transport when present; otherwise implement the same generation-aware `/ingest/batch` contract. The transport must serialize and enqueue one immutable event synchronously for every occurrence, assign monotonic delivery identity, preserve FIFO order, retain each event until terminal acknowledgement, retry a frame with the same non-empty `batchId`, and expose occurrence, enqueue, acknowledgement, persisted, rejection, and discard counts. Split frames only by request bytes or a runtime payload boundary. Events from an older `recordingGeneration` receive a terminal discard and make the run incomplete rather than becoming post-Resume evidence.
 
-Legacy or custom direct HTTP posts that omit `recordingGeneration` receive only the write-time gate: they are discarded if their request reaches the collector while frozen, but an untagged request delayed until after Resume cannot be identified as a frozen-generation event. Do not claim no-delayed-replay semantics for that path; update the sender to use the generation-aware batch contract.
+Reserve the single-event `endpoint` (`/ingest`) for a bounded, one-shot, non-browser producer that emits exactly one planned event and can await its response before finishing. Stamp that event with the current authoritative `recordingGeneration`, parse the response, and require all of the following:
 
-If the runtime has no lightweight HTTP client, append a compact JSON line to `logFile` using append mode and close promptly. When appending directly:
+- the HTTP request succeeded;
+- `persistedEvents` is exactly `1`;
+- `discardedEvents` is exactly `0`.
 
-- Treat the append as a deliberate bypass of Freeze/Resume. Direct file writes do not pass through the collector gate, do not carry terminal discard acknowledgements, and may be indexed even while HTTP ingestion is frozen.
-- Use the same schema.
-- Serialize under a process-safe lock when multiple writers share a file.
-- Keep each object on one physical line.
-- Expect the collector to incrementally index the file on the next state read or background tail pass.
-- Do not mix unrelated sessions in one file.
+Treat a timeout, missing or malformed response, any other count, or a legacy `accepted` / `acceptedEvents` value without the persistence fields as incomplete delivery. Never use `/ingest` from browser code or from a producer that can repeat. Never fire and forget it, issue one request per loop or callback occurrence, or treat Network-panel completion as a substitute for validating the response body.
 
-## Volume controls
+Do not append planned-probe evidence directly to `logFile`. Direct writes bypass recording generations and the collector acknowledgement that distinguishes persisted from discarded events. If neither an existing acknowledged transport nor the collector contract can be used, report the instrumentation gate as blocked.
 
-For general loops or hot paths unrelated to complete `fetch` capture, select and document an information-preserving control:
+## Event cardinality and payload controls
+
+For every active probe and bounded evidence interval, preserve this equality:
 
 ```text
-first 5 per correlation
-once per entity/version
-only when selected fields change
-only when invariant fails
-aggregate count and emit at flow end
-deterministic sample by correlation ID
+source occurrence count = enqueued event count = persisted NDJSON record count
 ```
 
-Emit suppression metadata such as `recordedCount`, `droppedCount`, and `limit` so missing general-purpose probe events are interpretable.
+Serialize each occurrence independently and give it stable probe, correlation, and sequence identity. HMR release-then-reacquire must preserve the producer's source sequence and must neither miss nor duplicate the authoritative occurrence; an acquisition attempted while the old owner remains active invalidates the run instead of replacing that owner. A batch is only a wire frame containing those independent events; it must not merge identities, replace earlier events, wait for the business stream to close, or change the record count. At a live checkpoint, compare the source occurrence count and enqueue watermark for the captured prefix with the acknowledged and persisted prefix. After production stops, additionally require an empty queue and no in-flight request.
 
-When the failure contract requires complete application-`fetch` or real-time source-event coverage, follow the browser reference. Do not apply count-based suppression to required request or source events. Treat serialization, oversize, lifecycle, or delivery rejection as incomplete evidence rather than suppression.
+Choose fewer or better probe locations before activating the run when projected observer cost is unsafe. Once a probe is active, do not sample, throttle, debounce, keep only the first events, emit once per key, gate on changes or anomalies, aggregate, coalesce, overwrite, deduplicate, or otherwise suppress its occurrences. Do not reinterpret a rejected or lost occurrence as intentionally omitted.
 
-Keep each event small. Use hashes, lengths, selected fields, and bounded error messages instead of complete payloads or state trees.
+Control observer cost by bounding payload content, not event count. Use selected scalar fields, hashes, lengths, enums, identifiers, compact timestamps, and bounded error messages instead of complete payloads, unbounded arrays, state trees, bodies, or stacks. Redact secrets before enqueueing. Bound the complete wire request—including `batchId` and JSON envelope—with `frameBytes`; reject an event before enqueue when its one-item request cannot fit. Any enrichment, serialization, queue-append, or oversized-event rejection, forced abandonment, registry conflict, queue loss, missing acknowledgement, terminal discard, count mismatch, or source/transport sequence gap makes the run incomplete.
+
+Multiple simultaneous `/ingest` rows in `Pending` state are an instrumentation gate failure: they indicate a repeating or browser producer is bypassing the acknowledged shared transport. Stop the run, remove the direct emitter, route every occurrence through the single shared transport, and start a fresh run. One outstanding `/ingest/batch` frame from that transport may be normal while its acknowledgement is pending; validate it through transport status and collector persistence counts.
 
 ## Evidence summarization
 
@@ -379,7 +380,7 @@ Useful filters:
 --format json
 ```
 
-The summarizer reports valid/invalid lines, probe and hypothesis coverage, correlations, event counts, causal-sequence gaps/regressions, browser transport-sequence gaps or duplicate/regressed sequences, error-like events, and a bounded timeline. It does not infer the root cause; use it to select raw evidence and to reject any claimed lossless interval with a transport continuity break.
+The summarizer reports persisted NDJSON record counts together with valid/invalid lines, probe and hypothesis coverage, correlations, causal-sequence gaps/regressions, browser transport-sequence gaps or duplicate/regressed sequences, error-like events, and a bounded timeline. It does not observe source occurrences or enqueue attempts by itself. Retain the producer's occurrence counter/checkpoint and the shared transport's enqueue and acknowledgement status, then reconcile them with the summarizer for the same `runId`, producer, probe set, and bounded interval. It does not infer the root cause; use it to select raw evidence and reject any interval whose occurrence, enqueue, and persisted counts differ or whose transport continuity is broken.
 
 ## Reading raw evidence
 
@@ -387,11 +388,13 @@ After summarization:
 
 1. Verify the expected run and correlation exist.
 2. Verify flow start and the configured terminal or observation-checkpoint sentinel.
-3. Check missing planned probes, required-event rejections, `discardedEvents`, `continuityBroken`, acknowledged watermarks, source/transport sequence gaps, and suppression counters.
-4. Identify the earliest invalid value, invariant failure, or invalid ordering.
-5. Read the raw NDJSON lines for that causal interval.
-6. Cite probe ID, location, run, correlation, sequence, and selected data.
-7. Evaluate every hypothesis, including `NOT_REACHED` paths.
+3. Reconcile `source occurrences = enqueued events = persisted NDJSON records` for the same checkpoint. Use producer-side occurrence counts, the transport enqueue watermark/count, acknowledged persistence status, and the summarizer or raw NDJSON count; do not substitute `accepted` / `acceptedEvents`.
+4. Require zero serialization or byte rejections, zero lost events, zero `discardedEvents`, `continuityBroken: false`, an acknowledged watermark through the checkpoint target, and no source/transport sequence gap. Any mismatch or discard makes the run incomplete and disqualifies it as successful evidence.
+5. Inspect the ingestion shape before causal interpretation. Multiple simultaneous `/ingest` rows in `Pending` state are an instrumentation gate failure, not high-volume success: stop, replace the direct per-occurrence emitter with the acknowledged shared transport, clear the invalid interval, and reproduce under a fresh `runId`. A single pending `/ingest/batch` frame is evaluated through its acknowledgement and the same count reconciliation.
+6. Check missing planned probes and identify the earliest invalid value, invariant failure, or invalid ordering only after the cardinality and transport gates pass.
+7. Read the raw NDJSON lines for that causal interval.
+8. Cite probe ID, location, run, correlation, sequence, and selected data.
+9. Evaluate every hypothesis, including `NOT_REACHED` paths.
 
 Do not paste the entire NDJSON file into chat when a compact summary and targeted lines suffice.
 
@@ -414,20 +417,24 @@ Dashboard state must not block logging, reproduction, analysis, or cleanup and m
 
 The collector binds to `127.0.0.1` by default.
 
-- Browser instrumentation may post directly to `/ingest`; the collector supplies ingest CORS headers.
+- Browser instrumentation must enqueue through the single shared acknowledged transport and its `/ingest/batch` wire frames; it must never post directly to `/ingest`. The collector supplies CORS headers for the transport's ingest requests.
 - Mutating operator APIs require the session-scoped `X-Debug-Dashboard-Token`.
 - Browser operator calls must be same-origin.
 - The lifecycle CLI reads the token from the ready file.
 - Do not expose the collector publicly or log its token into product telemetry.
-- Do not create a project-local proxy unless direct browser-to-collector delivery is proven impossible.
+- Do not create a project-local proxy unless shared-transport delivery from the browser to the collector is proven impossible.
 
 ## Reproduction handoff
 
 Apply the reproduction-run rules in `SKILL.md`; the steps below implement the default user-handoff path. Requesting the user to operate their own browser or application is a manual handoff, not agent-operated browser automation, and does not justify disabling dashboard auto-open.
 
-For user-owned reproduction, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; and observer, volume, and privacy controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
+For user-owned reproduction, use the canonical Markdown template and pre-send checks in `SKILL.md`. Its rendered blocks must remain distinct: the dashboard opening paragraph, `### Failure contract`, `### Coverage`, `### Residual ambiguities`, and the final `### Reproduction` ordered list. Preserve the required coverage content: hypothesis families and mapped coverage; probe and shared-probe counts; causal-boundary coverage; the one-event-per-occurrence policy; the shared acknowledged transport and checkpoint; and payload, privacy, and perturbation controls. Never pack these sections into one soft-line-break paragraph, a table, or a code block.
+
+Before sending that handoff, inspect every active probe and emitter. Require browser and repeating producers to call the one shared transport once per occurrence, require exactly one active producer per stable producer key, require its source-occurrence/enqueue/persistence counters to be observable for the planned checkpoint, and require `/ingest` to be absent from those paths. If the Network panel already shows multiple simultaneous `/ingest` rows in `Pending` state, fail the instrumentation gate and repair the emitter before asking for reproduction; do not describe the collector as ready. A one-shot non-browser `/ingest` producer is valid only under the awaited `persistedEvents: 1` and `discardedEvents: 0` contract above.
 
 For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff. Its line must include the independent recording value `live`, `frozen`, or `unknown`. If it reports frozen, run `debug_session.py resume-recording --ready-file <READY_FILE>`, rerun `dashboard-status`, and require live before reproduction; session `resume` does not change this state. If recording remains unknown, refresh authoritative state and surface the exact error rather than inventing live status. For a newly established browser-capable local session that reports `disabled`, run `debug_session.py open-dashboard --ready-file <READY_FILE>`, refresh `dashboard-status`, and then copy its refreshed `line` verbatim as the opening paragraph. After a successful ledger-based resume, preserve the existing dashboard, do not call `open-dashboard`, and copy the refreshed status line and exact URL. Surface the exact URL and error if bounded startup recovery fails; do not block the reproduction. When commands are prohibited, derive the same line and recovery decision from the supplied authoritative state. For a host-provided session, use its authoritative state and the same display values where possible; do not invent a URL, confirmation status, or recording mode. Never collapse this handoff to reproduction steps alone.
+
+Define the final reproduction step as the exact observation checkpoint that snapshots source occurrence count and shared-transport enqueue/acknowledgement status. After the completion signal, compare those counts with persisted NDJSON records before interpreting the bug. Report the run as incomplete when the counts differ, an acknowledgement is missing, a producer was duplicated, or any event was rejected, abandoned, discarded, or involved in a registry conflict. After producers and wrappers are detached, call `flushAndStop()` before replacing or removing the browser transport; never use forced `stop()` as normal teardown. Whether the terminal drain succeeds or fails, later acquisition uses a fresh `runId`; the registry retains the terminal run audit and rejects attempts to reopen it. A user-triggered Freeze remains valid operator control, but any resulting discard prevents that run from serving as successful evidence; Resume and reproduce under a fresh run interval and `runId`.
 
 Make the reproduction request the final visible section and stop. Use the host's real completion action when available; otherwise ask for a short reply such as `done`. For a validated agent-autonomous plan, execute the reproduction directly after the runtime gate instead of asking the user. Agent experiments outside that plan are supporting evidence only and do not satisfy the failing-run gate.
 
