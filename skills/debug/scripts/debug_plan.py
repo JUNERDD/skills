@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 
@@ -40,11 +40,90 @@ COVERAGE_GATES = {
     "privacyReviewed",
     "transportChecked",
     "correlationChecked",
+    "eventCardinalityReviewed",
 }
+TOP_LEVEL_FIELDS = {
+    "failureContract",
+    "excludedCauseFamilies",
+    "run",
+    "boundaries",
+    "hypotheses",
+    "probes",
+    "coverage",
+}
+FAILURE_CONTRACT_FIELDS = {
+    "expected",
+    "observed",
+    "trigger",
+    "scope",
+    "frequency",
+    "timing",
+    "lastKnownGood",
+    "reproductionCost",
+    "constraints",
+}
+EXCLUDED_CAUSE_FAMILY_FIELDS = {"family", "reason"}
+RUN_FIELDS = {
+    "runId",
+    "reproductionOwner",
+    "reproductionDelegation",
+    "steps",
+    "completion",
+}
+REPRODUCTION_DELEGATION_FIELDS = {
+    "target",
+    "scope",
+    "effectiveRunId",
+    "currentUserDirective",
+}
+COMPLETION_FIELDS = {"mode", "condition"}
+BOUNDARY_FIELDS = {"id", "invariant"}
+HYPOTHESIS_FIELDS = {
+    "id",
+    "mechanism",
+    "boundaryIds",
+    "confirmedBy",
+    "rejectedBy",
+    "status",
+}
+COVERAGE_FIELDS = COVERAGE_GATES | {"residualAmbiguities"}
+PROBE_FIELDS = {
+    "probeId",
+    "location",
+    "event",
+    "role",
+    "boundaryIds",
+    "hypothesisIds",
+    "expectedOccurrence",
+    "eventPolicy",
+    "dataFields",
+    "redactions",
+}
+EVENT_POLICY_FIELDS = {"mode", "payloadControl"}
+PAYLOAD_CONTROL_FIELDS = {"maxEventBytes", "fieldBounds", "overflowPolicy"}
+FIELD_BOUND_FIELDS = {"maxBytes", "maxItems", "maxDepth"}
 
 
 def _nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def _positive_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _reject_unknown_fields(
+    validator: _Validator,
+    value: dict[str, Any],
+    allowed_fields: set[str],
+    path: str,
+) -> None:
+    unexpected_fields = sorted(set(value) - allowed_fields)
+    if unexpected_fields:
+        validator.error(
+            path,
+            "contains unsupported fields: " + ", ".join(unexpected_fields),
+        )
 
 
 def _valid_source_location(value: str) -> bool:
@@ -197,7 +276,15 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         validator.error("plan", "must be a JSON object")
         return _report(validator, {})
 
+    _reject_unknown_fields(validator, plan, TOP_LEVEL_FIELDS, "plan")
+
     failure_contract = validator.object_field(plan, "failureContract", "")
+    _reject_unknown_fields(
+        validator,
+        failure_contract,
+        FAILURE_CONTRACT_FIELDS,
+        "failureContract",
+    )
     for key in (
         "expected",
         "observed",
@@ -227,6 +314,12 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             if not isinstance(exclusion, dict):
                 validator.error(path, "must be an object")
                 continue
+            _reject_unknown_fields(
+                validator,
+                exclusion,
+                EXCLUDED_CAUSE_FAMILY_FIELDS,
+                path,
+            )
             family = validator.string_field(exclusion, "family", path)
             validator.string_field(exclusion, "reason", path)
             if family in seen_families:
@@ -237,6 +330,7 @@ def validate_plan(plan: Any) -> dict[str, Any]:
                 excluded_cause_family_count += 1
 
     run = validator.object_field(plan, "run", "")
+    _reject_unknown_fields(validator, run, RUN_FIELDS, "run")
     run_id = validator.string_field(run, "runId", "run")
     owner = validator.string_field(run, "reproductionOwner", "run")
     if owner and owner not in {"agent", "user", "external"}:
@@ -255,6 +349,12 @@ def validate_plan(plan: Any) -> dict[str, Any]:
                 "must be an object recording the current user's explicit delegation for non-user ownership",
             )
         else:
+            _reject_unknown_fields(
+                validator,
+                raw_delegation,
+                REPRODUCTION_DELEGATION_FIELDS,
+                "run.reproductionDelegation",
+            )
             target = validator.string_field(
                 raw_delegation, "target", "run.reproductionDelegation"
             )
@@ -291,6 +391,12 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         if not isinstance(raw_completion, dict):
             validator.error("run.completion", "must be an object")
         else:
+            _reject_unknown_fields(
+                validator,
+                raw_completion,
+                COMPLETION_FIELDS,
+                "run.completion",
+            )
             completion_mode = validator.string_field(raw_completion, "mode", "run.completion")
             if completion_mode and completion_mode not in COMPLETION_MODES:
                 validator.error(
@@ -309,11 +415,13 @@ def validate_plan(plan: Any) -> dict[str, Any]:
 
     for _, (index, boundary) in boundaries.items():
         path = f"boundaries[{index}]"
+        _reject_unknown_fields(validator, boundary, BOUNDARY_FIELDS, path)
         validator.string_field(boundary, "invariant", path)
 
     hypothesis_boundary_refs: dict[str, list[str]] = {}
     for hypothesis_id, (index, hypothesis) in hypotheses.items():
         path = f"hypotheses[{index}]"
+        _reject_unknown_fields(validator, hypothesis, HYPOTHESIS_FIELDS, path)
         mechanism = validator.string_field(hypothesis, "mechanism", path)
         if mechanism and _generic_mechanism(mechanism):
             validator.error(f"{path}.mechanism", "must name a concrete, falsifiable mechanism")
@@ -335,6 +443,25 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     probe_roles: dict[str, str] = {}
     for probe_id, (index, probe) in probes.items():
         path = f"probes[{index}]"
+        unexpected_probe_fields = sorted(
+            set(probe) - PROBE_FIELDS - {"expectedEvents", "volumeControl"}
+        )
+        if unexpected_probe_fields:
+            validator.error(
+                path,
+                "contains unsupported fields: " + ", ".join(unexpected_probe_fields),
+            )
+        if "expectedEvents" in probe:
+            validator.error(
+                f"{path}.expectedEvents",
+                "legacy free-text occurrence policy is forbidden; use "
+                "expectedOccurrence: 'every-execution'",
+            )
+        if "volumeControl" in probe:
+            validator.error(
+                f"{path}.volumeControl",
+                "legacy event filtering is forbidden; remove this field",
+            )
         location = validator.string_field(probe, "location", path)
         if location and not _valid_source_location(location):
             validator.error(
@@ -358,15 +485,112 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             path,
             allow_empty=role in SENTINEL_ROLES,
         )
-        validator.string_list_field(probe, "expectedEvents", path, allow_empty=False)
-        volume_control = probe.get("volumeControl")
-        if not (
-            _nonempty_string(volume_control)
-            or isinstance(volume_control, dict) and bool(volume_control)
-        ):
-            validator.error(f"{path}.volumeControl", "must be a non-empty string or object")
-        validator.string_list_field(probe, "dataFields", path, allow_empty=False)
+        expected_occurrence = validator.string_field(
+            probe, "expectedOccurrence", path
+        )
+        if expected_occurrence and expected_occurrence != "every-execution":
+            validator.error(
+                f"{path}.expectedOccurrence",
+                "must be 'every-execution'; every source execution must emit one event",
+            )
+        data_fields = validator.string_list_field(
+            probe, "dataFields", path, allow_empty=False
+        )
         validator.string_list_field(probe, "redactions", path, allow_empty=True)
+
+        event_policy = probe.get("eventPolicy")
+        if not isinstance(event_policy, dict):
+            validator.error(f"{path}.eventPolicy", "must be an object")
+        else:
+            unexpected_fields = sorted(set(event_policy) - EVENT_POLICY_FIELDS)
+            if unexpected_fields:
+                validator.error(
+                    f"{path}.eventPolicy",
+                    "must contain only: mode, payloadControl "
+                    f"(unexpected: {', '.join(unexpected_fields)})",
+                )
+            event_mode = validator.string_field(
+                event_policy,
+                "mode",
+                f"{path}.eventPolicy",
+            )
+            if event_mode and event_mode != "all-occurrences":
+                validator.error(
+                    f"{path}.eventPolicy.mode",
+                    "must be 'all-occurrences'; active probe occurrences cannot be filtered",
+                )
+            payload_control = event_policy.get("payloadControl")
+            payload_path = f"{path}.eventPolicy.payloadControl"
+            if not isinstance(payload_control, dict):
+                validator.error(payload_path, "must be an object")
+            else:
+                unexpected_payload_fields = sorted(
+                    set(payload_control) - PAYLOAD_CONTROL_FIELDS
+                )
+                if unexpected_payload_fields:
+                    validator.error(
+                        payload_path,
+                        "must contain only: fieldBounds, maxEventBytes, overflowPolicy "
+                        f"(unexpected: {', '.join(unexpected_payload_fields)})",
+                    )
+
+                max_event_bytes = payload_control.get("maxEventBytes")
+                if not _positive_integer(max_event_bytes):
+                    validator.error(
+                        f"{payload_path}.maxEventBytes",
+                        "must be a positive integer",
+                    )
+
+                field_bounds = payload_control.get("fieldBounds")
+                if not isinstance(field_bounds, dict):
+                    validator.error(f"{payload_path}.fieldBounds", "must be an object")
+                else:
+                    data_field_set = set(data_fields)
+                    for field_name, field_bound in field_bounds.items():
+                        field_path = f"{payload_path}.fieldBounds[{field_name!r}]"
+                        if not _nonempty_string(field_name):
+                            validator.error(field_path, "field name must be non-empty")
+                        elif field_name not in data_field_set:
+                            validator.error(
+                                field_path,
+                                f"must name a field listed in {path}.dataFields",
+                            )
+
+                        if not isinstance(field_bound, dict):
+                            validator.error(field_path, "must be an object")
+                            continue
+                        unexpected_bound_fields = sorted(
+                            set(field_bound) - FIELD_BOUND_FIELDS
+                        )
+                        if unexpected_bound_fields:
+                            validator.error(
+                                field_path,
+                                "must contain only: maxBytes, maxDepth, maxItems "
+                                f"(unexpected: {', '.join(unexpected_bound_fields)})",
+                            )
+                        recognized_bounds = set(field_bound) & FIELD_BOUND_FIELDS
+                        if not recognized_bounds:
+                            validator.error(
+                                field_path,
+                                "must contain at least one of: maxBytes, maxDepth, maxItems",
+                            )
+                        for bound_name in sorted(recognized_bounds):
+                            if not _positive_integer(field_bound[bound_name]):
+                                validator.error(
+                                    f"{field_path}.{bound_name}",
+                                    "must be a positive integer",
+                                )
+
+                overflow_policy = validator.string_field(
+                    payload_control,
+                    "overflowPolicy",
+                    payload_path,
+                )
+                if overflow_policy and overflow_policy != "reject-run":
+                    validator.error(
+                        f"{payload_path}.overflowPolicy",
+                        "must be 'reject-run'; overflow cannot drop or reshape occurrences",
+                    )
 
     boundary_ids = set(boundaries)
     hypothesis_ids = set(hypotheses)
@@ -432,6 +656,7 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         validator.error("probes", "must include at least one flow-terminal sentinel")
 
     coverage = validator.object_field(plan, "coverage", "")
+    _reject_unknown_fields(validator, coverage, COVERAGE_FIELDS, "coverage")
     for gate in sorted(COVERAGE_GATES):
         if coverage.get(gate) is not True:
             validator.error(f"coverage.{gate}", "must be true before reproduction")
