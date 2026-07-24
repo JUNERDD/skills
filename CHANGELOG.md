@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.8] - 2026-07-24
+
+### Changed
+
+- Reframed multitask-coordinator around hierarchical task and decision ownership, recursive subplanners, and owned ephemeral shared memory, with updated scheduler-audit guidance and catalog copy.
+- Hardened debug browser capture with a realm-registry-owned transport, conflict-on-active HMR producer leases, all-occurrence event cardinality, and audited run terminalization.
+- Added validate_browser_instrumentation.py plus regression tests to require one canonical transport binding and reject direct ingest, keepalive, shadow-sink, and occurrence-filter patterns.
+- Tightened coverage-plan contracts around all-occurrences/every-execution cardinality and payload-only cost bounds, and synced README plus website catalog copy for debug and multitask-coordinator.
+
 ## [0.2.7-beta2] - 2026-07-21
 
 ### Changed
