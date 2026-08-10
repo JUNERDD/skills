@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from collections import Counter
-import hashlib
 import json
 import os
 import secrets
@@ -53,7 +52,7 @@ from collector_state import (
 
 INGEST_CORS_ALLOW_HEADERS = 'Content-Type, X-Debug-Session-Id'
 INGEST_CORS_ALLOW_METHODS = 'POST, OPTIONS'
-INGEST_PATHS = {'/ingest', '/ingest/batch'}
+INGEST_PATH = '/ingest'
 MAX_JSON_BODY_BYTES = 4 * 1024 * 1024
 DASHBOARD_TOKEN_HEADER = 'X-Debug-Dashboard-Token'
 SENSITIVE_POST_PATHS = {
@@ -68,40 +67,6 @@ SENSITIVE_POST_PATHS = {
     '/api/shutdown',
 }
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
-_TransportBatchIdentity = tuple[int, str]
-
-
-class _TransportBatchIdentityConflict(Exception):
-    """Raised when one batch ID is reused for a different logical frame."""
-
-    def __init__(
-        self,
-        batch_id: str,
-        expected: _TransportBatchIdentity | None,
-        received: _TransportBatchIdentity,
-    ) -> None:
-        super().__init__(f'transport_batch_id_conflict:{batch_id}')
-        self.batch_id = batch_id
-        self.expected = expected
-        self.received = received
-
-
-def _build_transport_batch_identity(
-    events: list[dict[str, Any]],
-    batch_id: str,
-) -> _TransportBatchIdentity:
-    """Bind a batch ID to canonical events with its collector-owned ID field."""
-
-    authoritative_events = [dict(event) for event in events]
-    for event in authoritative_events:
-        event['transportBatchId'] = batch_id
-    canonical_events = json.dumps(
-        authoritative_events,
-        ensure_ascii=True,
-        separators=(',', ':'),
-        sort_keys=True,
-    ).encode('utf-8')
-    return len(events), hashlib.sha256(canonical_events).hexdigest()
 
 
 class CollectorServer(ThreadingHTTPServer):
@@ -150,45 +115,18 @@ class CollectorServer(ThreadingHTTPServer):
         self.entries: list[dict[str, Any]] = []
         self.run_counts = Counter()
         self.hypothesis_counts = Counter()
-        self.probe_counts = Counter()
-        self.correlation_counts = Counter()
-        self.event_counts = Counter()
-        self.location_counts = Counter()
         self.location_records: dict[str, dict[str, Any]] = {}
         self.tracked_location_records: dict[str, dict[str, Any]] = {}
         self.invalid_lines = 0
-        self.last_event: dict[str, Any] | None = None
         self.file_size_bytes = 0
         self.file_updated_at: int | None = None
-        self.location_state_updated_at: int | None = None
         self.physical_line_count = 0
         self.indexed_file_offset = 0
-        self.ingest_request_count = 0
-        self.ingest_accepted_event_count = 0
-        self.ingest_accepted_bytes = 0
-        self.ingest_last_accepted_at: int | None = None
-        self.ingest_frozen_discarded_request_count = 0
-        self.ingest_frozen_discarded_event_count = 0
-        self.ingest_frozen_discarded_bytes = 0
-        self.ingest_frozen_last_discarded_at: int | None = None
-        self.ingest_stale_discarded_request_count = 0
-        self.ingest_stale_discarded_event_count = 0
-        self.ingest_stale_discarded_bytes = 0
-        self.ingest_stale_last_discarded_at: int | None = None
         self.index_last_completed_at: int | None = None
         self.index_error_count = 0
         self.index_last_error = ''
         self.recording_frozen = False
-        self.recording_generation = 0
-        self.recording_frozen_at: int | None = None
-        self.recording_resumed_at: int | None = None
-        self.seen_transport_batch_ids: set[str] = set()
-        # Terminal outcomes survive Clear for the process lifetime so a lost
-        # acknowledgement cannot replay a resolved batch after Resume.
-        self.transport_batch_outcomes: dict[str, str] = {}
-        # The matching frame identities also survive Clear. A batch ID can
-        # confirm only the exact event array that originally resolved it.
-        self.transport_batch_identities: dict[str, _TransportBatchIdentity] = {}
+        self._recording_gate_token = object()
         self._index_wake_event = threading.Event()
         self._index_stop_event = threading.Event()
         self._index_thread: threading.Thread | None = None
@@ -266,11 +204,7 @@ class CollectorServer(ThreadingHTTPServer):
 
     @property
     def endpoint_url(self) -> str:
-        return f'{self.base_url}/ingest'
-
-    @property
-    def batch_endpoint_url(self) -> str:
-        return f'{self.base_url}/ingest/batch'
+        return f'{self.base_url}{INGEST_PATH}'
 
     @property
     def dashboard_url(self) -> str:
@@ -371,13 +305,8 @@ class CollectorServer(ThreadingHTTPServer):
         changed = False
         with self.ingest_lock:
             if self.recording_frozen != frozen:
-                changed_at = int(time.time() * 1000)
                 self.recording_frozen = frozen
-                self.recording_generation += 1
-                if frozen:
-                    self.recording_frozen_at = changed_at
-                else:
-                    self.recording_resumed_at = changed_at
+                self._recording_gate_token = object()
                 changed = True
         if changed:
             self.write_ready_file()
@@ -447,9 +376,11 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path != INGEST_PATH:
+            self._json_response(HTTPStatus.NOT_FOUND, {'ok': False, 'error': 'not_found'})
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
-        if path in INGEST_PATHS:
-            self._send_ingest_cors_headers()
+        self._send_ingest_cors_headers()
         self.send_header('Content-Length', '0')
         self.end_headers()
 
@@ -505,11 +436,9 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path == '/ingest':
-            self._handle_ingest()
-            return
-        if path == '/ingest/batch':
-            self._handle_ingest_batch()
+        if path == INGEST_PATH:
+            admission_token = self.server._recording_gate_token
+            self._handle_ingest(admission_token)
             return
         if path in SENSITIVE_POST_PATHS and not self._require_dashboard_access():
             return
@@ -579,7 +508,7 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         self.close_connection = True
         self._json_response(HTTPStatus.NOT_FOUND, {'ok': False, 'error': 'not_found'})
 
-    def _handle_ingest(self) -> None:
+    def _handle_ingest(self, admission_token: object) -> None:
         payload = self._read_json_body()
         if payload is None:
             self._json_response(
@@ -597,123 +526,68 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        event = self._prepare_ingest_event(payload)
-        # Clear and Freeze must observe this append only after its persistence
-        # acknowledgement has been written and flushed to the client socket.
-        with self.server.ingest_lock:
-            persisted_bytes, _, disposition = self._append_ingest_events_locked([event])
-            discarded = disposition != 'persisted'
-            self._json_response(
-                HTTPStatus.ACCEPTED,
-                {
-                    'ok': True,
-                    'accepted': 1,
-                    'persistedBytes': persisted_bytes,
-                    'persistedEvents': 0 if discarded else 1,
-                    'discardedEvents': 1 if discarded else 0,
-                    'discardedByFreeze': disposition == 'discarded_frozen',
-                    'discardedByClear': disposition == 'discarded_cleared',
-                    'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
-                    'disposition': disposition,
-                    'recordingFrozen': self.server.recording_frozen,
-                    'recordingGeneration': self.server.recording_generation,
-                },
-                cors_mode='ingest',
-            )
-        if disposition == 'persisted':
-            self.server.wake_indexer()
-
-    def _handle_ingest_batch(self) -> None:
-        payload = self._read_json_body()
-        if payload is None:
-            self._json_response(
-                HTTPStatus.BAD_REQUEST,
-                {'ok': False, 'error': 'invalid_json'},
-                cors_mode='ingest',
-            )
-            return
-
-        raw_events = payload.get('events') if isinstance(payload, dict) else payload
-        raw_batch_id = payload.get('batchId') if isinstance(payload, dict) else None
-        batch_id = raw_batch_id.strip() if isinstance(raw_batch_id, str) else ''
-        if not isinstance(raw_events, list):
-            self._json_response(
-                HTTPStatus.BAD_REQUEST,
-                {'ok': False, 'error': 'events_must_be_array'},
-                cors_mode='ingest',
-            )
-            return
-        if not raw_events:
-            self._json_response(
-                HTTPStatus.BAD_REQUEST,
-                {'ok': False, 'error': 'events_required'},
-                cors_mode='ingest',
-            )
-            return
-        if any(not isinstance(item, dict) for item in raw_events):
-            self._json_response(
-                HTTPStatus.BAD_REQUEST,
-                {'ok': False, 'error': 'event_must_be_object'},
-                cors_mode='ingest',
-            )
-            return
-
-        batch_identity = (
-            _build_transport_batch_identity(raw_events, batch_id)
-            if batch_id
-            else None
-        )
-        events = [self._prepare_ingest_event(item) for item in raw_events]
-        if batch_id:
-            for event in events:
-                event['transportBatchId'] = batch_id
-        # Keep the idempotent batch outcome stable through the acknowledgement;
-        # Clear may rewrite it only after this response write has completed.
-        with self.server.ingest_lock:
-            try:
-                persisted_bytes, duplicate_batch, disposition = (
-                    self._append_ingest_events_locked(
-                        events,
-                        batch_id=batch_id or None,
-                        batch_identity=batch_identity,
-                    )
-                )
-            except _TransportBatchIdentityConflict as conflict:
+        if set(payload) == {'events'}:
+            raw_events = payload['events']
+            if not isinstance(raw_events, list):
                 self._json_response(
-                    HTTPStatus.CONFLICT,
-                    {
-                        'ok': False,
-                        'error': 'transport_batch_id_conflict',
-                        'batchId': conflict.batch_id,
-                        'expectedEventCount': (
-                            conflict.expected[0] if conflict.expected is not None else None
-                        ),
-                        'receivedEventCount': conflict.received[0],
-                    },
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'events_must_be_array'},
                     cors_mode='ingest',
                 )
                 return
-            discarded = disposition != 'persisted'
-            self._json_response(
-                HTTPStatus.ACCEPTED,
-                {
-                    'ok': True,
-                    'accepted': len(events),
-                    'persistedBytes': persisted_bytes,
-                    'persistedEvents': 0 if duplicate_batch or discarded else len(events),
-                    'discardedEvents': len(events) if discarded else 0,
-                    'discardedByFreeze': disposition == 'discarded_frozen',
-                    'discardedByClear': disposition == 'discarded_cleared',
-                    'discardedByStaleGeneration': disposition == 'discarded_stale_generation',
-                    'disposition': disposition,
-                    'recordingFrozen': self.server.recording_frozen,
-                    'recordingGeneration': self.server.recording_generation,
-                    'duplicateBatch': duplicate_batch,
-                    'batchId': batch_id or None,
-                },
-                cors_mode='ingest',
+            if not raw_events:
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'events_required'},
+                    cors_mode='ingest',
+                )
+                return
+            if any(not isinstance(item, dict) for item in raw_events):
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {'ok': False, 'error': 'event_must_be_object'},
+                    cors_mode='ingest',
+                )
+                return
+        else:
+            raw_events = [payload]
+
+        events = [self._prepare_ingest_event(item) for item in raw_events]
+        # Clear and Freeze must observe this append only after its persistence
+        # acknowledgement has been written and flushed to the client socket.
+        with self.server.ingest_lock:
+            persisted_bytes, written, rejection = self._append_ingest_events_locked(
+                events,
+                admission_token=admission_token,
             )
-        if disposition == 'persisted' and not duplicate_batch:
+            if not written:
+                self._json_response(
+                    HTTPStatus.LOCKED,
+                    {
+                        'ok': False,
+                        'error': rejection,
+                        'accepted': 0,
+                        'written': 0,
+                        'persistedBytes': 0,
+                        'persistedEvents': 0,
+                        'recordingFrozen': self.server.recording_frozen,
+                    },
+                    cors_mode='ingest',
+                )
+            else:
+                self._json_response(
+                    HTTPStatus.ACCEPTED,
+                    {
+                        'ok': True,
+                        'accepted': len(events),
+                        'written': len(events),
+                        'persistedBytes': persisted_bytes,
+                        'persistedEvents': len(events),
+                        'recordingFrozen': False,
+                    },
+                    cors_mode='ingest',
+                )
+        if written:
             self.server.wake_indexer()
 
     def _prepare_ingest_event(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -731,84 +605,26 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
         self,
         events: list[dict[str, Any]],
         *,
-        batch_id: str | None = None,
-        batch_identity: _TransportBatchIdentity | None = None,
-    ) -> tuple[int, bool, str]:
-        """Append one frame while the caller owns the ingest linearization lock."""
+        admission_token: object,
+    ) -> tuple[int, bool, str | None]:
+        """Append one request while the caller owns the ingest linearization lock."""
 
+        if self.server.recording_frozen:
+            return 0, False, 'recording_frozen'
+        if admission_token is not self.server._recording_gate_token:
+            return 0, False, 'recording_state_changed'
         encoded_events = [
             f"{json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n".encode('utf-8')
             for event in events
         ]
         encoded_blob = b''.join(encoded_events)
         accepted_at = int(time.time() * 1000)
-        if batch_id:
-            if batch_identity is None:
-                raise ValueError('batch_identity_required')
-            known_batch = (
-                batch_id in self.server.transport_batch_outcomes
-                or batch_id in self.server.seen_transport_batch_ids
-                or batch_id in self.server.transport_batch_identities
-            )
-            expected_identity = self.server.transport_batch_identities.get(batch_id)
-            if known_batch and expected_identity != batch_identity:
-                raise _TransportBatchIdentityConflict(
-                    batch_id,
-                    expected_identity,
-                    batch_identity,
-                )
-            if batch_id in self.server.transport_batch_outcomes:
-                return 0, True, self.server.transport_batch_outcomes[batch_id]
-            if batch_id in self.server.seen_transport_batch_ids:
-                return 0, True, 'persisted'
-
-        raw_generations = [event.get('recordingGeneration') for event in events]
-        tagged_generations = [value for value in raw_generations if value is not None]
-        valid_generation = (
-            len(tagged_generations) == len(events)
-            and all(isinstance(value, int) and not isinstance(value, bool) for value in tagged_generations)
-            and len(set(tagged_generations)) == 1
-        )
-        stale_generation = bool(tagged_generations) and (
-            not valid_generation
-            or tagged_generations[0] != self.server.recording_generation
-        )
-
-        if self.server.recording_frozen or stale_generation:
-            disposition = (
-                'discarded_frozen'
-                if self.server.recording_frozen
-                else 'discarded_stale_generation'
-            )
-            if batch_id:
-                self.server.seen_transport_batch_ids.add(batch_id)
-                self.server.transport_batch_identities[batch_id] = batch_identity
-                self.server.transport_batch_outcomes[batch_id] = disposition
-            if self.server.recording_frozen:
-                self.server.ingest_frozen_discarded_request_count += 1
-                self.server.ingest_frozen_discarded_event_count += len(events)
-                self.server.ingest_frozen_discarded_bytes += len(encoded_blob)
-                self.server.ingest_frozen_last_discarded_at = accepted_at
-            else:
-                self.server.ingest_stale_discarded_request_count += 1
-                self.server.ingest_stale_discarded_event_count += len(events)
-                self.server.ingest_stale_discarded_bytes += len(encoded_blob)
-                self.server.ingest_stale_last_discarded_at = accepted_at
-            return 0, False, disposition
         with self.server.log_file.open('ab') as file:
             file.write(encoded_blob)
             file.flush()
             self.server.file_size_bytes = file.tell()
-        if batch_id:
-            self.server.seen_transport_batch_ids.add(batch_id)
-            self.server.transport_batch_identities[batch_id] = batch_identity
-            self.server.transport_batch_outcomes[batch_id] = 'persisted'
         self.server.file_updated_at = accepted_at
-        self.server.ingest_request_count += 1
-        self.server.ingest_accepted_event_count += len(events)
-        self.server.ingest_accepted_bytes += len(encoded_blob)
-        self.server.ingest_last_accepted_at = accepted_at
-        return len(encoded_blob), False, 'persisted'
+        return len(encoded_blob), True, None
 
     def _handle_config_update(self) -> None:
         payload = self._read_json_body()
@@ -1087,9 +903,8 @@ class CollectorRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            # An ingest frame may already be appended even when the
-            # client times out before reading the acknowledgement. A retry with
-            # the same batchId is idempotent.
+            # The request may already be appended even when the client times out
+            # before reading the acknowledgement. Retrying can append it again.
             pass
 
     def _send_ingest_cors_headers(self) -> None:

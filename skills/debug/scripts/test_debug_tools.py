@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+import urllib.error
 import urllib.request
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -38,15 +39,28 @@ class DebugToolTests(unittest.TestCase):
             self.assertTrue(payload.get("ok", True), msg=payload)
         return result, payload
 
-    def _post_event(self, endpoint: str, payload: dict) -> None:
+    def _post_event(
+        self,
+        endpoint: str,
+        payload: dict,
+        *,
+        expected_status: int = 202,
+    ) -> dict:
         request = urllib.request.Request(
             endpoint,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            self.assertEqual(response.status, 202)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                status = response.status
+                body = response.read()
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            body = exc.read()
+        self.assertEqual(status, expected_status)
+        return json.loads(body.decode("utf-8") or "{}")
 
     def _create_stop_fixture(
         self,
@@ -612,7 +626,6 @@ class DebugToolTests(unittest.TestCase):
                     "dashboardAutoOpenEnabled": True,
                     "dashboardFrontendOpenRecorded": True,
                     "recordingFrozen": False,
-                    "recordingGeneration": 0,
                 },
                 "frontend_confirmed",
                 "Dashboard: frontend_confirmed — http://127.0.0.1:43125/ "
@@ -635,7 +648,6 @@ class DebugToolTests(unittest.TestCase):
                     "dashboardAutoOpenEnabled": True,
                     "dashboardFrontendOpenRecorded": False,
                     "recordingFrozen": True,
-                    "recordingGeneration": 3,
                     "dashboardOpenError": "browser\nopen failed",
                 },
                 "frontend_not_confirmed",
@@ -677,7 +689,6 @@ class DebugToolTests(unittest.TestCase):
             "dashboardAutoOpenEnabled": True,
             "dashboardFrontendOpenRecorded": True,
             "recordingFrozen": True,
-            "recordingGeneration": 7,
         }
         args = mock.Mock(ready_file=str(ready_path), timeout=1.0)
 
@@ -695,7 +706,7 @@ class DebugToolTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "frontend_confirmed")
         self.assertEqual(result["recordingStatus"], "frozen")
-        self.assertEqual(result["recordingGeneration"], 7)
+        self.assertNotIn("recordingGeneration", result)
         self.assertIn("http://127.0.0.1:43125/", result["line"])
         self.assertIn("recording: frozen", result["line"])
         self.assertIn("temporary state failure", result["line"])
@@ -709,24 +720,21 @@ class DebugToolTests(unittest.TestCase):
         }
         args = mock.Mock(ready_file=str(ready_path), timeout=1.0)
 
-        for frozen, command, url, generation in (
+        for frozen, command, url in (
             (
                 True,
                 debug_session.command_freeze_recording,
                 ready_payload["freezeRecordingUrl"],
-                1,
             ),
             (
                 False,
                 debug_session.command_resume_recording,
                 ready_payload["resumeRecordingUrl"],
-                2,
             ),
         ):
             response = {
                 "service": {
                     "recordingFrozen": frozen,
-                    "recordingGeneration": generation,
                 }
             }
             with self.subTest(frozen=frozen):
@@ -752,7 +760,7 @@ class DebugToolTests(unittest.TestCase):
                 self.assertEqual(
                     result["recordingStatus"], "frozen" if frozen else "live"
                 )
-                self.assertEqual(result["recordingGeneration"], generation)
+                self.assertNotIn("recordingGeneration", result)
 
     def test_open_dashboard_skips_when_frontend_is_already_recorded(self) -> None:
         ready_path = Path("/tmp/debug-ready.json")
@@ -1044,7 +1052,8 @@ class DebugToolTests(unittest.TestCase):
                 self.assertTrue(ready_file.exists())
                 self.assertEqual(start_payload["lifecycleMode"], "local-cli")
                 self.assertEqual(start_payload["locationStateFlushMs"], 25)
-                self.assertTrue(start_payload["batchEndpoint"].endswith("/ingest/batch"))
+                self.assertTrue(start_payload["endpoint"].endswith("/ingest"))
+                self.assertNotIn("batchEndpoint", start_payload)
                 self.assertEqual(start_payload["dashboardRecovery"]["status"], "disabled")
                 self.assertEqual(
                     start_payload["dashboardRecovery"]["fallbackAttemptCount"],
@@ -1115,7 +1124,7 @@ class DebugToolTests(unittest.TestCase):
                 self.assertEqual(frozen_status["recordingStatus"], "frozen")
                 self.assertIn("recording: frozen", frozen_status["line"])
 
-                self._post_event(
+                frozen_ingest = self._post_event(
                     start_payload["endpoint"],
                     {
                         "sessionId": "integration",
@@ -1124,7 +1133,10 @@ class DebugToolTests(unittest.TestCase):
                         "event": "state_observed",
                         "timestamp": int(time.time() * 1000),
                     },
+                    expected_status=423,
                 )
+                self.assertEqual(frozen_ingest["written"], 0)
+                self.assertEqual(frozen_ingest["persistedEvents"], 0)
                 _, frozen_state = self._run_json(
                     str(DEBUG_SESSION),
                     "state",
@@ -1282,12 +1294,10 @@ class DebugToolTests(unittest.TestCase):
                 )
                 summary = state_payload["state"]["summary"]
                 self.assertEqual(summary["totalEntries"], 2)
-                self.assertEqual(summary["probeCounts"][0]["name"], "flow.end")
                 self.assertEqual(
                     {item["name"]: item["count"] for item in summary["hypothesisCounts"]},
                     {"H2": 2, "H1": 1},
                 )
-                self.assertEqual(summary["correlationCounts"], [{"name": "c1", "count": 2}])
 
                 result = subprocess.run(
                     [
@@ -1329,10 +1339,6 @@ class DebugToolTests(unittest.TestCase):
                     str(ready_file),
                 )
                 self.assertEqual(cleared_payload["state"]["summary"]["totalEntries"], 0)
-                self.assertEqual(
-                    cleared_payload["state"]["summary"]["trackedLocationCount"],
-                    3,
-                )
 
                 artifacts = [Path(path) for path in start_payload["ownedArtifacts"]]
                 self._run_json(
@@ -1397,40 +1403,65 @@ class DebugToolTests(unittest.TestCase):
             self.assertEqual(summary["sequence"]["gapCount"], 0)
             self.assertEqual(summary["sequence"]["regressionOrDuplicateCount"], 0)
 
-    def test_summarizer_reports_transport_sequence_gaps_and_regressions(self) -> None:
+    def test_summarizer_sequence_continuity_uses_full_correlation_before_probe_filter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = Path(temp_dir) / "events.ndjson"
             events = [
                 {
                     "runId": "initial",
-                    "transportClientId": "client-a",
-                    "transportId": "event-1",
-                    "transportSequence": 1,
+                    "correlationId": "shared",
+                    "probeId": "selected",
+                    "sequence": 1,
                 },
                 {
                     "runId": "initial",
-                    "transportClientId": "client-b",
-                    "transportId": "event-b1",
-                    "transportSequence": 1,
+                    "correlationId": "shared",
+                    "probeId": "interior",
+                    "sequence": 2,
                 },
                 {
                     "runId": "initial",
-                    "transportClientId": "client-a",
-                    "transportId": "event-2",
-                    "transportSequence": 2,
+                    "correlationId": "shared",
+                    "probeId": "selected",
+                    "sequence": 3,
                 },
-                {
-                    "runId": "initial",
-                    "transportClientId": "client-a",
-                    "transportId": "event-4",
-                    "transportSequence": 4,
-                },
-                {
-                    "runId": "initial",
-                    "transportClientId": "client-a",
-                    "transportId": "event-4-retry",
-                    "transportSequence": 4,
-                },
+            ]
+            log_file.write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+
+            _, summary = self._run_json(
+                str(SUMMARIZER),
+                str(log_file),
+                "--format",
+                "json",
+                "--run-id",
+                "initial",
+                "--correlation-id",
+                "shared",
+                "--probe-id",
+                "selected",
+            )
+
+            self.assertEqual(summary["stats"]["matchedEvents"], 2)
+            self.assertEqual(
+                summary["sequence"]["scopeFilters"],
+                {"runId": "initial", "correlationId": "shared"},
+            )
+            self.assertEqual(summary["sequence"]["eventsWithSequence"], 3)
+            self.assertEqual(summary["sequence"]["unscopedSequenceEventCount"], 0)
+            self.assertEqual(summary["sequence"]["scopesWithSequence"], 1)
+            self.assertEqual(summary["sequence"]["gapCount"], 0)
+            self.assertEqual(summary["sequence"]["regressionOrDuplicateCount"], 0)
+
+    def test_summarizer_reports_sequence_events_without_a_complete_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_file = Path(temp_dir) / "events.ndjson"
+            events = [
+                {"runId": "initial", "sequence": 1},
+                {"correlationId": "shared", "sequence": 1},
+                {"runId": "initial", "correlationId": "shared", "sequence": 1},
             ]
             log_file.write_text(
                 "".join(json.dumps(event) + "\n" for event in events),
@@ -1441,14 +1472,10 @@ class DebugToolTests(unittest.TestCase):
                 str(SUMMARIZER), str(log_file), "--format", "json"
             )
 
-            continuity = summary["transportContinuity"]
-            self.assertEqual(continuity["scope"], "full-log")
-            self.assertEqual(continuity["eventsWithTransportSequence"], 5)
-            self.assertEqual(continuity["clientsWithTransportSequence"], 2)
-            self.assertEqual(continuity["gapCount"], 1)
-            self.assertEqual(continuity["gaps"][0]["missingStart"], 3)
-            self.assertEqual(continuity["gaps"][0]["missingEnd"], 3)
-            self.assertEqual(continuity["regressionOrDuplicateSequenceCount"], 1)
+            self.assertEqual(summary["sequence"]["eventsWithSequence"], 3)
+            self.assertEqual(summary["sequence"]["unscopedSequenceEventCount"], 2)
+            self.assertEqual(summary["sequence"]["scopesWithSequence"], 1)
+            self.assertEqual(summary["sequence"]["gapCount"], 0)
 
     def test_summarizer_expected_probes_prefers_coverage_plan_probes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -411,25 +411,6 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         body = response.read()
         return response, json.loads(body.decode('utf-8') or '{}')
 
-    def _assert_transport_batch_conflict(
-        self,
-        status: int,
-        payload: dict[str, object],
-        *,
-        batch_id: str,
-        expected_events: int | None,
-        received_events: int,
-    ) -> None:
-        self.assertEqual(status, 409)
-        self.assertFalse(payload['ok'])
-        self.assertEqual(payload['error'], 'transport_batch_id_conflict')
-        self.assertEqual(payload['batchId'], batch_id)
-        self.assertEqual(payload['expectedEventCount'], expected_events)
-        self.assertEqual(payload['receivedEventCount'], received_events)
-        self.assertNotIn('accepted', payload)
-        self.assertNotIn('duplicateBatch', payload)
-        self.assertNotIn('persistedEvents', payload)
-
     def test_clear_body_does_not_corrupt_next_request_on_persistent_connection(self) -> None:
         connection = http.client.HTTPConnection(
             '127.0.0.1',
@@ -510,6 +491,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(initial_status, 202)
         self.assertEqual(initial_payload['persistedEvents'], 1)
+        self.assertEqual(initial_payload['written'], 1)
 
         freeze_status, freeze_payload = self._request_json(
             'POST',
@@ -520,45 +502,41 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(freeze_status, 200)
         self.assertEqual(freeze_payload['status'], 'frozen')
         self.assertTrue(freeze_payload['service']['recordingFrozen'])
-        self.assertTrue(freeze_payload['service']['recordingFrozenAt'])
 
         single_status, single_payload = self._request_json(
             'POST',
             '/ingest',
             payload={'probeId': 'frozen-single', 'event': 'must_not_persist'},
         )
-        self.assertEqual(single_status, 202)
-        self.assertEqual(single_payload['accepted'], 1)
+        self.assertEqual(single_status, 423)
+        self.assertFalse(single_payload['ok'])
+        self.assertEqual(single_payload['error'], 'recording_frozen')
+        self.assertEqual(single_payload['accepted'], 0)
+        self.assertEqual(single_payload['written'], 0)
         self.assertEqual(single_payload['persistedEvents'], 0)
-        self.assertEqual(single_payload['discardedEvents'], 1)
-        self.assertTrue(single_payload['discardedByFreeze'])
 
-        frozen_batch = {
-            'batchId': 'freeze-client:1:2',
+        frozen_envelope = {
             'events': [
-                {'probeId': 'frozen-batch', 'event': 'must_not_persist', 'sequence': 1},
-                {'probeId': 'frozen-batch', 'event': 'must_not_persist', 'sequence': 2},
+                {'probeId': 'frozen-envelope', 'event': 'must_not_persist', 'sequence': 1},
+                {'probeId': 'frozen-envelope', 'event': 'must_not_persist', 'sequence': 2},
             ],
         }
-        batch_status, batch_payload = self._request_json(
+        envelope_status, envelope_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload=frozen_batch,
+            '/ingest',
+            payload=frozen_envelope,
         )
-        self.assertEqual(batch_status, 202)
-        self.assertEqual(batch_payload['accepted'], 2)
-        self.assertEqual(batch_payload['persistedEvents'], 0)
-        self.assertEqual(batch_payload['discardedEvents'], 2)
-        self.assertTrue(batch_payload['discardedByFreeze'])
-        self.assertFalse(batch_payload['duplicateBatch'])
+        self.assertEqual(envelope_status, 423)
+        self.assertFalse(envelope_payload['ok'])
+        self.assertEqual(envelope_payload['accepted'], 0)
+        self.assertEqual(envelope_payload['written'], 0)
+        self.assertEqual(envelope_payload['persistedEvents'], 0)
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
 
         state_status, state_payload = self._request_json('GET', '/api/state')
         self.assertEqual(state_status, 200)
         self.assertEqual(state_payload['status'], 'frozen')
         self.assertEqual(state_payload['summary']['totalEntries'], 1)
-        self.assertEqual(state_payload['service']['ingestFrozenDiscardedRequestCount'], 2)
-        self.assertEqual(state_payload['service']['ingestFrozenDiscardedEventCount'], 3)
 
         health_status, health_payload = self._request_json('GET', '/health')
         self.assertEqual(health_status, 200)
@@ -575,7 +553,6 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(clear_payload['status'], 'frozen')
         self.assertTrue(clear_payload['service']['recordingFrozen'])
         self.assertEqual(clear_payload['summary']['totalEntries'], 0)
-        self.assertEqual(clear_payload['service']['ingestFrozenDiscardedEventCount'], 0)
         self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
         resume_status, resume_payload = self._request_json(
@@ -587,18 +564,17 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(resume_status, 200)
         self.assertEqual(resume_payload['status'], 'running')
         self.assertFalse(resume_payload['service']['recordingFrozen'])
-        self.assertTrue(resume_payload['service']['recordingResumedAt'])
 
         retry_status, retry_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload=frozen_batch,
+            '/ingest',
+            payload=frozen_envelope,
         )
         self.assertEqual(retry_status, 202)
-        self.assertTrue(retry_payload['duplicateBatch'])
-        self.assertTrue(retry_payload['discardedByFreeze'])
-        self.assertEqual(retry_payload['persistedEvents'], 0)
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        self.assertTrue(retry_payload['ok'])
+        self.assertEqual(retry_payload['written'], 2)
+        self.assertEqual(retry_payload['persistedEvents'], 2)
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
 
         resumed_status, resumed_payload = self._request_json(
             'POST',
@@ -607,8 +583,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(resumed_status, 202)
         self.assertEqual(resumed_payload['persistedEvents'], 1)
-        self.assertEqual(resumed_payload['discardedEvents'], 0)
-        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
+        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 3)
 
     def test_recording_controls_require_dashboard_access(self) -> None:
         for path in ('/api/recording/freeze', '/api/recording/resume'):
@@ -617,96 +592,75 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
                 self.assertEqual(status, 403)
                 self.assertEqual(payload['error'], 'dashboard_token_required')
 
-    def test_stale_recording_generation_is_discarded_after_resume(self) -> None:
-        dashboard_headers = {
-            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+    def test_dashboard_api_contract_survives_transport_simplification(self) -> None:
+        status, payload = self._request_json('GET', '/api/state')
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload['status'], 'running')
+        service = payload['service']
+        expected_urls = {
+            'dashboardUrl': self.server.dashboard_url,
+            'stateUrl': self.server.state_url,
+            'logsUrl': self.server.logs_url,
+            'logDetailUrl': self.server.log_detail_url,
+            'locationsUrl': self.server.locations_url,
+            'syncLocationsUrl': self.server.sync_locations_url,
+            'configUrl': self.server.config_url,
+            'dashboardFrontendOpenedUrl': self.server.dashboard_frontend_opened_url,
+            'dashboardFrontendOpenFailedUrl': self.server.dashboard_frontend_open_failed_url,
+            'openLocationUrl': self.server.open_location_url,
+            'clearUrl': self.server.clear_url,
+            'freezeRecordingUrl': self.server.freeze_recording_url,
+            'resumeRecordingUrl': self.server.resume_recording_url,
+            'shutdownUrl': self.server.shutdown_url,
         }
-        freeze_status, freeze_payload = self._request_json(
-            'POST',
-            '/api/recording/freeze',
-            payload={},
-            headers=dashboard_headers,
-        )
-        self.assertEqual(freeze_status, 200)
-        self.assertEqual(freeze_payload['service']['recordingGeneration'], 1)
+        for key, expected in expected_urls.items():
+            with self.subTest(key=key):
+                self.assertEqual(service[key], expected)
+        self.assertEqual(service['dashboardToken'], self.server.dashboard_token)
+        self.assertFalse(service['recordingFrozen'])
+        self.assertNotIn('recordingGeneration', service)
+        self.assertNotIn('transportBatchCount', service)
 
-        repeated_status, repeated_payload = self._request_json(
-            'POST',
-            '/api/recording/freeze',
-            payload={},
-            headers=dashboard_headers,
-        )
-        self.assertEqual(repeated_status, 200)
-        self.assertEqual(repeated_payload['service']['recordingGeneration'], 1)
-
-        resume_status, resume_payload = self._request_json(
-            'POST',
-            '/api/recording/resume',
-            payload={},
-            headers=dashboard_headers,
-        )
-        self.assertEqual(resume_status, 200)
-        current_generation = resume_payload['service']['recordingGeneration']
-        self.assertEqual(current_generation, 2)
-
-        stale_batch = {
-            'batchId': 'offline-client:1:1',
-            'events': [
-                {
-                    'probeId': 'offline-during-freeze',
-                    'event': 'must_not_replay',
-                    'recordingGeneration': 0,
-                },
-            ],
+    def test_repeating_multi_event_requests_are_not_deduplicated_and_unknown_fields_are_opaque(self) -> None:
+        event = {
+            'probeId': 'language-neutral.event',
+            'event': 'persist_as_supplied',
+            'runtimeTag': 'event-owned-value',
         }
-        stale_status, stale_payload = self._request_json(
-            'POST',
-            '/ingest/batch',
-            payload=stale_batch,
-        )
-        self.assertEqual(stale_status, 202)
-        self.assertEqual(stale_payload['disposition'], 'discarded_stale_generation')
-        self.assertEqual(stale_payload['discardedEvents'], 1)
-        self.assertFalse(stale_payload['discardedByFreeze'])
-        self.assertTrue(stale_payload['discardedByStaleGeneration'])
-        self.assertEqual(stale_payload['recordingGeneration'], current_generation)
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        body = {'events': [event]}
 
-        retry_status, retry_payload = self._request_json(
+        first_status, first_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload=stale_batch,
+            '/ingest',
+            payload=body,
         )
-        self.assertEqual(retry_status, 202)
-        self.assertTrue(retry_payload['duplicateBatch'])
-        self.assertEqual(retry_payload['disposition'], 'discarded_stale_generation')
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        second_status, second_payload = self._request_json(
+            'POST',
+            '/ingest',
+            payload=body,
+        )
 
-        current_status, current_payload = self._request_json(
-            'POST',
-            '/ingest/batch',
-            payload={
-                'batchId': 'online-client:2:2',
-                'events': [
-                    {
-                        'probeId': 'online-after-resume',
-                        'event': 'persist_now',
-                        'recordingGeneration': current_generation,
-                    },
-                ],
-            },
+        self.assertEqual(first_status, 202)
+        self.assertEqual(second_status, 202)
+        self.assertEqual(first_payload['written'], 1)
+        self.assertEqual(second_payload['written'], 1)
+        persisted = [
+            json.loads(line)
+            for line in self.log_file.read_text(encoding='utf-8').splitlines()
+        ]
+        self.assertEqual(len(persisted), 2)
+        self.assertEqual(
+            [item['runtimeTag'] for item in persisted],
+            ['event-owned-value', 'event-owned-value'],
         )
-        self.assertEqual(current_status, 202)
-        self.assertEqual(current_payload['disposition'], 'persisted')
-        self.assertEqual(current_payload['persistedEvents'], 1)
-        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 1)
 
         state_status, state_payload = self._request_json('GET', '/api/state')
         self.assertEqual(state_status, 200)
-        self.assertEqual(
-            state_payload['service']['ingestStaleGenerationDiscardedEventCount'],
-            1,
-        )
+        service = state_payload['service']
+        self.assertNotIn('recordingGeneration', service)
+        self.assertNotIn('transportBatchCount', service)
+        self.assertNotIn('ingestStaleGenerationDiscardedEventCount', service)
 
     def test_concurrent_recording_toggles_keep_ready_file_valid_and_current(self) -> None:
         ready_file = self.workspace_root / 'collector.ready.json'
@@ -733,36 +687,167 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         state_status, state_payload = self._request_json('GET', '/api/state')
         self.assertEqual(state_status, 200)
         self.assertEqual(
-            ready_payload['recordingGeneration'],
-            state_payload['service']['recordingGeneration'],
-        )
-        self.assertEqual(
             ready_payload['recordingFrozen'],
             state_payload['service']['recordingFrozen'],
         )
+        self.assertNotIn('recordingGeneration', ready_payload)
+        self.assertNotIn('recordingGeneration', state_payload['service'])
 
-    def test_freeze_linearizes_with_concurrent_batches_without_partial_writes(self) -> None:
+    def test_ingest_admitted_while_frozen_cannot_write_after_resume(self) -> None:
         dashboard_headers = {
             collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
         }
-        batch_count = 24
-        events_per_batch = 3
-        start_gate = threading.Barrier(batch_count + 1)
+        freeze_status, _ = self._request_json(
+            'POST',
+            '/api/recording/freeze',
+            payload={},
+            headers=dashboard_headers,
+        )
+        self.assertEqual(freeze_status, 200)
 
-        def send_batch(index: int) -> tuple[int, dict[str, object]]:
+        handler_waiting = threading.Event()
+        allow_body_read = threading.Event()
+        original_read_json_body = collector_server.CollectorRequestHandler._read_json_body
+
+        def hold_ingest_body(
+            handler: collector_server.CollectorRequestHandler,
+        ) -> object:
+            if handler.path == '/ingest':
+                handler_waiting.set()
+                if not allow_body_read.wait(timeout=5):
+                    raise AssertionError('timed out waiting to resume ingest body parsing')
+            return original_read_json_body(handler)
+
+        with mock.patch.object(
+            collector_server.CollectorRequestHandler,
+            '_read_json_body',
+            new=hold_ingest_body,
+        ):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                ingest_future = pool.submit(
+                    self._request_json,
+                    'POST',
+                    '/ingest',
+                    payload={'probeId': 'frozen.inflight', 'event': 'must_not_persist'},
+                )
+                self.assertTrue(handler_waiting.wait(timeout=5))
+                resume_status, resume_payload = self._request_json(
+                    'POST',
+                    '/api/recording/resume',
+                    payload={},
+                    headers=dashboard_headers,
+                )
+                self.assertEqual(resume_status, 200)
+                self.assertEqual(resume_payload['status'], 'running')
+                allow_body_read.set()
+                ingest_status, ingest_payload = ingest_future.result(timeout=5)
+
+        self.assertEqual(ingest_status, 423)
+        self.assertEqual(ingest_payload['error'], 'recording_state_changed')
+        self.assertFalse(ingest_payload['recordingFrozen'])
+        self.assertEqual(ingest_payload['persistedEvents'], 0)
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+    def test_ingest_spanning_freeze_and_resume_cannot_write_after_transition(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        handler_waiting = threading.Event()
+        allow_body_read = threading.Event()
+        original_read_json_body = collector_server.CollectorRequestHandler._read_json_body
+
+        def hold_ingest_body(
+            handler: collector_server.CollectorRequestHandler,
+        ) -> object:
+            if handler.path == '/ingest':
+                handler_waiting.set()
+                if not allow_body_read.wait(timeout=5):
+                    raise AssertionError('timed out waiting to resume ingest body parsing')
+            return original_read_json_body(handler)
+
+        with mock.patch.object(
+            collector_server.CollectorRequestHandler,
+            '_read_json_body',
+            new=hold_ingest_body,
+        ):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                ingest_future = pool.submit(
+                    self._request_json,
+                    'POST',
+                    '/ingest',
+                    payload={'probeId': 'live.inflight', 'event': 'must_not_persist'},
+                )
+                self.assertTrue(handler_waiting.wait(timeout=5))
+                freeze_status, _ = self._request_json(
+                    'POST',
+                    '/api/recording/freeze',
+                    payload={},
+                    headers=dashboard_headers,
+                )
+                resume_status, _ = self._request_json(
+                    'POST',
+                    '/api/recording/resume',
+                    payload={},
+                    headers=dashboard_headers,
+                )
+                self.assertEqual((freeze_status, resume_status), (200, 200))
+                allow_body_read.set()
+                ingest_status, ingest_payload = ingest_future.result(timeout=5)
+
+        self.assertEqual(ingest_status, 423)
+        self.assertEqual(ingest_payload['error'], 'recording_state_changed')
+        self.assertFalse(ingest_payload['recordingFrozen'])
+        self.assertEqual(ingest_payload['persistedEvents'], 0)
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+    def test_state_uses_one_recording_snapshot(self) -> None:
+        self.server.set_recording_frozen(True)
+        original_build_service_payload = collector_state.build_service_payload
+
+        def resume_during_state_build(
+            service: object,
+            *,
+            recording_frozen: bool | None = None,
+        ) -> dict[str, object]:
+            self.assertTrue(recording_frozen)
+            self.server.set_recording_frozen(False)
+            return original_build_service_payload(
+                service,
+                recording_frozen=recording_frozen,
+            )
+
+        with mock.patch.object(
+            collector_state,
+            'build_service_payload',
+            new=resume_during_state_build,
+        ):
+            payload = collector_state.build_state_response(self.server)
+
+        self.assertEqual(payload['status'], 'frozen')
+        self.assertTrue(payload['service']['recordingFrozen'])
+        self.assertFalse(self.server.recording_frozen)
+
+    def test_freeze_linearizes_with_concurrent_multi_event_requests_without_partial_writes(self) -> None:
+        dashboard_headers = {
+            collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
+        }
+        request_count = 24
+        events_per_request = 3
+        start_gate = threading.Barrier(request_count + 1)
+
+        def send_events(index: int) -> tuple[int, dict[str, object]]:
             start_gate.wait(timeout=5)
             return self._request_json(
                 'POST',
-                '/ingest/batch',
+                '/ingest',
                 payload={
-                    'batchId': f'concurrent-freeze:{index}',
                     'events': [
                         {
                             'probeId': f'concurrent.{index}',
                             'event': 'race_with_freeze',
                             'sequence': sequence,
                         }
-                        for sequence in range(events_per_batch)
+                        for sequence in range(events_per_request)
                     ],
                 },
             )
@@ -776,23 +861,23 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
                 headers=dashboard_headers,
             )
 
-        with ThreadPoolExecutor(max_workers=batch_count + 1) as pool:
-            batch_futures = [pool.submit(send_batch, index) for index in range(batch_count)]
+        with ThreadPoolExecutor(max_workers=request_count + 1) as pool:
+            request_futures = [pool.submit(send_events, index) for index in range(request_count)]
             freeze_future = pool.submit(freeze)
-            batch_results = [future.result(timeout=10) for future in batch_futures]
+            request_results = [future.result(timeout=10) for future in request_futures]
             freeze_status, freeze_payload = freeze_future.result(timeout=10)
 
         self.assertEqual(freeze_status, 200)
         self.assertEqual(freeze_payload['status'], 'frozen')
         persisted_events = 0
-        for response_status, payload in batch_results:
-            self.assertEqual(response_status, 202)
-            self.assertIn(payload['persistedEvents'], (0, events_per_batch))
-            self.assertIn(payload['discardedEvents'], (0, events_per_batch))
-            self.assertEqual(
-                payload['persistedEvents'] + payload['discardedEvents'],
-                events_per_batch,
-            )
+        for response_status, payload in request_results:
+            self.assertIn(response_status, (202, 423))
+            self.assertIn(payload['persistedEvents'], (0, events_per_request))
+            self.assertEqual(payload['written'], payload['persistedEvents'])
+            if response_status == 202:
+                self.assertEqual(payload['persistedEvents'], events_per_request)
+            else:
+                self.assertEqual(payload['persistedEvents'], 0)
             persisted_events += payload['persistedEvents']
 
         persisted_lines = self.log_file.read_text(encoding='utf-8').splitlines()
@@ -800,17 +885,16 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
 
         post_freeze_status, post_freeze_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload={
-                'batchId': 'concurrent-freeze:after',
                 'events': [
                     {'probeId': 'after-freeze', 'event': 'must_not_persist'},
                 ],
             },
         )
-        self.assertEqual(post_freeze_status, 202)
+        self.assertEqual(post_freeze_status, 423)
+        self.assertEqual(post_freeze_payload['written'], 0)
         self.assertEqual(post_freeze_payload['persistedEvents'], 0)
-        self.assertEqual(post_freeze_payload['discardedEvents'], 1)
         self.assertEqual(
             len(self.log_file.read_text(encoding='utf-8').splitlines()),
             persisted_events,
@@ -951,7 +1035,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         finally:
             connection.close()
 
-    def test_batch_ingest_appends_structured_events(self) -> None:
+    def test_ingest_accepts_multi_event_envelope(self) -> None:
         events = [
             {
                 'runId': 'run-1',
@@ -975,7 +1059,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
 
         status, payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload={'events': events},
             headers={'X-Debug-Session-Id': 'test-session'},
         )
@@ -984,15 +1068,30 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
 
         state_status, state_payload = self._request_json('GET', '/api/state')
         self.assertEqual(state_status, 200)
-        self.assertEqual(state_payload['service']['batchEndpoint'], self.server.batch_endpoint_url)
+        self.assertEqual(state_payload['service']['endpoint'], self.server.endpoint_url)
+        self.assertNotIn('batchEndpoint', state_payload['service'])
         summary = state_payload['summary']
         self.assertEqual(summary['totalEntries'], 2)
-        self.assertEqual(summary['correlationCounts'], [{'name': 'corr-1', 'count': 2}])
         self.assertEqual(
             {item['name']: item['count'] for item in summary['hypothesisCounts']},
             {'H2': 2, 'H1': 1},
         )
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), 2)
+
+    def test_ingest_preserves_events_field_on_an_ordinary_event(self) -> None:
+        event = {
+            'probeId': 'opaque.events-field',
+            'event': 'business_event',
+            'events': ['created', 'updated'],
+        }
+
+        status, payload = self._request_json('POST', '/ingest', payload=event)
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['accepted'], 1)
+        persisted = json.loads(self.log_file.read_text(encoding='utf-8'))
+        self.assertEqual(persisted['events'], event['events'])
+        self.assertEqual(persisted['event'], event['event'])
 
     def test_message_less_event_remains_valid_for_dashboard_summary_fallback(self) -> None:
         event = {
@@ -1024,7 +1123,61 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(raw_payload['event'], event['event'])
         self.assertEqual(raw_payload['probeId'], event['probeId'])
 
-    def test_batch_ingest_has_no_event_count_cap(self) -> None:
+    def test_ingest_rejects_removed_batch_route_and_raw_arrays(self) -> None:
+        events = [{'probeId': 'removed.route', 'event': 'must_not_persist'}]
+
+        removed_status, removed_payload = self._request_json(
+            'POST',
+            '/ingest/batch',
+            payload={'events': events},
+        )
+        array_status, array_payload = self._request_json('POST', '/ingest', payload=events)
+
+        self.assertEqual(removed_status, 404)
+        self.assertEqual(removed_payload['error'], 'not_found')
+        self.assertEqual(array_status, 400)
+        self.assertEqual(array_payload['error'], 'payload_must_be_object')
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+        connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        try:
+            connection.request('OPTIONS', '/ingest/batch')
+            response = connection.getresponse()
+            options_payload = json.loads(response.read().decode('utf-8'))
+            self.assertEqual(response.status, 404)
+            self.assertEqual(options_payload['error'], 'not_found')
+            self.assertIsNone(response.getheader('Access-Control-Allow-Origin'))
+        finally:
+            connection.close()
+
+    def test_ingest_preflight_still_exposes_cors(self) -> None:
+        connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        try:
+            connection.request('OPTIONS', '/ingest')
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 204)
+            self.assertEqual(response.getheader('Access-Control-Allow-Origin'), '*')
+            self.assertEqual(response.getheader('Access-Control-Allow-Methods'), 'POST, OPTIONS')
+        finally:
+            connection.close()
+
+    def test_ingest_rejects_invalid_multi_event_envelopes(self) -> None:
+        cases = (
+            ({'events': 'not-an-array'}, 'events_must_be_array'),
+            ({'events': []}, 'events_required'),
+            ({'events': [{'event': 'valid'}, 'invalid']}, 'event_must_be_object'),
+        )
+
+        for payload, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                status, response = self._request_json('POST', '/ingest', payload=payload)
+                self.assertEqual(status, 400)
+                self.assertEqual(response['error'], expected_error)
+
+        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+
+    def test_multi_event_ingest_has_no_event_count_cap(self) -> None:
         events = [
             {
                 'probeId': f'p{i}',
@@ -1033,7 +1186,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             }
             for i in range(1_000)
         ]
-        status, payload = self._request_json('POST', '/ingest/batch', payload=events)
+        status, payload = self._request_json('POST', '/ingest', payload={'events': events})
         self.assertEqual(status, 202)
         self.assertEqual(payload['accepted'], len(events))
         self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
@@ -1043,16 +1196,18 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertFalse(state_payload['service']['ingestEventCountLimited'])
         self.assertEqual(state_payload['summary']['totalEntries'], len(events))
 
-    def test_state_count_lists_are_bounded_without_limiting_capture(self) -> None:
+    def test_state_summary_exposes_only_dashboard_consumed_fields(self) -> None:
         events = [
             {
+                'runId': 'summary-run',
                 'probeId': 'fetch.lifecycle',
                 'event': 'fetch_start',
                 'correlationId': f'fetch-{index}',
+                'hypothesisId': 'H-summary',
             }
-            for index in range(500)
+            for index in range(25)
         ]
-        status, payload = self._request_json('POST', '/ingest/batch', payload={'events': events})
+        status, payload = self._request_json('POST', '/ingest', payload={'events': events})
         self.assertEqual(status, 202)
         self.assertEqual(payload['accepted'], len(events))
 
@@ -1060,21 +1215,73 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(state_status, 200)
         summary = state_payload['summary']
         self.assertEqual(summary['totalEntries'], len(events))
-        self.assertEqual(summary['countCardinality']['correlationCounts'], len(events))
-        self.assertIn('correlationCounts', summary['countListsTruncated'])
-        self.assertEqual(len(summary['correlationCounts']), summary['countListLimit'])
+        self.assertEqual(
+            set(summary),
+            {
+                'totalEntries',
+                'invalidLines',
+                'fileSizeBytes',
+                'fileUpdatedAt',
+                'runCounts',
+                'hypothesisCounts',
+            },
+        )
+        self.assertEqual(summary['runCounts'], [{'name': 'summary-run', 'count': len(events)}])
+        self.assertEqual(
+            summary['hypothesisCounts'],
+            [{'name': 'H-summary', 'count': len(events)}],
+        )
 
-    def test_retrying_same_transport_batch_is_idempotent(self) -> None:
+    def test_dashboard_count_lists_remain_bounded(self) -> None:
+        class TrackingCounter(collector_state.Counter):
+            requested_limit: int | None = None
+
+            def most_common(self, n: int | None = None):
+                self.requested_limit = n
+                return super().most_common(n)
+
+        event_count = collector_state.MAX_DASHBOARD_COUNT_ITEMS + 5
+        counter = TrackingCounter({f'run-{index:03d}': 1 for index in range(event_count)})
+
+        compacted = collector_state.compact_count_pairs(counter)
+
+        self.assertEqual(counter.requested_limit, collector_state.MAX_DASHBOARD_COUNT_ITEMS)
+        self.assertEqual(len(compacted), collector_state.MAX_DASHBOARD_COUNT_ITEMS)
+
         events = [
-            {'probeId': 'fetch.lifecycle', 'event': 'fetch_start', 'transportId': f'e-{i}'}
+            {
+                'runId': f'run-{index:03d}',
+                'probeId': 'summary.bound',
+                'event': 'summary_bound',
+                'hypothesisId': f'H-{index:03d}',
+            }
+            for index in range(event_count)
+        ]
+
+        status, payload = self._request_json('POST', '/ingest', payload={'events': events})
+        self.assertEqual(status, 202)
+        self.assertEqual(payload['written'], event_count)
+
+        state_status, state_payload = self._request_json('GET', '/api/state')
+        self.assertEqual(state_status, 200)
+        summary = state_payload['summary']
+        self.assertEqual(summary['totalEntries'], event_count)
+        self.assertEqual(len(summary['runCounts']), collector_state.MAX_DASHBOARD_COUNT_ITEMS)
+        self.assertEqual(
+            len(summary['hypothesisCounts']),
+            collector_state.MAX_DASHBOARD_COUNT_ITEMS,
+        )
+
+    def test_repeating_multi_event_request_writes_duplicate_events(self) -> None:
+        events = [
+            {'probeId': 'fetch.lifecycle', 'event': 'fetch_start', 'eventId': f'e-{i}'}
             for i in range(25)
         ]
-        body = {'batchId': 'client-a:1:25', 'events': events}
+        body = {'events': events}
         reordered_body = {
-            'batchId': body['batchId'],
             'events': [
                 {
-                    'transportId': event['transportId'],
+                    'eventId': event['eventId'],
                     'event': event['event'],
                     'probeId': event['probeId'],
                 }
@@ -1082,59 +1289,60 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             ],
         }
 
-        first_status, first_payload = self._request_json('POST', '/ingest/batch', payload=body)
+        first_status, first_payload = self._request_json('POST', '/ingest', payload=body)
         second_status, second_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=reordered_body,
         )
 
         self.assertEqual(first_status, 202)
         self.assertEqual(first_payload['persistedEvents'], len(events))
-        self.assertFalse(first_payload['duplicateBatch'])
+        self.assertEqual(first_payload['written'], len(events))
         self.assertEqual(second_status, 202)
         self.assertEqual(second_payload['accepted'], len(events))
-        self.assertEqual(second_payload['persistedEvents'], 0)
-        self.assertTrue(second_payload['duplicateBatch'])
-        self.assertEqual(len(self.log_file.read_text(encoding='utf-8').splitlines()), len(events))
+        self.assertEqual(second_payload['persistedEvents'], len(events))
+        self.assertEqual(second_payload['written'], len(events))
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            len(events) * 2,
+        )
 
-    def test_outer_batch_id_survives_spoofed_inner_id_and_restart(self) -> None:
-        outer_batch_id = 'client-restart:1:1'
+    def test_unknown_event_fields_survive_restart_as_opaque_data(self) -> None:
         original_events = [
             {
                 'probeId': 'restart.identity',
                 'event': 'persist_once',
-                'transportBatchId': 'spoofed-inner-original',
+                'customEnvelopeId': 'original',
             },
         ]
-        body = {'batchId': outer_batch_id, 'events': original_events}
+        body = {'events': original_events}
         first_status, first_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=body,
         )
         self.assertEqual(first_status, 202)
         self.assertEqual(first_payload['persistedEvents'], 1)
 
         changed_inner_events = [dict(original_events[0])]
-        changed_inner_events[0]['transportBatchId'] = 'spoofed-inner-retry'
-        duplicate_status, duplicate_payload = self._request_json(
+        changed_inner_events[0]['customEnvelopeId'] = 'retry'
+        second_status, second_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': outer_batch_id, 'events': changed_inner_events},
+            '/ingest',
+            payload={'events': changed_inner_events},
         )
-        self.assertEqual(duplicate_status, 202)
-        self.assertTrue(duplicate_payload['duplicateBatch'])
-        self.assertEqual(duplicate_payload['persistedEvents'], 0)
+        self.assertEqual(second_status, 202)
+        self.assertEqual(second_payload['persistedEvents'], 1)
 
         persisted_before_restart = [
             json.loads(line)
             for line in self.log_file.read_text(encoding='utf-8').splitlines()
         ]
-        self.assertEqual(len(persisted_before_restart), 1)
+        self.assertEqual(len(persisted_before_restart), 2)
         self.assertEqual(
-            persisted_before_restart[0]['transportBatchId'],
-            outer_batch_id,
+            [item['customEnvelopeId'] for item in persisted_before_restart],
+            ['original', 'retry'],
         )
 
         previous_server = self.server
@@ -1162,76 +1370,59 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.server = restarted_server
         self._thread = restarted_thread
 
-        self.assertIn(outer_batch_id, restarted_server.seen_transport_batch_ids)
-        self.assertNotIn('spoofed-inner-original', restarted_server.seen_transport_batch_ids)
-        self.assertNotIn(outer_batch_id, restarted_server.transport_batch_identities)
-
         retry_status, retry_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=body,
         )
-        self._assert_transport_batch_conflict(
-            retry_status,
-            retry_payload,
-            batch_id=outer_batch_id,
-            expected_events=None,
-            received_events=1,
-        )
+        self.assertEqual(retry_status, 202)
+        self.assertEqual(retry_payload['persistedEvents'], 1)
         self.assertEqual(
             len(self.log_file.read_text(encoding='utf-8').splitlines()),
-            1,
+            3,
         )
 
-    def test_persisted_batch_id_rejects_every_different_frame(self) -> None:
-        batch_id = 'client-persisted-conflict:1:2'
+    def test_multi_event_requests_with_different_content_are_all_collected(self) -> None:
         events = [
             {'probeId': 'persisted.conflict', 'event': 'original', 'sequence': 1},
             {'probeId': 'persisted.conflict', 'event': 'original', 'sequence': 2},
         ]
         first_status, first_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': events},
+            '/ingest',
+            payload={'events': events},
         )
         self.assertEqual(first_status, 202)
         self.assertEqual(first_payload['persistedEvents'], len(events))
 
         different_count_status, different_count_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': events[:1]},
+            '/ingest',
+            payload={'events': events[:1]},
         )
-        self._assert_transport_batch_conflict(
-            different_count_status,
-            different_count_payload,
-            batch_id=batch_id,
-            expected_events=len(events),
-            received_events=1,
-        )
+        self.assertEqual(different_count_status, 202)
+        self.assertEqual(different_count_payload['persistedEvents'], 1)
 
         different_body = [dict(event) for event in events]
         different_body[1]['event'] = 'changed-with-same-count'
         different_body_status, different_body_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': different_body},
+            '/ingest',
+            payload={'events': different_body},
         )
-        self._assert_transport_batch_conflict(
-            different_body_status,
-            different_body_payload,
-            batch_id=batch_id,
-            expected_events=len(events),
-            received_events=len(different_body),
-        )
+        self.assertEqual(different_body_status, 202)
+        self.assertEqual(different_body_payload['persistedEvents'], len(different_body))
 
         persisted = [
             json.loads(line)
             for line in self.log_file.read_text(encoding='utf-8').splitlines()
         ]
-        self.assertEqual([event['event'] for event in persisted], ['original', 'original'])
+        self.assertEqual(
+            [event['event'] for event in persisted],
+            ['original', 'original', 'original', 'original', 'changed-with-same-count'],
+        )
 
-    def test_discarded_batch_id_rejects_a_different_frame(self) -> None:
+    def test_frozen_multi_event_requests_are_rejected_without_registry_state(self) -> None:
         dashboard_headers = {
             collector_server.DASHBOARD_TOKEN_HEADER: self.server.dashboard_token,
         }
@@ -1243,55 +1434,50 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(freeze_status, 200)
 
-        batch_id = 'client-discarded-conflict:1:2'
         events = [
             {'probeId': 'discarded.conflict', 'event': 'original', 'sequence': 1},
             {'probeId': 'discarded.conflict', 'event': 'original', 'sequence': 2},
         ]
         first_status, first_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': events},
+            '/ingest',
+            payload={'events': events},
         )
-        self.assertEqual(first_status, 202)
-        self.assertEqual(first_payload['disposition'], 'discarded_frozen')
-        self.assertEqual(first_payload['discardedEvents'], len(events))
+        self.assertEqual(first_status, 423)
+        self.assertEqual(first_payload['error'], 'recording_frozen')
+        self.assertEqual(first_payload['written'], 0)
+        self.assertEqual(first_payload['persistedEvents'], 0)
 
         changed_events = [dict(event) for event in events]
         changed_events[0]['event'] = 'changed-with-same-count'
-        conflict_status, conflict_payload = self._request_json(
+        changed_status, changed_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': changed_events},
+            '/ingest',
+            payload={'events': changed_events},
         )
-        self._assert_transport_batch_conflict(
-            conflict_status,
-            conflict_payload,
-            batch_id=batch_id,
-            expected_events=len(events),
-            received_events=len(changed_events),
-        )
+        self.assertEqual(changed_status, 423)
+        self.assertEqual(changed_payload['written'], 0)
+        self.assertEqual(changed_payload['persistedEvents'], 0)
 
         retry_status, retry_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': batch_id, 'events': events},
+            '/ingest',
+            payload={'events': events},
         )
-        self.assertEqual(retry_status, 202)
-        self.assertTrue(retry_payload['duplicateBatch'])
-        self.assertEqual(retry_payload['disposition'], 'discarded_frozen')
-        self.assertEqual(retry_payload['discardedEvents'], len(events))
+        self.assertEqual(retry_status, 423)
+        self.assertEqual(retry_payload['error'], 'recording_frozen')
+        self.assertEqual(retry_payload['written'], 0)
         self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
-    def test_clear_marks_preclear_persisted_batch_as_terminally_discarded(self) -> None:
+    def test_clear_removes_entries_and_same_events_can_be_collected_again(self) -> None:
         events = [
             {'probeId': 'before.clear', 'event': 'persist_then_clear'},
             {'probeId': 'before.clear', 'event': 'persist_then_clear'},
         ]
-        body = {'batchId': 'client-clear:1:2', 'events': events}
+        body = {'events': events}
         first_status, first_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=body,
         )
         self.assertEqual(first_status, 202)
@@ -1310,35 +1496,32 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
 
         retry_status, retry_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=body,
         )
         self.assertEqual(retry_status, 202)
-        self.assertTrue(retry_payload['duplicateBatch'])
-        self.assertEqual(retry_payload['disposition'], 'discarded_cleared')
-        self.assertEqual(retry_payload['persistedEvents'], 0)
-        self.assertEqual(retry_payload['discardedEvents'], len(events))
-        self.assertTrue(retry_payload['discardedByClear'])
-        self.assertFalse(retry_payload['discardedByFreeze'])
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        self.assertEqual(retry_payload['written'], len(events))
+        self.assertEqual(retry_payload['persistedEvents'], len(events))
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            len(events),
+        )
 
         changed_events = [dict(event) for event in events]
         changed_events[0]['event'] = 'changed_after_clear'
-        conflict_status, conflict_payload = self._request_json(
+        changed_status, changed_payload = self._request_json(
             'POST',
-            '/ingest/batch',
-            payload={'batchId': body['batchId'], 'events': changed_events},
+            '/ingest',
+            payload={'events': changed_events},
         )
-        self._assert_transport_batch_conflict(
-            conflict_status,
-            conflict_payload,
-            batch_id=str(body['batchId']),
-            expected_events=len(events),
-            received_events=len(changed_events),
+        self.assertEqual(changed_status, 202)
+        self.assertEqual(changed_payload['persistedEvents'], len(changed_events))
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            len(events) + len(changed_events),
         )
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
 
-    def test_clear_waits_for_persisted_batch_ack_before_truncating(self) -> None:
+    def test_clear_waits_for_persisted_ingest_ack_before_truncating(self) -> None:
         class ContentionLock:
             def __init__(self) -> None:
                 self._lock = threading.Lock()
@@ -1365,8 +1548,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             {'probeId': 'ack.clear', 'event': 'persist_before_ack', 'sequence': 1},
             {'probeId': 'ack.clear', 'event': 'persist_before_ack', 'sequence': 2},
         ]
-        batch_id = 'client-ack-clear:1:2'
-        body = {'batchId': batch_id, 'events': events}
+        body = {'events': events}
         append_completed = threading.Event()
         allow_ack = threading.Event()
         ack_flushed = threading.Event()
@@ -1379,12 +1561,12 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
             *,
             cors_mode: str = 'none',
         ) -> None:
-            if payload.get('batchId') == batch_id and payload.get('persistedEvents') == len(events):
+            if payload.get('persistedEvents') == len(events):
                 append_completed.set()
                 if not allow_ack.wait(timeout=5):
                     raise AssertionError('timed out waiting to release the persisted ACK')
             original_json_response(handler, status, payload, cors_mode=cors_mode)
-            if payload.get('batchId') == batch_id and payload.get('persistedEvents') == len(events):
+            if payload.get('persistedEvents') == len(events):
                 ack_flushed.set()
 
         dashboard_headers = {
@@ -1400,7 +1582,7 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
                     ingest_future = pool.submit(
                         self._request_json,
                         'POST',
-                        '/ingest/batch',
+                        '/ingest',
                         payload=body,
                     )
                     self.assertTrue(append_completed.wait(timeout=5))
@@ -1433,22 +1615,23 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
 
         retry_status, retry_payload = self._request_json(
             'POST',
-            '/ingest/batch',
+            '/ingest',
             payload=body,
         )
         self.assertEqual(retry_status, 202)
-        self.assertTrue(retry_payload['duplicateBatch'])
-        self.assertEqual(retry_payload['disposition'], 'discarded_cleared')
-        self.assertEqual(retry_payload['persistedEvents'], 0)
-        self.assertEqual(retry_payload['discardedEvents'], len(events))
-        self.assertEqual(self.log_file.read_text(encoding='utf-8'), '')
+        self.assertEqual(retry_payload['written'], len(events))
+        self.assertEqual(retry_payload['persistedEvents'], len(events))
+        self.assertEqual(
+            len(self.log_file.read_text(encoding='utf-8').splitlines()),
+            len(events),
+        )
 
     def test_ingest_ack_is_not_blocked_by_dashboard_index_lock(self) -> None:
         self.server.write_lock.acquire()
         try:
             status, payload = self._request_json(
                 'POST',
-                '/ingest/batch',
+                '/ingest',
                 payload={'events': [{'probeId': 'fetch.start'} for _ in range(500)]},
             )
         finally:
@@ -1457,32 +1640,32 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertEqual(payload['accepted'], 500)
 
-    def test_concurrent_batches_all_complete_and_persist(self) -> None:
-        batch_count = 32
-        events_per_batch = 64
+    def test_concurrent_multi_event_requests_all_complete_and_persist(self) -> None:
+        request_count = 32
+        events_per_request = 64
 
-        def send_batch(batch_index: int) -> tuple[int, dict[str, object]]:
+        def send_events(request_index: int) -> tuple[int, dict[str, object]]:
             events = [
                 {
                     'probeId': 'fetch.lifecycle',
                     'event': 'fetch_start',
-                    'correlationId': f'{batch_index}-{event_index}',
+                    'correlationId': f'{request_index}-{event_index}',
                 }
-                for event_index in range(events_per_batch)
+                for event_index in range(events_per_request)
             ]
-            return self._request_json('POST', '/ingest/batch', payload={'events': events})
+            return self._request_json('POST', '/ingest', payload={'events': events})
 
         with ThreadPoolExecutor(max_workers=16) as pool:
-            results = list(pool.map(send_batch, range(batch_count)))
+            results = list(pool.map(send_events, range(request_count)))
 
         self.assertTrue(all(status == 202 for status, _ in results))
         self.assertEqual(
             sum(int(payload['accepted']) for _, payload in results),
-            batch_count * events_per_batch,
+            request_count * events_per_request,
         )
         self.assertEqual(
             len(self.log_file.read_text(encoding='utf-8').splitlines()),
-            batch_count * events_per_batch,
+            request_count * events_per_request,
         )
 
     def test_config_update_requires_dashboard_token_and_ignores_unrelated_fields(self) -> None:
@@ -1719,8 +1902,6 @@ class CollectorServerSecurityTests(ConfigPathMixin, unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(payload['summary']['totalEntries'], 0)
-        self.assertEqual(payload['summary']['trackedLocationCount'], 1)
-        self.assertEqual(payload['summary']['uniqueLocations'], 1)
 
         status, payload = self._request_json('GET', '/api/locations')
         self.assertEqual(status, 200)

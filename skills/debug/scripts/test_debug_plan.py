@@ -63,6 +63,33 @@ def valid_plan() -> dict:
                 "status": "PENDING",
             }
         ],
+        "debuggerStrategy": {
+            "mode": "attached",
+            "reason": "The local source build supports debugger attachment.",
+            "breakpoints": [
+                {
+                    "breakpointId": "breakpoint.search-commit",
+                    "kind": "pause",
+                    "location": "src/search.ts:42",
+                    "activation": "initial",
+                    "rationale": "Stop before the suspected stale result commit.",
+                    "inspect": ["generation", "activeGeneration", "accepted"],
+                    "boundaryIds": ["B-search-flow"],
+                    "hypothesisIds": ["H-stale-overwrite"],
+                    "condition": "generation != activeGeneration",
+                },
+                {
+                    "breakpointId": "breakpoint.search-terminal",
+                    "kind": "pause",
+                    "location": "src/search.ts:80",
+                    "activation": "initial",
+                    "rationale": "Stop at terminal state to inspect the complete search outcome.",
+                    "inspect": ["outcome", "queuedEvents"],
+                    "boundaryIds": ["B-search-flow"],
+                    "hypothesisIds": ["H-stale-overwrite"],
+                },
+            ],
+        },
         "probes": [
             {
                 "probeId": "search.flow-start",
@@ -119,9 +146,10 @@ def valid_plan() -> dict:
         ],
         "coverage": {
             "causeFamiliesReviewed": True,
+            "firstPassBreakpointBatchReviewed": True,
             "observerCostReviewed": True,
             "privacyReviewed": True,
-            "transportChecked": True,
+            "loggingPathChecked": True,
             "correlationChecked": True,
             "eventCardinalityReviewed": True,
             "residualAmbiguities": [],
@@ -185,7 +213,331 @@ class DebugPlanTests(unittest.TestCase):
         self.assertEqual(report["counts"]["boundaries"], 1)
         self.assertEqual(report["counts"]["hypotheses"], 1)
         self.assertEqual(report["counts"]["probes"], 3)
+        self.assertEqual(report["counts"]["initialBreakpoints"], 2)
+        self.assertEqual(report["counts"]["deferredBreakpoints"], 0)
         self.assertEqual(report["counts"]["excludedCauseFamilies"], 1)
+
+    def test_attached_debugger_accepts_initial_and_deferred_breakpoints(self) -> None:
+        plan = valid_plan()
+        deferred = plan["debuggerStrategy"]["breakpoints"][1]
+        deferred["activation"] = "deferred"
+        deferred["deferReason"] = "privacy-risk"
+        deferred["activateWhen"] = (
+            "Enable a redacted locals view that cannot expose private payloads."
+        )
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        counts = json.loads(result.stdout)["counts"]
+        self.assertEqual(
+            (counts["initialBreakpoints"], counts["deferredBreakpoints"]),
+            (1, 1),
+        )
+
+    def test_debugger_mode_and_reason_are_required_and_validated(self) -> None:
+        mutations = (
+            lambda strategy: strategy.pop("mode"),
+            lambda strategy: strategy.update({"mode": "sometimes-attached"}),
+            lambda strategy: strategy.pop("reason"),
+            lambda strategy: strategy.update({"reason": "  "}),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                plan = valid_plan()
+                mutation(plan["debuggerStrategy"])
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("debuggerStrategy.", result.stdout)
+
+    def test_debugger_strategy_is_required(self) -> None:
+        plan = valid_plan()
+        del plan["debuggerStrategy"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("debuggerStrategy: must be an object", result.stdout)
+
+    def test_attached_debugger_requires_an_initial_breakpoint(self) -> None:
+        plan = valid_plan()
+        for breakpoint in plan["debuggerStrategy"]["breakpoints"]:
+            breakpoint["activation"] = "deferred"
+            breakpoint["deferReason"] = "observer-risk"
+            breakpoint["activateWhen"] = "Pausing no longer perturbs the failing race."
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("must include at least one initial breakpoint", result.stdout)
+
+    def test_non_attached_debugger_accepts_complete_deferred_candidates(self) -> None:
+        for mode, defer_reason in (
+            ("unavailable", "tool-unavailable"),
+            ("unsafe", "observer-risk"),
+        ):
+            with self.subTest(mode=mode):
+                plan = valid_plan()
+                plan["debuggerStrategy"]["mode"] = mode
+                for breakpoint in plan["debuggerStrategy"]["breakpoints"]:
+                    breakpoint["activation"] = "deferred"
+                    breakpoint["deferReason"] = defer_reason
+                    breakpoint["activateWhen"] = (
+                        "Attach safely once the recorded deferral condition clears."
+                    )
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+                counts = json.loads(result.stdout)["counts"]
+                self.assertEqual(counts["initialBreakpoints"], 0)
+                self.assertEqual(counts["deferredBreakpoints"], 2)
+
+    def test_non_attached_empty_candidate_batch_fails_coverage(self) -> None:
+        for mode in ("unavailable", "unsafe"):
+            with self.subTest(mode=mode):
+                plan = valid_plan()
+                plan["debuggerStrategy"]["mode"] = mode
+                plan["debuggerStrategy"]["breakpoints"] = []
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                errors = "\n".join(json.loads(result.stdout)["errors"])
+                self.assertIn("must include at least one deferred breakpoint", errors)
+                self.assertIn(
+                    "must be referenced by at least one concrete debugger breakpoint",
+                    errors,
+                )
+
+    def test_non_attached_debugger_rejects_initial_breakpoints(self) -> None:
+        for mode in ("unavailable", "unsafe"):
+            with self.subTest(mode=mode):
+                plan = valid_plan()
+                plan["debuggerStrategy"]["mode"] = mode
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    f"{mode} mode must not include initial breakpoints",
+                    result.stdout,
+                )
+
+    def test_duplicate_breakpoint_ids_are_rejected(self) -> None:
+        plan = valid_plan()
+        duplicate = deepcopy(plan["debuggerStrategy"]["breakpoints"][0])
+        plan["debuggerStrategy"]["breakpoints"].append(duplicate)
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("debuggerStrategy.breakpoints[2].breakpointId", result.stdout)
+        self.assertIn("duplicates", result.stdout)
+
+    def test_duplicate_physical_breakpoints_are_rejected_and_counted_once(self) -> None:
+        plan = valid_plan()
+        original = plan["debuggerStrategy"]["breakpoints"][0]
+        duplicate = deepcopy(original)
+        duplicate["breakpointId"] = "breakpoint.search-commit-duplicate"
+        duplicate["location"] = "src\\search.ts:042"
+        duplicate["condition"] = "generation < activeGeneration"
+        plan["debuggerStrategy"]["breakpoints"] = [original, duplicate]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertIn("duplicates the physical breakpoint", "\n".join(report["errors"]))
+        self.assertEqual(report["counts"]["initialBreakpoints"], 1)
+
+    def test_debugger_breakpoints_must_be_pause_kind(self) -> None:
+        for value in (None, "logpoint"):
+            with self.subTest(value=value):
+                plan = valid_plan()
+                breakpoint = plan["debuggerStrategy"]["breakpoints"][0]
+                if value is None:
+                    del breakpoint["kind"]
+                else:
+                    breakpoint["kind"] = value
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("breakpoints[0].kind", result.stdout)
+                if value == "logpoint":
+                    self.assertIn(
+                        "evidence-bearing logpoints belong in probes",
+                        result.stdout,
+                    )
+
+    def test_breakpoint_content_and_references_are_validated(self) -> None:
+        plan = valid_plan()
+        breakpoint = plan["debuggerStrategy"]["breakpoints"][0]
+        breakpoint["location"] = "/tmp/search.ts:42"
+        breakpoint["rationale"] = ""
+        breakpoint["inspect"] = []
+        breakpoint["boundaryIds"] = ["B-missing"]
+        breakpoint["hypothesisIds"] = ["H-missing"]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("debuggerStrategy.breakpoints[0].location", errors)
+        self.assertIn("debuggerStrategy.breakpoints[0].rationale", errors)
+        self.assertIn("debuggerStrategy.breakpoints[0].inspect", errors)
+        self.assertIn("unknown boundary 'B-missing'", errors)
+        self.assertIn("unknown hypothesis 'H-missing'", errors)
+
+    def test_deferred_breakpoint_requires_condition_and_reason(self) -> None:
+        for field in ("activateWhen", "deferReason"):
+            for value in (None, ""):
+                with self.subTest(field=field, value=value):
+                    plan = valid_plan()
+                    breakpoint = plan["debuggerStrategy"]["breakpoints"][1]
+                    breakpoint["activation"] = "deferred"
+                    breakpoint["activateWhen"] = (
+                        "Enable a redacted locals view that cannot expose private payloads."
+                    )
+                    breakpoint["deferReason"] = "privacy-risk"
+                    if value is None:
+                        del breakpoint[field]
+                    else:
+                        breakpoint[field] = value
+                    result = self.run_cli(plan)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(
+                        f"debuggerStrategy.breakpoints[1].{field}",
+                        result.stdout,
+                    )
+
+    def test_initial_breakpoint_rejects_deferred_fields(self) -> None:
+        plan = valid_plan()
+        plan["debuggerStrategy"]["breakpoints"][0]["activateWhen"] = "Later."
+        plan["debuggerStrategy"]["breakpoints"][0][
+            "deferReason"
+        ] = "privacy-risk"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("breakpoints[0].activateWhen", errors)
+        self.assertIn("breakpoints[0].deferReason", errors)
+        self.assertEqual(errors.count("must be omitted for an initial breakpoint"), 2)
+
+    def test_prior_breakpoint_inconclusive_is_not_a_deferral_reason(self) -> None:
+        plan = valid_plan()
+        breakpoint = plan["debuggerStrategy"]["breakpoints"][1]
+        breakpoint["activation"] = "deferred"
+        breakpoint["activateWhen"] = "The prior breakpoint is inconclusive."
+        breakpoint["deferReason"] = "privacy-risk"
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn(
+            "do not defer until an earlier breakpoint is inconclusive",
+            errors,
+        )
+
+    def test_breakpoint_boundary_ids_require_an_existing_boundary(self) -> None:
+        plan = valid_plan()
+        plan["debuggerStrategy"]["breakpoints"][0]["boundaryIds"] = []
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("breakpoints[0].boundaryIds: must not be empty", result.stdout)
+
+    def test_multi_boundary_breakpoint_requires_shared_rationale(self) -> None:
+        plan = valid_plan()
+        plan["boundaries"].append(
+            {
+                "id": "B-commit-ownership",
+                "invariant": "The active generation owns the pending result commit.",
+            }
+        )
+        plan["debuggerStrategy"]["breakpoints"][0]["boundaryIds"] = [
+            "B-search-flow",
+            "B-commit-ownership",
+        ]
+        plan["debuggerStrategy"]["breakpoints"][1]["boundaryIds"] = [
+            "B-commit-ownership"
+        ]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "breakpoints[0].sharedBoundaryRationale: must be a non-empty string",
+            result.stdout,
+        )
+
+    def test_single_boundary_breakpoint_rejects_shared_rationale(self) -> None:
+        plan = valid_plan()
+        plan["debuggerStrategy"]["breakpoints"][0][
+            "sharedBoundaryRationale"
+        ] = "Unnecessary for one boundary."
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "must be omitted unless boundaryIds contains multiple boundaries",
+            result.stdout,
+        )
+
+    def test_non_attached_mode_rejects_incompatible_defer_reason(self) -> None:
+        for mode, defer_reason in (
+            ("unavailable", "observer-risk"),
+            ("unsafe", "tool-unavailable"),
+        ):
+            with self.subTest(mode=mode, defer_reason=defer_reason):
+                plan = valid_plan()
+                plan["debuggerStrategy"]["mode"] = mode
+                for breakpoint in plan["debuggerStrategy"]["breakpoints"]:
+                    breakpoint["activation"] = "deferred"
+                    breakpoint["activateWhen"] = "The deferral condition clears."
+                    breakpoint["deferReason"] = defer_reason
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    f"is not permitted when debuggerStrategy.mode is {mode}",
+                    result.stdout,
+                )
+
+    def test_shared_frame_can_cover_multiple_boundaries_with_rationale(self) -> None:
+        plan = valid_plan()
+        plan["boundaries"].append(
+            {
+                "id": "B-commit-ownership",
+                "invariant": "The active generation owns the pending result commit.",
+            }
+        )
+        plan["hypotheses"].append(
+            {
+                "id": "H-ownership-mismatch",
+                "mechanism": "The commit frame retains an owner that differs from the active request generation.",
+                "boundaryIds": ["B-commit-ownership"],
+                "confirmedBy": ["The pending owner differs from the active generation."],
+                "rejectedBy": ["The pending owner always equals the active generation."],
+                "status": "PENDING",
+            }
+        )
+        shared = plan["debuggerStrategy"]["breakpoints"][0]
+        shared["boundaryIds"] = ["B-search-flow", "B-commit-ownership"]
+        shared["hypothesisIds"] = ["H-stale-overwrite", "H-ownership-mismatch"]
+        shared["sharedBoundaryRationale"] = (
+            "The same pre-commit frame exposes both generation ordering and result ownership."
+        )
+        plan["probes"][1]["boundaryIds"] = [
+            "B-search-flow",
+            "B-commit-ownership",
+        ]
+        plan["probes"][1]["hypothesisIds"] = [
+            "H-stale-overwrite",
+            "H-ownership-mismatch",
+        ]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+
+    def test_debugger_and_breakpoint_unknown_fields_are_rejected(self) -> None:
+        plan = valid_plan()
+        plan["debuggerStrategy"]["retry"] = True
+        plan["debuggerStrategy"]["breakpoints"][0]["eventPolicy"] = {
+            "mode": "all-occurrences"
+        }
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("debuggerStrategy: contains unsupported fields: retry", errors)
+        self.assertIn("debuggerStrategy.breakpoints[0]: contains unsupported fields: eventPolicy", errors)
+
+    def test_breakpoints_do_not_change_or_satisfy_probe_counts(self) -> None:
+        plan = valid_plan()
+        plan["probes"][1]["boundaryIds"] = []
+        plan["probes"][1]["hypothesisIds"] = []
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["counts"]["probes"], 3)
+        self.assertEqual(report["counts"]["initialBreakpoints"], 2)
+        self.assertEqual(report["counts"]["deferredBreakpoints"], 0)
+        errors = "\n".join(report["errors"])
+        self.assertIn("must be referenced by at least one probe", errors)
 
     def test_missing_required_fields_fail_validation(self) -> None:
         plan = valid_plan()
@@ -615,6 +967,21 @@ class DebugPlanTests(unittest.TestCase):
         errors = "\n".join(json.loads(result.stdout)["errors"])
         self.assertIn("coverage.eventCardinalityReviewed: must be true", errors)
 
+    def test_first_pass_breakpoint_batch_review_is_required_and_true(self) -> None:
+        for value in (None, False):
+            with self.subTest(value=value):
+                plan = valid_plan()
+                if value is None:
+                    del plan["coverage"]["firstPassBreakpointBatchReviewed"]
+                else:
+                    plan["coverage"]["firstPassBreakpointBatchReviewed"] = value
+                result = self.run_cli(plan)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "coverage.firstPassBreakpointBatchReviewed: must be true",
+                    result.stdout,
+                )
+
     def test_residual_ambiguities_warn_from_the_coverage_gate(self) -> None:
         plan = valid_plan()
         plan["coverage"]["residualAmbiguities"] = ["Read source is not yet distinguished."]
@@ -624,6 +991,34 @@ class DebugPlanTests(unittest.TestCase):
         self.assertEqual(report["counts"]["residualAmbiguities"], 1)
         self.assertIn("contains 1 unresolved ambiguity", report["warnings"][0])
 
+    def test_residual_ambiguity_does_not_replace_concrete_breakpoint_coverage(self) -> None:
+        plan = valid_plan()
+        plan["boundaries"].append(
+            {
+                "id": "B-render-dispatch",
+                "invariant": "The render target resolves to the active view instance.",
+            }
+        )
+        plan["hypotheses"].append(
+            {
+                "id": "H-dynamic-render-target",
+                "mechanism": "Dynamic dispatch selects a stale view instance after the result commit.",
+                "boundaryIds": ["B-render-dispatch"],
+                "confirmedBy": ["The resolved view instance is stale."],
+                "rejectedBy": ["The resolved view instance is always active."],
+                "status": "PENDING",
+            }
+        )
+        plan["probes"][1]["boundaryIds"].append("B-render-dispatch")
+        plan["probes"][1]["hypothesisIds"].append("H-dynamic-render-target")
+        plan["coverage"]["residualAmbiguities"] = [
+            "The dynamic render implementation path:line is not yet resolved."
+        ]
+        result = self.run_cli(plan)
+        self.assertEqual(result.returncode, 1)
+        errors = "\n".join(json.loads(result.stdout)["errors"])
+        self.assertIn("residualAmbiguities does not waive coverage", errors)
+
     def test_markdown_output_is_human_readable(self) -> None:
         result = self.run_cli(valid_plan(), "--format", "markdown")
         self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
@@ -631,6 +1026,8 @@ class DebugPlanTests(unittest.TestCase):
         self.assertIn("Result: **PASS**", result.stdout)
         self.assertIn("| Hypotheses | 1 |", result.stdout)
         self.assertIn("| Observation-checkpoint probes | 0 |", result.stdout)
+        self.assertIn("| Initial breakpoints | 2 |", result.stdout)
+        self.assertIn("| Deferred breakpoints | 0 |", result.stdout)
         self.assertIn("## Errors", result.stdout)
 
     def test_malformed_json_is_a_format_error(self) -> None:

@@ -1,6 +1,6 @@
 # Investigation and Root-Cause Ledger
 
-Use one evolving Markdown ledger whenever repair is in scope or an investigation spans a user handoff, context compaction, multiple runs, an expensive reproduction, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for boundaries, hypotheses, probes, and coverage. Carry the same ledger through evidence collection, collector-session continuity or replacement, repair, verification, and cleanup; do not create a diagnosis-only stopping point for repair-scoped work.
+Use one evolving Markdown ledger whenever repair is in scope or an investigation spans a user handoff, context compaction, multiple runs, an expensive reproduction, or a request for durable evidence. Keep the validated coverage-plan JSON file as the authority for debugger strategy, initial and deferred native breakpoints, boundaries, hypotheses, structured probes, and coverage. Carry the same ledger through evidence collection, collector-session continuity or replacement, repair, verification, and cleanup; do not create a diagnosis-only stopping point for repair-scoped work.
 
 Treat lifecycle scope as `investigation > collector session > run`. One reported bug owns one investigation ledger. That investigation normally reuses one collector session identified by an exact active ready file, while each failing, blind-spot, or verification pass gets a distinct `runId`. A user reply, evidence-analysis turn, context compaction, repair transition, or new `runId` changes neither the investigation nor its active collector session.
 
@@ -33,6 +33,8 @@ Read the current ledger before every update. Append one investigation row for ea
 
 - initial validated plan;
 - collector session established, resumed, unreachable, explicitly isolated, replaced, or stopped;
+- completed run reached its bounded checkpoint, delivery confidence was recorded, and the collector was frozen for a stable analysis snapshot;
+- collector resumed for future requests in a prepared failing, blind-spot, or verification run;
 - failing reproduction analysis;
 - targeted blind-spot run;
 - root-cause change;
@@ -74,15 +76,17 @@ Use these hypothesis statuses, matching the coverage plan:
 
 Use `NOT_REACHED` only when enclosing evidence proves the flow terminated or branched before the hypothesized path. Treat an otherwise missing probe as `INCONCLUSIVE`.
 
+Set the document status to `Analyzing` after the completed run's terminal or observation checkpoint, generic persisted-count confidence, and current collector state are recorded. When a stable snapshot is needed, confirm that the collector is frozen before reading evidence. Resume only for future requests after the next run is prepared.
+
 ## Collector-session history
 
-Record every collector session used by the investigation in chronological order. For each session, preserve its session ID, exact ready file, evidence file, endpoint or dashboard URL, ownership and cleanup policy, status, and any replacement reason. Mark exactly one reachable session as active. A successful `resume` updates the existing history entry rather than adding a new session.
+Record every collector session used by the investigation in chronological order. For each session, preserve its session ID, exact ready file, evidence file, endpoint or dashboard URL, ownership and cleanup policy, status, current recording state, and any replacement reason. Mark exactly one reachable session as active. A successful session `resume` updates the existing history entry rather than adding a new session and never changes its recording state.
 
 Use statuses such as `active`, `missing`, `unreachable`, `replaced`, and `stopped`. Start another session only after recording that the active ready file is missing or unreachable, or the user or host's explicit isolation/replacement directive. A new run alone never adds a collector-session entry.
 
 ## Reproduction-run history
 
-Record every completed failing, blind-spot, and verification run. Treat ownership as run-scoped and immutable. For non-user ownership, record the delegation target, scope, effective run ID, and current-user directive. A request for the agent to investigate completed evidence changes neither the completed run nor any future run owner.
+Record every completed failing, blind-spot, and verification run. Include its terminal or observation checkpoint, available source/emitted/persisted counts, delivery limitations, and collector state used for analysis. Treat ownership as run-scoped and immutable. For non-user ownership, record the delegation target, scope, effective run ID, and current-user directive. A request for the agent to investigate completed evidence changes neither the completed run nor any future run owner.
 
 ## Root-cause proof
 
@@ -116,7 +120,9 @@ For an in-scope repair, additionally record:
 - Active ready file: `[exact path or none]`
 - Active evidence file: `[NDJSON path or none]`
 - Active session ownership: `[owned | host-provided | shared | none]`
+- Active recording state: `[live | frozen | unknown | none]`
 - Coverage plan: `[path]`
+- Debugger strategy: `[attached | unavailable | unsafe]` — `[reason]`
 - Status: `[status]`
 - Reproduction cost: `[low | medium | high | single opportunity]`
 - Constraints: `[list]`
@@ -132,6 +138,7 @@ For an in-scope repair, additionally record:
 ## Coverage
 
 - Plan validation: `[passed at timestamp]`
+- Initial / deferred breakpoints: `[counts]`
 - Boundaries / hypotheses / probes: `[counts]`
 - Reviewed cause-family exclusions: `[families and reasons]`
 - Observer and privacy controls: `[summary]`
@@ -139,11 +146,11 @@ For an in-scope repair, additionally record:
 
 ## Collector Sessions
 
-- `[sessionId]` — ready file: `[exact path]`; evidence: `[NDJSON path]`; endpoint/dashboard: `[URL]`; ownership: `[owned | host-provided | shared]`; status: `[active | missing | unreachable | replaced | stopped]`; replacement reason: `[not applicable | recorded reason]`
+- `[sessionId]` — ready file: `[exact path]`; evidence: `[NDJSON path]`; endpoint/dashboard: `[URL]`; ownership: `[owned | host-provided | shared]`; status: `[active | missing | unreachable | replaced | stopped]`; recording: `[live | frozen | unknown]`; replacement reason: `[not applicable | recorded reason]`
 
 ## Reproduction Runs
 
-- `[runId]` — purpose: `[failing | blind-spot | verification]`; owner: `[user | agent | external]`; delegation: `[not applicable | target, scope, effectiveRunId, current-user directive]`; status: `[completed | incomplete]`; evidence: `[path and bounded filter]`
+- `[runId]` — purpose: `[failing | blind-spot | verification]`; owner: `[user | agent | external]`; delegation: `[not applicable | target, scope, effectiveRunId, current-user directive]`; status: `[completed | incomplete]`; checkpoint: `[terminal or bounded observation]`; delivery: `[source/emitted/persisted counts or stated limitation]`; analysis state: `[frozen | live | unavailable]`; evidence: `[path and bounded filter]`
 
 ## Current Root Cause
 
