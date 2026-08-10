@@ -12,6 +12,7 @@ Use this reference to maximize the probability that one clean failing reproducti
 - Hypothesis deduplication
 - Coverage plan
 - Probe graph
+- First-pass breakpoint batch
 - Observer cost
 - Long-lived flows
 - Correlation and absence
@@ -27,15 +28,16 @@ Do not impose an arbitrary hypothesis or probe cap. Stop expanding the first-pas
 1. Every relevant causal boundary has an invariant and one or more planned observations.
 2. Every material hypothesis names a concrete mechanism and has both confirming and rejecting evidence.
 3. Every material hypothesis maps to probes that can distinguish it from adjacent causes.
-4. Flow sentinels, correlation, ordering, observer cost, privacy, and transport continuity are covered.
+4. Flow sentinels, correlation, ordering, observer cost, privacy, and the selected logging path are covered.
 5. Excluded cause families and residual ambiguities are explicit.
+6. The full native-breakpoint candidate set has been reviewed; every safe nonredundant location is in the initial batch, and every deferred location has a concrete activation condition.
 
 Treat a hypothesis as material only when code, architecture, runtime conditions, or authoritative incident facts make it plausible and it requires distinct evidence or a distinct repair. Do not generate speculative checklist entries merely to increase coverage counts.
 
 Scale breadth continuously:
 
 - For expensive, flaky, destructive, timing-sensitive, production-only, user-only, or uncertain reproduction opportunities, cover every material boundary before the first failing run.
-- For cheap reproductions or severe observer risk, begin with the highest-value causal cuts, but use the same plan schema and gate. Record any deferred distinction as a residual ambiguity.
+- For cheap reproductions, still install every safe, nonredundant first-pass breakpoint or observation point already justified by the causal map; cheap replay is not a reason to default to one or two locations. When pausing or instrumentation creates severe observer risk, enumerate the full candidate set but defer only the unsafe locations with a concrete reason and activation condition, use non-pausing probes for the affected distinctions, and record any remaining ambiguity.
 - When broad instrumentation could hide the bug, prefer invariant, ordering, and boundary probes with bounded payloads instead of abandoning coverage discipline.
 
 ## Failure contract
@@ -94,7 +96,7 @@ Enumerate breadth-first before ranking:
 6. Define confirming and rejecting observations before assigning priority.
 7. Rank after coverage, not before it.
 
-Name a mechanism, not a category. Prefer “attempt 1 finishes after attempt 2 and overwrites generation 2 because the commit path does not reject stale generations” over “race condition.”
+Name a mechanism, not a category. Prefer “attempt 1 finishes after attempt 2 and overwrites version 2 because the commit path does not reject obsolete work” over “race condition.”
 
 ## Cause-family checklist
 
@@ -161,13 +163,39 @@ Use this shape:
   "hypotheses": [
     {
       "id": "H-race-overwrite",
-      "mechanism": "attempt A commits after B without a stale-generation guard",
+      "mechanism": "attempt A commits after B without an obsolete-work guard",
       "boundaryIds": ["B-commit"],
       "confirmedBy": ["A commits after B from an older base version"],
       "rejectedBy": ["the commit path rejects every older base version"],
       "status": "PENDING"
     }
   ],
+  "debuggerStrategy": {
+    "mode": "attached",
+    "reason": "the local debugger is attached and paused replay is safe for this flow",
+    "breakpoints": [
+      {
+        "breakpointId": "BP-save-settle",
+        "kind": "pause",
+        "location": "src/save.ts:64",
+        "activation": "initial",
+        "rationale": "inspect completion order before either attempt reaches the commit boundary",
+        "inspect": ["call stack", "operationId", "baseVersion", "settledAt"],
+        "boundaryIds": ["B-commit"],
+        "hypothesisIds": ["H-race-overwrite"]
+      },
+      {
+        "breakpointId": "BP-save-commit",
+        "kind": "pause",
+        "location": "src/save.ts:88",
+        "activation": "initial",
+        "rationale": "inspect the obsolete-work decision at the owning boundary",
+        "inspect": ["call stack", "operationId", "baseVersion", "currentVersion"],
+        "boundaryIds": ["B-commit"],
+        "hypothesisIds": ["H-race-overwrite"]
+      }
+    ]
+  },
   "probes": [
     {
       "probeId": "flow.start",
@@ -231,7 +259,7 @@ Use this shape:
           "overflowPolicy": "reject-run"
         }
       },
-      "dataFields": ["flowId", "outcome", "queuedEvents"],
+      "dataFields": ["flowId", "outcome", "emittedEvents"],
       "redactions": []
     }
   ],
@@ -239,9 +267,10 @@ Use this shape:
     "causeFamiliesReviewed": true,
     "observerCostReviewed": true,
     "privacyReviewed": true,
-    "transportChecked": true,
+    "loggingPathChecked": true,
     "correlationChecked": true,
     "eventCardinalityReviewed": true,
+    "firstPassBreakpointBatchReviewed": true,
     "residualAmbiguities": []
   }
 }
@@ -269,6 +298,12 @@ Apply the reproduction-run rules in `SKILL.md`. For the exceptional agent-autono
 
 `run.reproductionOwner` applies only to the shown `runId`. For non-user ownership, set `reproductionDelegation.scope` to `single-run` or `remaining-runs` and require `effectiveRunId` to equal that `runId`. Preserve completed ownership in the investigation ledger before replacing the plan's current `run` block.
 
+Always include `debuggerStrategy`. Set `mode` to `attached`, `unavailable`, or `unsafe`, and give a concrete non-empty `reason`. Every mode must enumerate a candidate breakpoint batch that covers every declared boundary and hypothesis. For `attached`, include at least one `initial` breakpoint and explicitly defer only constrained candidates. For `unavailable` or `unsafe`, keep every candidate `deferred`; this records the complete breakpoint set without claiming it was installed, while structured probes provide the runtime evidence.
+
+Each breakpoint requires a unique `breakpointId`, fixed `kind: "pause"`, a workspace-relative numeric-line `location`, `activation` (`initial` or `deferred`), a concrete `rationale`, a non-empty `inspect` list naming the stack frames, locals, or expressions to examine, one or more resolving `boundaryIds` entries, and one or more resolving `hypothesisIds`. When `boundaryIds` contains multiple boundaries, require a non-empty `sharedBoundaryRationale` explaining why the same physical paused frame genuinely exposes all of them; omit that field for a single boundary. The same normalized source `location` is one physical breakpoint regardless of condition, so combine any conditions and merge its mappings into one entry; duplicate entries are invalid and breakpoint counts include unique physical locations only. Use the optional `condition` only to scope hits to the failing run, correlation, identity, or state; never use an arbitrary hit limit as a substitute for a complete batch. A deferred breakpoint also requires `activateWhen` and one structured `deferReason`: `tool-unavailable`, `observer-risk`, or `privacy-risk`. An initial breakpoint must omit both fields. In `unavailable` mode every candidate uses `tool-unavailable`; in `unsafe` mode use only `observer-risk` or `privacy-risk`. Defer neither because a hypothesis ranks lower nor because an earlier breakpoint may be inconclusive. Because every breakpoint `location` must already be concrete, keep a dynamically unresolved source site in `coverage.residualAmbiguities` and map its boundary and hypothesis to the nearest concrete upstream or downstream surrogate breakpoint. Residual ambiguity never waives concrete coverage. Once a pause resolves the site's `path:line`, add the full newly justified batch and revalidate before continuing.
+
+Native pause breakpoints are separate from `probes`: they do not emit all-occurrence events, do not satisfy structured-probe coverage, are not synchronized to the collector, and cannot prove absence from a non-hit alone. When pauses would alter the failure, use `mode: "unsafe"` plus validated non-pausing structured probes instead of shrinking the plan to a token breakpoint set. A native debugger logpoint is formal evidence only when it is represented as a plan probe and routed through the same selected project/host logger or language-native collector adapter; raw debugger-console output remains supplemental.
+
 Omitting `run.completion` preserves the default `flow-terminal` requirement. For an intentionally long-lived flow, set `run.completion` to `{"mode":"observation-checkpoint","condition":"<bounded observable stop condition>"}` and include an `observation-checkpoint` sentinel. The checkpoint closes only the evidence window; it does not claim that the business stream terminated.
 
 Write every probe location as a workspace-relative source path followed by a positive numeric line, for example `src/save.ts:88`. Revalidate after instrumentation moves a probe.
@@ -281,7 +316,7 @@ Give every probe the fixed `expectedOccurrence: "every-execution"` value and an 
 - `fieldBounds`: an object whose keys must also appear in that probe's `dataFields`. Each entry must contain at least one positive integer bound from `maxBytes`, `maxItems`, or `maxDepth`, and no other keys. Use an empty object when the whole-event byte limit is sufficient.
 - `overflowPolicy`: the fixed value `reject-run`. An overflow makes the evidence run incomplete; it must not silently drop, merge, or replace the occurrence.
 
-The validator rejects unknown keys at every plan object, including the top level, failure contract, exclusions, run/delegation/completion, boundaries, hypotheses, probes, policies, and coverage gate, rather than letting occurrence controls move to an ignored field. The legacy free-text `expectedEvents`, string `payloadControl`, and `volumeControl` forms are invalid. Free text remains necessary for the failure contract, reproduction steps, evidence, redactions, and ambiguities, so machine validation cannot infer whether every sentence is descriptive or imperative. Perform a mandatory semantic contradiction review: descriptions may identify throttling, filtering, or deduplication in product behavior, but any prose instruction to apply such behavior to debug instrumentation fails the plan and cannot override `expectedOccurrence` or `eventPolicy`. Choose and enforce payload bounds before activation so every execution can enqueue its distinct event; never add a second occurrence/cardinality policy in prose or another field.
+The validator rejects unknown keys at every plan object, including the top level, failure contract, exclusions, run/delegation/completion, boundaries, hypotheses, debugger strategy and breakpoints, probes, policies, and coverage gate, rather than letting ignored instructions bypass the plan. The legacy free-text `expectedEvents`, string `payloadControl`, and `volumeControl` forms are invalid. Free text remains necessary for the failure contract, reproduction steps, breakpoint rationale and activation, evidence, redactions, and ambiguities, so machine validation cannot infer whether every sentence is descriptive or imperative. Perform a mandatory semantic review: require the initial breakpoint batch to contain every safe nonredundant candidate, require each deferral and multi-boundary mapping to be credible, and reject descriptions that direct debug instrumentation to throttle, filter, deduplicate, or otherwise suppress occurrences. Product behavior may contain those mechanisms, but prose cannot override `expectedOccurrence` or `eventPolicy`. Choose and enforce payload bounds before activation so every execution can enqueue its distinct event; never add a second occurrence/cardinality policy in prose or another field.
 
 Map every boundary and hypothesis from at least one probe through `boundaryIds` and `hypothesisIds`. Run:
 
@@ -304,11 +339,26 @@ Use stable semantic probe IDs.
 - **Exception probes:** capture type/code, handling branch, retry/fallback decision, and whether the error became visible or apparent success.
 - **Invariant probes:** record invariant name, pass/fail, compact operands, and owning boundary.
 
+## First-pass breakpoint batch
+
+Use native debugger breakpoints when an attached debugger can safely pause the target. Treat “one batch” as one pre-execution setup phase, not necessarily one API request:
+
+1. Build the complete candidate list from the causal map before setting the first breakpoint. Include failing-flow ingress and symptom boundaries, both sides of state or ownership transfer, discriminating branches, before/after mutation, async schedule/start/settle/cancel, cache and persistence access, external-call request/result, exception/fallback, invariants, and completion.
+2. Remove only locations that are observationally redundant with the same paused frame. A breakpoint may map multiple boundaries only with a credible `sharedBoundaryRationale` that the same frame exposes each one. Merge every duplicate normalized source location, combine any conditions, and count the resulting unique physical locations. Keep concrete unsafe, unavailable, or privacy-sensitive candidates in the plan as deferred entries with structured reasons. Record dynamically unresolved source sites in `coverage.residualAmbiguities` until they resolve to concrete locations, while mapping their boundaries and hypotheses to nearest concrete surrogate breakpoints. Do not stop at an arbitrary count, and do not use reproduction cheapness, hypothesis rank, or possible inconclusive evidence at an earlier breakpoint to justify a one- or two-breakpoint default.
+3. Install every remaining `initial` breakpoint before the first `run` or `continue`. When the debugger tool sets one location per call, issue all calls back-to-back before execution resumes.
+4. Give each breakpoint one falsifiable question and an explicit inspection list. Prefer conditions based on the target run, correlation, request, operation, identity, or state so setup traffic does not pause; avoid hit-count caps that discard relevant matching occurrences.
+5. At a pause, inspect the planned stack and values first. If dynamic dispatch, a concrete type, or the call stack reveals another material causal interval, add the whole newly justified breakpoint set before the next `continue`.
+6. Prefer validated non-pausing structured probes for timing-sensitive, concurrent, high-frequency, lifecycle, or long-lived work. Treat a debugger logpoint as formal evidence only when it is also a plan probe using the validated logging path. A pause-only breakpoint or raw console logpoint is supplementary and never replaces an all-occurrence structured probe required for continuity or absence claims.
+
+Set `coverage.firstPassBreakpointBatchReviewed` only after this review and installation decision is complete. Report initial and deferred breakpoint counts in the reproduction handoff even when the debugger is unavailable or unsafe.
+
 ## Observer cost
 
 Estimate dynamic event cardinality and payload bytes, not static statement count. Every runtime occurrence of every active probe must produce one distinct debug event. Keep cardinality intact while bounding strings, arrays, stack depth, and canonical non-secret hashes as declared by `eventPolicy.payloadControl`.
 
 Never sample, rate-limit, throttle, debounce, filter, coalesce, aggregate, suppress, deduplicate, or replace active probe occurrences. Never apply once-per-key, once-per-correlation, once-per-flow, change-only, failure-only, or event-count-cap behavior. When the failure contract depends on an upstream event count, place its source probe at the authoritative callback or dispatch before any pre-existing reduction; observing only a downstream throttled or filtered callback does not prove upstream cardinality. Reduce observer cost only by choosing fewer probe locations before the run or by shrinking each event's fields; after a probe is active, send every occurrence.
+
+Do not interpret observer-cost review as permission to install a token native-breakpoint set. Enumerate the full breakpoint batch first, then move pause-unsafe distinctions to non-pausing probes or explicit deferred entries.
 
 For every application `fetch` and every source event from a real-time flow, preserve one debug event per occurrence throughout the covered page lifetime. Follow [browser-debugging.md](./browser-debugging.md).
 
@@ -316,13 +366,13 @@ For every application `fetch` and every source event from a real-time flow, pres
 
 Treat SSE, WebSocket, subscription, long-poll, and `ReadableStream` flows as first-class when they are intentionally open:
 
-1. Distinguish connection/request state from evidence delivery. A browser Network-panel `Pending` row can be a live business stream or an unacknowledged debug frame; it is not itself proof of a stall or lost event.
-2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every source-event occurrence at each active probe with a monotonic source sequence, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
+1. Distinguish connection/request state from evidence delivery. A browser Network-panel `Pending` row can be a live business stream or an unfinished debug HTTP request; it is not itself proof of a stall or lost event.
+2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every source-event occurrence at each active probe with the correlation-scoped top-level logging sequence plus a separately named domain source sequence when its owner differs, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
 3. Choose a checkpoint condition tied to an observable assertion, event count, protocol state, operator action, or justified product deadline. Do not wait for an intentionally open business stream to terminate.
-4. At the checkpoint, snapshot the debug transport's current event watermark and wait only until that complete FIFO prefix is acknowledged. Let later events continue to enqueue. Require zero event rejections and no source or transport sequence gap through the target watermark.
-5. Use a final queue-empty flush only after the producer is stopped. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unacknowledged event, use an authoritative producer/server-side logger or mark continuity incomplete.
+4. At the checkpoint, emit the planned sentinel, snapshot the producer's available source/emitted count, and verify the corresponding persisted NDJSON records through that sentinel. Let later business events continue; the checkpoint closes only the bounded evidence interval.
+5. If the selected logger exposes an ordinary completion signal, wait for it only at the natural checkpoint. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unfinished event, use an authoritative producer/server-side logger or mark continuity incomplete.
 
-No finite page-local memory queue can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: emit every active probe occurrence, retain every successfully serialized event until acknowledgement, and never filter, coalesce, aggregate, suppress, deduplicate, overwrite, or delete it; never claim a wider lossless interval than the acknowledged continuous prefix proves.
+No page-local logging path can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: emit one independent event for every active-probe occurrence, never filter, coalesce, aggregate, suppress, deduplicate, overwrite, or delete it, and claim only the bounded interval whose sentinels and generic persisted counts are actually present. If the selected logger cannot establish exact delivery, record that limitation and keep absence claims inconclusive.
 
 ## Correlation and absence
 
@@ -340,7 +390,7 @@ Reuse existing identifiers. Do not introduce headers or parameters that alter pr
 
 Do not infer strict distributed order from wall-clock timestamps alone. Capture wall time for cross-process alignment and monotonic time for local duration and ordering.
 
-Treat a missing probe as evidence only when flow sentinels, collector continuity, enclosing branch or boundary execution, current source locations and endpoint, `all-occurrences` policy, and transport acknowledgement prove it should have arrived. Otherwise mark it `INCONCLUSIVE` or `NOT_REACHED`.
+Treat a missing probe as evidence only when flow sentinels, collector continuity, enclosing branch or boundary execution, current source locations and endpoint, the `all-occurrences` policy, and available source/emitted/persisted counts prove it should have arrived. Otherwise mark it `INCONCLUSIVE` or `NOT_REACHED`.
 
 ## Coverage gate
 
@@ -351,6 +401,7 @@ Before the first failing reproduction, require:
 - [ ] Every relevant causal boundary has an invariant and mapped probe.
 - [ ] Every material hypothesis has both confirming and rejecting evidence.
 - [ ] Every boundary and hypothesis is covered by at least one probe, and every probe reference resolves.
+- [ ] `debuggerStrategy` records attached, unavailable, or unsafe status, and its initial/deferred candidates cover every boundary and hypothesis. When attached, every safe nonredundant initial breakpoint is installed before the first continue. When unavailable or unsafe, all candidates are deferred with mode-compatible structured reasons and validated non-pausing probes cover runtime evidence. `coverage.firstPassBreakpointBatchReviewed` is true.
 - [ ] A flow-start sentinel and the configured flow-terminal or observation-checkpoint sentinel exist.
 - [ ] Correlation and ordering survive every relevant async or service boundary.
 - [ ] `coverage.eventCardinalityReviewed` is true after proving that every active probe uses `expectedOccurrence: every-execution` plus `eventPolicy.mode: all-occurrences` and emits one event for every execution.
@@ -360,8 +411,8 @@ Before the first failing reproduction, require:
 - [ ] Logging is failure-tolerant and cannot block the product path.
 - [ ] The plan validator succeeds.
 - [ ] Instrumented code passes the narrowest relevant compile, type, or syntax check.
-- [ ] Collector health, ingest acknowledgement, endpoint freshness, and expected-probe sync succeed.
-- [ ] Every active source and transport sequence, acknowledgement watermark, and browser/process lifecycle evidence-loss boundary is covered or declared residual.
+- [ ] Collector health, endpoint freshness, expected-probe sync, and one bounded test-event persistence check succeed through the selected project/host logger or target-runtime native HTTP adapter.
+- [ ] Every active source or causal sequence and every browser/process lifecycle evidence-loss boundary is covered or declared residual.
 - [ ] The run ID is unique and stale evidence is cleared.
 
 Do not include dashboard visibility in this gate. A dashboard can improve operator experience but does not prove evidence delivery.
@@ -370,7 +421,7 @@ Do not include dashboard visibility in this gate. A dashboard can improve operat
 
 1. Summarize the exact run before reading raw volume.
 2. Select the failing parent correlation, operation, request, and attempt.
-3. Verify the start and configured completion sentinels, one-to-one source/probe cardinality, acknowledged delivery prefix, missing expected probes, event rejections, and source/transport sequence gaps. Require a queue-empty drain only when production has stopped.
+3. Verify the start and configured completion sentinels, available source/emitted/persisted counts, missing expected probes, send or serialization errors, and source or causal-sequence gaps. Treat delivery-dependent absence as inconclusive when the selected logger cannot establish exact persisted counts.
 4. Evaluate every hypothesis against its confirming and rejecting evidence.
 5. Identify the earliest invalid value, decision, ordering, or external result.
 6. Trace it forward through boundaries to the observed symptom.

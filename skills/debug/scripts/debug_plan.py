@@ -34,11 +34,13 @@ PROBE_ROLES = {
 SENTINEL_ROLES = {"flow-start", "flow-terminal", "observation-checkpoint"}
 COMPLETION_MODES = {"flow-terminal", "observation-checkpoint"}
 DELEGATION_SCOPES = {"single-run", "remaining-runs"}
+DEBUGGER_MODES = {"attached", "unavailable", "unsafe"}
 COVERAGE_GATES = {
     "causeFamiliesReviewed",
+    "firstPassBreakpointBatchReviewed",
     "observerCostReviewed",
     "privacyReviewed",
-    "transportChecked",
+    "loggingPathChecked",
     "correlationChecked",
     "eventCardinalityReviewed",
 }
@@ -49,6 +51,7 @@ TOP_LEVEL_FIELDS = {
     "boundaries",
     "hypotheses",
     "probes",
+    "debuggerStrategy",
     "coverage",
 }
 FAILURE_CONTRACT_FIELDS = {
@@ -85,6 +88,27 @@ HYPOTHESIS_FIELDS = {
     "confirmedBy",
     "rejectedBy",
     "status",
+}
+DEBUGGER_STRATEGY_FIELDS = {"mode", "reason", "breakpoints"}
+BREAKPOINT_FIELDS = {
+    "breakpointId",
+    "kind",
+    "location",
+    "activation",
+    "rationale",
+    "inspect",
+    "boundaryIds",
+    "hypothesisIds",
+    "condition",
+    "activateWhen",
+    "deferReason",
+    "sharedBoundaryRationale",
+}
+BREAKPOINT_ACTIVATIONS = {"initial", "deferred"}
+BREAKPOINT_DEFER_REASONS = {
+    "tool-unavailable",
+    "observer-risk",
+    "privacy-risk",
 }
 COVERAGE_FIELDS = COVERAGE_GATES | {"residualAmbiguities"}
 PROBE_FIELDS = {
@@ -126,16 +150,41 @@ def _reject_unknown_fields(
         )
 
 
-def _valid_source_location(value: str) -> bool:
+def _normalize_source_location(value: str) -> str | None:
     path, separator, line = value.rpartition(":")
     if not separator or not path or not line.isdigit() or int(line) <= 0:
-        return False
-    normalized = path.replace("\\", "/")
-    if normalized.startswith("/") or (
-        len(normalized) >= 2 and normalized[0].isalpha() and normalized[1] == ":"
+        return None
+    normalized_path = path.replace("\\", "/")
+    if normalized_path.startswith("/") or (
+        len(normalized_path) >= 2
+        and normalized_path[0].isalpha()
+        and normalized_path[1] == ":"
     ):
-        return False
-    return all(part not in {"", ".", ".."} for part in normalized.split("/"))
+        return None
+    if not all(
+        part not in {"", ".", ".."} for part in normalized_path.split("/")
+    ):
+        return None
+    return f"{normalized_path}:{int(line)}"
+
+
+def _valid_source_location(value: str) -> bool:
+    return _normalize_source_location(value) is not None
+
+
+def _sequential_breakpoint_deferral(value: str) -> bool:
+    normalized = " ".join(value.lower().split())
+    breakpoint_terms = ("breakpoint", "debugger stop", "debugger pause")
+    insufficiency_terms = (
+        "inconclusive",
+        "insufficient",
+        "not enough",
+        "does not explain",
+        "fails to explain",
+    )
+    return any(term in normalized for term in breakpoint_terms) and any(
+        term in normalized for term in insufficiency_terms
+    )
 
 
 class _Validator:
@@ -406,12 +455,47 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             if completion_mode == "observation-checkpoint":
                 validator.string_field(raw_completion, "condition", "run.completion")
 
+    debugger_strategy = validator.object_field(plan, "debuggerStrategy", "")
+    _reject_unknown_fields(
+        validator,
+        debugger_strategy,
+        DEBUGGER_STRATEGY_FIELDS,
+        "debuggerStrategy",
+    )
+    debugger_mode = validator.string_field(
+        debugger_strategy, "mode", "debuggerStrategy"
+    )
+    if debugger_mode and debugger_mode not in DEBUGGER_MODES:
+        validator.error(
+            "debuggerStrategy.mode",
+            f"must be one of: {', '.join(sorted(DEBUGGER_MODES))}",
+        )
+    validator.string_field(debugger_strategy, "reason", "debuggerStrategy")
+    raw_breakpoints = debugger_strategy.get("breakpoints")
+    breakpoint_items: list[tuple[int, dict[str, Any]]] = []
+    if not isinstance(raw_breakpoints, list):
+        validator.error("debuggerStrategy.breakpoints", "must be an array")
+    else:
+        for index, breakpoint in enumerate(raw_breakpoints):
+            if not isinstance(breakpoint, dict):
+                validator.error(
+                    f"debuggerStrategy.breakpoints[{index}]", "must be an object"
+                )
+                continue
+            breakpoint_items.append((index, breakpoint))
+
     boundary_items = _indexed_objects(validator, plan, "boundaries")
     hypothesis_items = _indexed_objects(validator, plan, "hypotheses")
     probe_items = _indexed_objects(validator, plan, "probes")
     boundaries = _index_unique_ids(validator, boundary_items, "boundaries", "id")
     hypotheses = _index_unique_ids(validator, hypothesis_items, "hypotheses", "id")
     probes = _index_unique_ids(validator, probe_items, "probes", "probeId")
+    breakpoints = _index_unique_ids(
+        validator,
+        breakpoint_items,
+        "debuggerStrategy.breakpoints",
+        "breakpointId",
+    )
 
     for _, (index, boundary) in boundaries.items():
         path = f"boundaries[{index}]"
@@ -437,6 +521,100 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         if status and status not in HYPOTHESIS_STATUSES:
             allowed = ", ".join(sorted(HYPOTHESIS_STATUSES))
             validator.error(f"{path}.status", f"must be one of: {allowed}")
+
+    breakpoint_boundary_refs: dict[str, list[str]] = {}
+    breakpoint_hypothesis_refs: dict[str, list[str]] = {}
+    breakpoint_sites: dict[str, tuple[int, str]] = {}
+    breakpoint_site_activations: dict[str, str] = {}
+    breakpoint_defer_reasons: dict[str, str] = {}
+    for breakpoint_id, (index, breakpoint) in breakpoints.items():
+        path = f"debuggerStrategy.breakpoints[{index}]"
+        _reject_unknown_fields(validator, breakpoint, BREAKPOINT_FIELDS, path)
+        breakpoint_kind = validator.string_field(breakpoint, "kind", path)
+        if breakpoint_kind and breakpoint_kind != "pause":
+            validator.error(
+                f"{path}.kind",
+                "must be 'pause'; evidence-bearing logpoints belong in probes",
+            )
+        location = validator.string_field(breakpoint, "location", path)
+        if location and not _valid_source_location(location):
+            validator.error(
+                f"{path}.location",
+                "must be a workspace-relative source path followed by a positive line number",
+            )
+        activation = validator.string_field(breakpoint, "activation", path)
+        if activation and activation not in BREAKPOINT_ACTIVATIONS:
+            validator.error(
+                f"{path}.activation",
+                f"must be one of: {', '.join(sorted(BREAKPOINT_ACTIVATIONS))}",
+            )
+        validator.string_field(breakpoint, "rationale", path)
+        validator.string_list_field(breakpoint, "inspect", path, allow_empty=False)
+        boundary_refs = validator.string_list_field(
+            breakpoint, "boundaryIds", path, allow_empty=False
+        )
+        breakpoint_boundary_refs[breakpoint_id] = boundary_refs
+        if len(boundary_refs) > 1:
+            validator.string_field(breakpoint, "sharedBoundaryRationale", path)
+        elif "sharedBoundaryRationale" in breakpoint:
+            validator.error(
+                f"{path}.sharedBoundaryRationale",
+                "must be omitted unless boundaryIds contains multiple boundaries",
+            )
+        breakpoint_hypothesis_refs[breakpoint_id] = validator.string_list_field(
+            breakpoint, "hypothesisIds", path, allow_empty=False
+        )
+        if "condition" in breakpoint:
+            validator.string_field(breakpoint, "condition", path)
+        normalized_location = _normalize_source_location(location) if location else None
+        if normalized_location:
+            duplicate = breakpoint_sites.get(normalized_location)
+            if duplicate:
+                duplicate_index, _ = duplicate
+                validator.error(
+                    f"{path}.location",
+                    "duplicates the physical breakpoint at "
+                    f"debuggerStrategy.breakpoints[{duplicate_index}]; combine any "
+                    "conditions, merge boundaryIds and hypothesisIds into one entry, "
+                    "and use sharedBoundaryRationale when it covers multiple boundaries",
+                )
+            else:
+                breakpoint_sites[normalized_location] = (index, breakpoint_id)
+                breakpoint_site_activations[normalized_location] = activation
+        if activation == "deferred":
+            activate_when = validator.string_field(breakpoint, "activateWhen", path)
+            if activate_when and _sequential_breakpoint_deferral(activate_when):
+                validator.error(
+                    f"{path}.activateWhen",
+                    "must name a tool, privacy, or observer-risk "
+                    "condition; do not defer until an earlier breakpoint is inconclusive",
+                )
+            defer_reason = validator.string_field(breakpoint, "deferReason", path)
+            breakpoint_defer_reasons[breakpoint_id] = defer_reason
+            if defer_reason and defer_reason not in BREAKPOINT_DEFER_REASONS:
+                validator.error(
+                    f"{path}.deferReason",
+                    "must be one of: "
+                    + ", ".join(sorted(BREAKPOINT_DEFER_REASONS)),
+                )
+        elif activation == "initial":
+            for deferred_field in ("activateWhen", "deferReason"):
+                if deferred_field in breakpoint:
+                    validator.error(
+                        f"{path}.{deferred_field}",
+                        "must be omitted for an initial breakpoint",
+                    )
+        else:
+            if "activateWhen" in breakpoint:
+                validator.string_field(breakpoint, "activateWhen", path)
+            if "deferReason" in breakpoint:
+                defer_reason = validator.string_field(breakpoint, "deferReason", path)
+                if defer_reason and defer_reason not in BREAKPOINT_DEFER_REASONS:
+                    validator.error(
+                        f"{path}.deferReason",
+                        "must be one of: "
+                        + ", ".join(sorted(BREAKPOINT_DEFER_REASONS)),
+                    )
 
     probe_boundary_refs: dict[str, list[str]] = {}
     probe_hypothesis_refs: dict[str, list[str]] = {}
@@ -604,6 +782,89 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             "boundary",
         )
 
+    breakpoint_boundary_ids: set[str] = set()
+    breakpoint_hypothesis_ids: set[str] = set()
+    for breakpoint_id, (index, _) in breakpoints.items():
+        valid_boundaries = _validate_references(
+            validator,
+            breakpoint_boundary_refs.get(breakpoint_id, []),
+            boundary_ids,
+            f"debuggerStrategy.breakpoints[{index}].boundaryIds",
+            "boundary",
+        )
+        if not valid_boundaries:
+            validator.error(
+                f"debuggerStrategy.breakpoints[{index}].boundaryIds",
+                "must map to at least one existing boundary",
+            )
+        breakpoint_boundary_ids.update(valid_boundaries)
+        valid_hypotheses = _validate_references(
+            validator,
+            breakpoint_hypothesis_refs.get(breakpoint_id, []),
+            hypothesis_ids,
+            f"debuggerStrategy.breakpoints[{index}].hypothesisIds",
+            "hypothesis",
+        )
+        if not valid_hypotheses:
+            validator.error(
+                f"debuggerStrategy.breakpoints[{index}].hypothesisIds",
+                "must map to at least one existing hypothesis",
+            )
+        breakpoint_hypothesis_ids.update(valid_hypotheses)
+
+    initial_breakpoint_count = list(breakpoint_site_activations.values()).count("initial")
+    deferred_breakpoint_count = list(breakpoint_site_activations.values()).count("deferred")
+    if debugger_mode == "attached":
+        if initial_breakpoint_count == 0:
+            validator.error(
+                "debuggerStrategy.breakpoints",
+                "attached mode must include at least one initial breakpoint",
+            )
+    elif debugger_mode in {"unavailable", "unsafe"}:
+        if initial_breakpoint_count:
+            validator.error(
+                "debuggerStrategy.breakpoints",
+                f"{debugger_mode} mode must not include initial breakpoints",
+            )
+        if deferred_breakpoint_count == 0:
+            validator.error(
+                "debuggerStrategy.breakpoints",
+                f"{debugger_mode} mode must include at least one deferred breakpoint",
+            )
+
+        compatible_defer_reasons = (
+            {"tool-unavailable"}
+            if debugger_mode == "unavailable"
+            else {"observer-risk", "privacy-risk"}
+        )
+        for breakpoint_id, defer_reason in breakpoint_defer_reasons.items():
+            if (
+                defer_reason in BREAKPOINT_DEFER_REASONS
+                and defer_reason not in compatible_defer_reasons
+            ):
+                breakpoint_index = breakpoints[breakpoint_id][0]
+                validator.error(
+                    f"debuggerStrategy.breakpoints[{breakpoint_index}].deferReason",
+                    f"{defer_reason!r} is not permitted when "
+                    f"debuggerStrategy.mode is {debugger_mode}",
+                )
+
+    if debugger_mode in DEBUGGER_MODES:
+        for boundary_id, (index, _) in boundaries.items():
+            if boundary_id not in breakpoint_boundary_ids:
+                validator.error(
+                    f"boundaries[{index}]",
+                    "must be referenced by at least one concrete debugger breakpoint "
+                    "boundaryIds entry; residualAmbiguities does not waive coverage",
+                )
+        for hypothesis_id, (index, _) in hypotheses.items():
+            if hypothesis_id not in breakpoint_hypothesis_ids:
+                validator.error(
+                    f"hypotheses[{index}]",
+                    "must be referenced by at least one concrete debugger breakpoint "
+                    "hypothesisIds entry; residualAmbiguities does not waive coverage",
+                )
+
     observed_boundary_ids: set[str] = set()
     observed_hypothesis_ids: set[str] = set()
     for probe_id, (index, _) in probes.items():
@@ -681,6 +942,8 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         "sharedProbeCount": sum(
             1 for refs in probe_hypothesis_refs.values() if len(set(refs)) > 1
         ),
+        "initialBreakpointCount": initial_breakpoint_count,
+        "deferredBreakpointCount": deferred_breakpoint_count,
         "residualAmbiguityCount": len(coverage_ambiguities),
         "excludedCauseFamilyCount": excluded_cause_family_count,
     }
@@ -696,6 +959,8 @@ def _report(validator: _Validator, counts: dict[str, int]) -> dict[str, Any]:
         "flowTerminalProbes": counts.get("flowTerminalProbeCount", 0),
         "observationCheckpointProbes": counts.get("observationCheckpointProbeCount", 0),
         "sharedProbes": counts.get("sharedProbeCount", 0),
+        "initialBreakpoints": counts.get("initialBreakpointCount", 0),
+        "deferredBreakpoints": counts.get("deferredBreakpointCount", 0),
         "residualAmbiguities": counts.get("residualAmbiguityCount", 0),
         "excludedCauseFamilies": counts.get("excludedCauseFamilyCount", 0),
     }
@@ -743,6 +1008,8 @@ def _format_markdown(report: dict[str, Any]) -> str:
         "flowTerminalProbes": "Flow-terminal probes",
         "observationCheckpointProbes": "Observation-checkpoint probes",
         "sharedProbes": "Shared probes",
+        "initialBreakpoints": "Initial breakpoints",
+        "deferredBreakpoints": "Deferred breakpoints",
         "residualAmbiguities": "Residual ambiguities",
         "excludedCauseFamilies": "Excluded cause families",
     }

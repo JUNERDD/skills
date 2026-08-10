@@ -1,4 +1,4 @@
 interface:
   display_name: "Coverage-First Debug & Repair"
-  short_description: "Prove and repair bugs with all-occurrence evidence"
-  default_prompt: "Use $debug to continue the existing debug process, preserve every active probe occurrence through acknowledged persistence without sampling or direct fire-and-forget ingestion, then prove, repair, verify, and clean up the bug."
+  short_description: "Batch breakpoints, prove, and repair runtime bugs"
+  default_prompt: "Use $debug to install the full safe first-pass native-breakpoint batch before continuing, preserve every accepted structured-probe occurrence as a persisted NDJSON record, then prove, repair, verify, and clean up the bug."

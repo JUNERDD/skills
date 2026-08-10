@@ -498,7 +498,6 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     recording_frozen: bool | None = None
-    recording_generation: int | None = None
     service_recording_frozen = service.get("recordingFrozen")
     if isinstance(service_recording_frozen, bool):
         recording_frozen = service_recording_frozen
@@ -508,13 +507,6 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
             recording_frozen = True
         elif state_status == "running":
             recording_frozen = False
-    service_recording_generation = service.get("recordingGeneration")
-    if (
-        isinstance(service_recording_generation, int)
-        and not isinstance(service_recording_generation, bool)
-        and service_recording_generation >= 0
-    ):
-        recording_generation = service_recording_generation
     recording_status = (
         "unknown"
         if recording_frozen is None
@@ -537,7 +529,6 @@ def command_dashboard_status(args: argparse.Namespace) -> dict[str, Any]:
         "frontendConfirmed": frontend_confirmed,
         "recordingFrozen": recording_frozen,
         "recordingStatus": recording_status,
-        "recordingGeneration": recording_generation,
         "error": error,
         "stateRefreshError": refresh_error,
         "line": line,
@@ -582,9 +573,6 @@ def _command_set_recording_frozen(
     recording_frozen = (
         service.get("recordingFrozen") if isinstance(service, dict) else None
     )
-    recording_generation = (
-        service.get("recordingGeneration") if isinstance(service, dict) else None
-    )
     recording_status = (
         "frozen"
         if recording_frozen is True
@@ -597,7 +585,6 @@ def _command_set_recording_frozen(
         "readyFile": str(ready_path),
         "recordingFrozen": recording_frozen,
         "recordingStatus": recording_status,
-        "recordingGeneration": recording_generation,
         "state": result,
     }
 

@@ -15,21 +15,21 @@ from collector_ide import resolve_location
 
 DEFAULT_LOG_WINDOW_LIMIT = 120
 MAX_LOG_WINDOW_LIMIT = 300
-MAX_STATE_COUNT_ITEMS = 200
+MAX_DASHBOARD_COUNT_ITEMS = 200
 
 
-def compact_count_pairs(
-    counter: Counter[str],
-    *,
-    limit: int | None = None,
-) -> list[dict[str, Any]]:
-    if limit is not None and len(counter) > limit:
-        items = counter.most_common(limit)
-    else:
-        items = counter.items()
+def compact_count_pairs(counter: Counter[str]) -> list[dict[str, Any]]:
+    items = (
+        counter.most_common(MAX_DASHBOARD_COUNT_ITEMS)
+        if len(counter) > MAX_DASHBOARD_COUNT_ITEMS
+        else counter.items()
+    )
     return [
         {'name': name, 'count': count}
-        for name, count in sorted(items, key=lambda item: (-item[1], item[0]))
+        for name, count in sorted(
+            items,
+            key=lambda item: (-item[1], item[0]),
+        )
     ]
 
 
@@ -78,22 +78,14 @@ def reset_log_cache(service: Any) -> None:
     service.entries = []
     service.run_counts = Counter()
     service.hypothesis_counts = Counter()
-    service.probe_counts = Counter()
-    service.correlation_counts = Counter()
-    service.event_counts = Counter()
-    service.location_counts = Counter()
     service.location_records: dict[str, dict[str, Any]] = {}
     if not hasattr(service, 'tracked_location_records'):
         service.tracked_location_records = {}
     service.invalid_lines = 0
-    service.last_event = None
     service.file_size_bytes = 0
     service.file_updated_at = None
-    service.location_state_updated_at = None
     service.physical_line_count = 0
     service.indexed_file_offset = 0
-    if hasattr(service, 'seen_transport_batch_ids'):
-        service.seen_transport_batch_ids = set()
 
 
 def _build_entry_metadata(
@@ -151,26 +143,9 @@ def append_entry_to_cache(
 
     if entry['runId']:
         service.run_counts[entry['runId']] += 1
-    if entry['correlationId']:
-        service.correlation_counts[entry['correlationId']] += 1
-    if entry['probeId']:
-        service.probe_counts[entry['probeId']] += 1
-    if entry['event']:
-        service.event_counts[entry['event']] += 1
     for hypothesis_id in entry['hypothesisIds']:
         service.hypothesis_counts[hypothesis_id] += 1
     _update_location_cache(service, entry)
-    service.last_event = payload
-    transport_batch_id = payload.get('transportBatchId')
-    if (
-        isinstance(transport_batch_id, str)
-        and transport_batch_id
-        and hasattr(service, 'seen_transport_batch_ids')
-    ):
-        service.seen_transport_batch_ids.add(transport_batch_id)
-        outcomes = getattr(service, 'transport_batch_outcomes', None)
-        if isinstance(outcomes, dict):
-            outcomes.setdefault(transport_batch_id, 'persisted')
     return entry
 
 
@@ -179,7 +154,6 @@ def _update_location_cache(service: Any, entry: dict[str, Any]) -> None:
     if not location:
         return
 
-    service.location_counts[location] += 1
     record = service.location_records.get(location)
     if record is None:
         record = {
@@ -701,7 +675,6 @@ def write_location_state_file(service: Any) -> None:
     temp_path = service.location_state_file.with_suffix(f'{service.location_state_file.suffix}.tmp')
     temp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding='utf-8')
     os.replace(temp_path, service.location_state_file)
-    service.location_state_updated_at = payload['updatedAt']
     _mark_location_state_written(service)
 
 
@@ -764,25 +737,8 @@ def flush_location_state_file(service: Any) -> None:
 
 
 def clear_log_file(service: Any) -> None:
-    outcomes = getattr(service, 'transport_batch_outcomes', None)
-    if isinstance(outcomes, dict):
-        for batch_id, disposition in tuple(outcomes.items()):
-            if disposition == 'persisted':
-                outcomes[batch_id] = 'discarded_cleared'
     service.log_file.write_text('', encoding='utf-8')
     reset_log_cache(service)
-    service.ingest_request_count = 0
-    service.ingest_accepted_event_count = 0
-    service.ingest_accepted_bytes = 0
-    service.ingest_last_accepted_at = None
-    service.ingest_frozen_discarded_request_count = 0
-    service.ingest_frozen_discarded_event_count = 0
-    service.ingest_frozen_discarded_bytes = 0
-    service.ingest_frozen_last_discarded_at = None
-    service.ingest_stale_discarded_request_count = 0
-    service.ingest_stale_discarded_event_count = 0
-    service.ingest_stale_discarded_bytes = 0
-    service.ingest_stale_last_discarded_at = None
     service.index_last_completed_at = None
     service.index_error_count = 0
     service.index_last_error = ''
@@ -810,9 +766,14 @@ def _slice_entries(
     return window
 
 
-def build_service_payload(service: Any) -> dict[str, Any]:
-    indexed_offset = int(getattr(service, 'indexed_file_offset', 0))
-    file_size_bytes = int(getattr(service, 'file_size_bytes', 0))
+def build_service_payload(
+    service: Any,
+    *,
+    recording_frozen: bool | None = None,
+) -> dict[str, Any]:
+    if recording_frozen is None:
+        recording_frozen = bool(getattr(service, 'recording_frozen', False))
+
     return {
         'sessionId': service.session_id,
         'logFile': str(service.log_file),
@@ -824,54 +785,10 @@ def build_service_payload(service: Any) -> dict[str, Any]:
         'locationStateFlushMs': int(getattr(service, 'location_state_flush_ms', 0)),
         'ingestEventCountLimited': False,
         'ingestMaxJsonBodyBytes': int(getattr(service, 'max_json_body_bytes', 0)),
-        'ingestRequestCount': int(getattr(service, 'ingest_request_count', 0)),
-        'ingestAcceptedEventCount': int(
-            getattr(service, 'ingest_accepted_event_count', 0),
-        ),
-        'ingestAcceptedBytes': int(getattr(service, 'ingest_accepted_bytes', 0)),
-        'ingestLastAcceptedAt': getattr(service, 'ingest_last_accepted_at', None),
-        'ingestFrozenDiscardedRequestCount': int(
-            getattr(service, 'ingest_frozen_discarded_request_count', 0),
-        ),
-        'ingestFrozenDiscardedEventCount': int(
-            getattr(service, 'ingest_frozen_discarded_event_count', 0),
-        ),
-        'ingestFrozenDiscardedBytes': int(
-            getattr(service, 'ingest_frozen_discarded_bytes', 0),
-        ),
-        'ingestFrozenLastDiscardedAt': getattr(
-            service,
-            'ingest_frozen_last_discarded_at',
-            None,
-        ),
-        'ingestStaleGenerationDiscardedRequestCount': int(
-            getattr(service, 'ingest_stale_discarded_request_count', 0),
-        ),
-        'ingestStaleGenerationDiscardedEventCount': int(
-            getattr(service, 'ingest_stale_discarded_event_count', 0),
-        ),
-        'ingestStaleGenerationDiscardedBytes': int(
-            getattr(service, 'ingest_stale_discarded_bytes', 0),
-        ),
-        'ingestStaleGenerationLastDiscardedAt': getattr(
-            service,
-            'ingest_stale_last_discarded_at',
-            None,
-        ),
-        'recordingFrozen': bool(getattr(service, 'recording_frozen', False)),
-        'recordingGeneration': int(getattr(service, 'recording_generation', 0)),
-        'recordingFrozenAt': getattr(service, 'recording_frozen_at', None),
-        'recordingResumedAt': getattr(service, 'recording_resumed_at', None),
-        'indexedFileOffset': indexed_offset,
-        'indexLagBytes': max(file_size_bytes - indexed_offset, 0),
-        'indexLastCompletedAt': getattr(service, 'index_last_completed_at', None),
-        'indexErrorCount': int(getattr(service, 'index_error_count', 0)),
-        'indexLastError': str(getattr(service, 'index_last_error', '') or ''),
-        'transportBatchCount': len(getattr(service, 'seen_transport_batch_ids', set())),
+        'recordingFrozen': recording_frozen,
         'serviceLogFile': str(service.service_log_file) if service.service_log_file else None,
         'ownedArtifacts': service.owned_artifacts,
         'endpoint': service.endpoint_url,
-        'batchEndpoint': service.batch_endpoint_url,
         'dashboardUrl': service.dashboard_url,
         'dashboardToken': service.dashboard_token,
         'stateUrl': service.state_url,
@@ -911,38 +828,17 @@ def build_service_payload(service: Any) -> dict[str, Any]:
 def build_state_response(service: Any) -> dict[str, Any]:
     with service.write_lock:
         sync_log_cache(service)
-        merged_locations = _build_active_location_records(service)
-        count_sources = {
-            'runCounts': service.run_counts,
-            'correlationCounts': service.correlation_counts,
-            'probeCounts': service.probe_counts,
-            'hypothesisCounts': service.hypothesis_counts,
-            'eventCounts': service.event_counts,
-            'locationCounts': service.location_counts,
-        }
         summary = {
             'totalEntries': len(service.entries),
-            'uniqueLocations': len(merged_locations),
-            'trackedLocationCount': len(service.tracked_location_records),
             'invalidLines': service.invalid_lines,
             'fileSizeBytes': service.file_size_bytes,
             'fileUpdatedAt': service.file_updated_at,
-            'locationStateUpdatedAt': service.location_state_updated_at,
-            'lastEvent': service.last_event,
-            'countListLimit': MAX_STATE_COUNT_ITEMS,
-            'countCardinality': {
-                name: len(counter) for name, counter in count_sources.items()
-            },
-            'countListsTruncated': [
-                name
-                for name, counter in count_sources.items()
-                if len(counter) > MAX_STATE_COUNT_ITEMS
-            ],
+            'runCounts': compact_count_pairs(service.run_counts),
+            'hypothesisCounts': compact_count_pairs(service.hypothesis_counts),
         }
-        summary.update({
-            name: compact_count_pairs(counter, limit=MAX_STATE_COUNT_ITEMS)
-            for name, counter in count_sources.items()
-        })
+
+    with service.ingest_lock:
+        recording_frozen = bool(getattr(service, 'recording_frozen', False))
 
     return {
         'ok': True,
@@ -950,10 +846,10 @@ def build_state_response(service: Any) -> dict[str, Any]:
             'stopping'
             if service.shutdown_requested_at
             else 'frozen'
-            if getattr(service, 'recording_frozen', False)
+            if recording_frozen
             else 'running'
         ),
-        'service': build_service_payload(service),
+        'service': build_service_payload(service, recording_frozen=recording_frozen),
         'summary': summary,
     }
 

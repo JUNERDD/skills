@@ -624,12 +624,13 @@ export const SKILLS: SkillDetail[] = [
     category: "Runtime debugging & repair",
     blurb: "Prove, repair, and verify runtime bugs with gap-auditable evidence.",
     lead:
-      "A coverage-first debugging and repair system with a machine-validated hypothesis-and-probe plan, loss-auditable runtime evidence, an evolving investigation ledger, and separate post-repair verification.",
+      "A coverage-first debugging and repair system with a machine-validated native-breakpoint-and-probe plan, loss-auditable runtime evidence, an evolving investigation ledger, and separate post-repair verification.",
     overview:
-      "Use this skill when code reading is not enough and a runtime bug should be followed from failure contract to verified repair. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, validates one coverage-plan file with a terminal or observation-checkpoint completion mode, and reuses that plan for collector location sync and expected-probe analysis. Each active probe uses a fixed all-occurrences/every-execution contract: every occurrence becomes exactly one independently serialized event and one persisted NDJSON record, with byte batching used only as wire framing. Each runtime run uses a user handoff by default. A pre-run assignment of runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Lifecycle scope is investigation over collector session over run: user replies, evidence analysis, context compaction, repair, and new run IDs resume the exact active ready file from the same investigation ledger. A healthy resumed collector keeps its endpoint, port, evidence file, and existing dashboard without another start or UI open; resume never scans the workspace or opens browser UI. Browser-capable local sessions automatically attempt to open and confirm the bundled dashboard with bounded fallback attempts only when newly established; user-owned reproduction never disables that default, and only a verified no-local-GUI host opts out. Browser probes acquire one realm-registry-owned acknowledged transport per collector session through `getOrCreateBrowserDebugTransport`, assigned once to a top-level canonical `const`. Every producer key has one active owner: HMR releases its current lease before reacquiring the inactive control, preserving source sequence, while acquisition during active ownership is a run-invalidating conflict rather than an implicit replacement. Transport termination retains a completed or incomplete run audit, and a later acquisition must use a fresh run ID. The static gate masks comments, strings, templates, and classified regex literals, fails closed on ambiguous slash/brace syntax, requires the canonical binding to own every accepted sink, and rejects direct fire-and-forget `/ingest`, steady `keepalive: true`, copied-but-unused transports, shadowed or fake sinks, duplicate producers, silent catches, and occurrence-level filtering. Its single mutually exclusive Freeze/Resume control drives a collector-global recording gate: while `FROZEN`, new events are discarded instead of written, every dashboard continues refreshing, Clear remains available without resuming recording, and all tabs, reloads, and later analysis turns that reuse the collector observe the same state. Any discarded event makes the run incomplete. Correlated NDJSON is summarized by run, parent flow, operation, request, child correlation, and transport continuity before raw events are inspected. Requests to debug, troubleshoot, fix, repair, or resolve continue through the evidence-proven repair, a separate verification run, ledger completion, and cleanup unless the user explicitly requests diagnosis-only work.",
+      "Use this skill when code reading is not enough and a runtime bug should be followed from failure contract to verified repair. It builds a code-grounded causal map, records material hypotheses with both confirming and rejecting evidence, and validates one coverage-plan file containing a strict attached/unavailable/unsafe debugger strategy, an explicit initial/deferred breakpoint batch, structured probes, and a terminal or observation-checkpoint completion mode. When a native debugger is attached and pausing is safe, the agent installs every safe nonredundant initial breakpoint in one pre-execution phase instead of advancing through a token one- or two-breakpoint set; when suspension is unsafe or unavailable, it retains every candidate as an explicitly reasoned deferred breakpoint and uses validated non-pausing probes. The plan is reused for collector location sync and expected-probe analysis. Each active probe uses a fixed all-occurrences/every-execution contract: every accepted occurrence becomes exactly one independently serialized event and one persisted NDJSON record; a multi-event envelope changes framing only. Each runtime run uses a user handoff by default. A pre-run assignment of runtime investigation may select an autonomous agent chain, but asking the agent to investigate after a completed user run resumes evidence analysis without relabeling that run or transferring future reproduction ownership; a future run changes owner only through explicit run-scoped delegation. Lifecycle scope is investigation over collector session over run: user replies, evidence analysis, context compaction, repair, and new run IDs resume the exact active ready file from the same investigation ledger. A healthy resumed collector keeps its endpoint, port, evidence file, existing dashboard, IDE selection, and location state without another start or UI open; resume never scans the workspace or opens browser UI. Newly established browser-capable local sessions automatically attempt to open and confirm the dashboard with bounded fallback attempts, while the live views, filtering, detail inspection, IDE source opening, location sync, and configuration interactions remain available. Event delivery is language-neutral: reuse an authoritative project or host logger first, otherwise use the target runtime's native HTTP client, with collector-free direct NDJSON append only under safe writer ownership. The skill ships no target-project transport module. The collector exposes only `POST /ingest`, accepting one event or an exact `{\"events\": [...]}` envelope, and provides collect, Freeze, Resume, Clear, and Stop; it does not own retry, deduplication, envelope identity, generation, or application lifecycle policy. While `FROZEN`, new ingest requests are rejected without writing, every dashboard continues refreshing, Clear remains available without resuming recording, and all tabs, reloads, and later analysis turns observe the same state. Correlated NDJSON is summarized by run and relevant application correlation fields before raw events are inspected. Requests to debug, troubleshoot, fix, repair, or resolve continue through the evidence-proven repair, a separate verification run, ledger completion, and cleanup unless the user explicitly requests diagnosis-only work.",
     bestFor: [
       "Expensive, flaky, timing-sensitive, destructive, environment-specific, or user-only reproductions.",
       "Runtime failures that are easy to guess about but hard to prove across causal boundaries.",
+      "Attached-debugger investigations that should install a broad first-pass breakpoint batch before execution resumes.",
       "Investigations that need a deterministic coverage gate before adding broad temporary instrumentation.",
       "Concurrent or distributed flows that need parent-flow, operation, request, attempt, and ordering evidence.",
       "Browser investigations that conditionally require complete page-lifetime application-fetch capture.",
@@ -639,34 +640,40 @@ export const SKILLS: SkillDetail[] = [
     workflow: [
       "Resolve scope without redundant approval, default each runtime run to a user handoff, allow a pre-run agent assignment to cover the remaining autonomous chain, and require explicit run-scoped delegation for later ownership changes; then define the failure contract plus terminal or bounded observation condition and inspect the relevant execution path.",
       "Build a causal-boundary map and enumerate code-grounded material hypotheses with both confirming and rejecting evidence.",
-      "Create and validate one coverage-plan file whose boundaries, hypotheses, probes, fixed all-occurrences/every-execution cardinality, structured payload-only bounds, privacy checks, and residual ambiguities agree; unknown keys are rejected structurally, and mandatory semantic review rejects prose that tries to override occurrence policy.",
+      "Create and validate one coverage-plan file whose debugger strategy, initial and deferred breakpoints, boundaries, hypotheses, probes, fixed all-occurrences/every-execution cardinality, structured payload-only bounds, privacy checks, and residual ambiguities agree; unknown keys are rejected structurally, and mandatory semantic review rejects token breakpoint batches or prose that tries to override occurrence policy.",
+      "When a native debugger is attached and pausing is safe, install every safe nonredundant initial breakpoint before the first run or continue, issuing single-location calls back-to-back; after a pause, add the entire newly justified causal-interval batch before resuming. Use non-pausing probes when suspension is unsafe.",
       "Read the investigation ledger and resume its exact active ready file before any start attempt; reuse a healthy collector and dashboard across turns and run IDs without workspace scanning or UI reopening, and replace it only when missing or unreachable or when the user or host explicitly requires isolation or replacement.",
-      "Instrument shared causal cuts and invariants, pass compile, browser-instrumentation, collector, expected-probe, cardinality, and transport-prefix gates, then check that collector recording is live, run `resume-recording` when necessary, and copy the normalized `dashboard-status` line before every user-owned reproduction.",
-      "Collect one clean terminal run or bounded observation window and summarize evidence by run, parent flow, operation, request, child correlation, source sequence, and transport sequence before reading raw volume.",
+      "Instrument shared causal cuts and invariants, select a project logger or runtime-native adapter, resolve every temporary helper reference independently with the target project's module system (optionally using the path helper for slash-delimited file-relative references), and pass native resolution, compile, collector, expected-probe, and cardinality gates; then after prior frozen analysis and next-run preparation run `resume-recording`, require collector recording to be live, and copy the normalized `dashboard-status` line before every user-owned reproduction.",
+      "Collect one clean terminal run or bounded observation window, detach its producers, flush the selected logger or runtime adapter, reconcile accepted writes with persisted NDJSON, freeze the collector, and summarize evidence by run and relevant application correlation fields while recording remains frozen.",
       "Prove origin-to-symptom propagation or add only probes for the smallest unresolved causal interval, updating one evolving investigation ledger throughout.",
       "For diagnosis-only work, preserve evidence and clean temporary instrumentation before reporting; otherwise treat diagnosis as intermediate, repair the proven mechanism immediately, verify separately, and then clean owned artifacts.",
     ],
     outputs: [
-      "A validated machine-readable coverage plan shared by location sync and expected-probe analysis.",
+      "A validated machine-readable coverage plan containing the debugger decision, broad initial/deferred breakpoint batch, and structured probes, shared by location sync and expected-probe analysis.",
       "A cited origin-to-symptom proof or the smallest explicitly unresolved causal interval.",
-      "For continuous streams, an acknowledged high-watermark checkpoint and source/transport gap report that closes the evidence window without claiming the business stream ended.",
+      "For continuous streams, a persisted bounded source-prefix checkpoint and source-gap report that closes the evidence window without claiming the business stream ended.",
       "One evolving investigation ledger, including active collector and session history, for every repair-scoped, user-owned, multi-run, or durable investigation.",
       "Scannable Markdown handoffs for user-owned reproduction, evidence analysis, and repair verification, with blank-line-separated headings and lists.",
       "For repair-scoped work, a causally sufficient code change backed by a separate verification run and deterministic cleanup.",
     ],
     guardrails: [
       "Do not claim a root cause without evidence for the originating fault, its propagation, and the reported symptom.",
+      "Do not resume after installing only one or two native breakpoints when more safe nonredundant first-pass locations are already justified; install the full batch or record each explicit deferral.",
+      "Do not count a pause-only breakpoint as an all-occurrence structured probe or use a non-hit alone to prove absence.",
+      "Do not use raw debugger-console logpoints as complete evidence; an evidence-bearing logpoint must also be a validated structured probe routed through the selected runtime adapter.",
       "Do not rewrite completed run ownership or interpret a request to analyze completed evidence as delegation of a future reproduction; require an explicit run-scoped directive for ownership changes.",
       "Do not start a second collector or reopen its dashboard after the ledger's exact active ready file resumes successfully; a user reply, analysis turn, context compaction, repair phase, or new run ID is not a collector-session boundary.",
       "Do not scan the workspace for a session to resume; replace only a missing or unreachable recorded session or under an explicit user or host isolation/replacement directive, and record the transition in the same investigation ledger.",
       "Do not treat user-owned reproduction, missing agent browser control, or a ban on agent-operated product browsing as a headless reason to disable local dashboard auto-open.",
       "Do not add a correlation header when it could change CORS, cache, routing, signing, authorization, or product behavior.",
       "Do not treat dashboard visibility as evidence or let a failed open block evidence collection or reproduction.",
-      "Do not treat collector-global `FROZEN` as health failure, evidence completion, or a transport checkpoint; it discards new events while dashboards continue refreshing, so restore live recording with the same Freeze/Resume control or `resume-recording` before a reproduction.",
+      "Do not invent a DevTools or page-global helper as a user completion action; attach checkpoint instrumentation to the natural boundary, use an existing host action or `done`, and prove completeness from acknowledgements and persisted records.",
+      "Do not treat collector-global `FROZEN` as health failure, evidence completion, or a persistence checkpoint, and never Freeze before producers are detached and the selected adapter is flushed; keep recording frozen through analysis and repair, then Resume only after the next run is prepared and immediately before recording.",
       "Do not apply a repair when the request is diagnosis-only or retain a smaller workaround that leaves the causal mechanism active.",
       "Do not sample, throttle, debounce, first-N, change-gate, once-per-key, aggregate, merge, coalesce, overwrite, deduplicate, or discard any active probe occurrence.",
-      "Do not normalize multiple simultaneous direct `/ingest` Pending rows; they mean browser instrumentation bypassed the required shared transport.",
-      "Do not claim lossless coverage across reload, navigation, process loss, memory exhaustion, or storage exhaustion with only the page-local memory queue.",
+      "Do not require the target project to import a bundled language-specific transport, fire and forget collector writes, or automatically retry an ambiguous response under an assumed deduplication guarantee.",
+      "Do not guess or copy a relative helper reference across differently nested importers; create the target first and require the target project's native resolver or compiler to accept every temporary cross-file edge.",
+      "Do not claim lossless coverage across reload, navigation, process loss, memory exhaustion, or storage exhaustion without an authoritative durable producer-side logger.",
       "Do not analyze unbounded raw logs before summarization or leave temporary instrumentation and owned artifacts after successful cleanup.",
     ],
     entryPoints: [
@@ -678,7 +685,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Coverage planning",
         path: "skills/debug/references/coverage-first-debugging.md",
-        description: "Causal maps, material hypotheses, the coverage plan, and the reproduction gate.",
+        description: "Causal maps, material hypotheses, broad first-pass breakpoint batching, the coverage plan, and the reproduction gate.",
       },
       {
         label: "Runtime reference",
@@ -688,7 +695,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Browser reference",
         path: "skills/debug/references/browser-debugging.md",
-        description: "Browser transport, long-lived stream checkpoints, fetch capture, and lifecycle rules.",
+        description: "Browser-native adapter choices, long-lived stream checkpoints, fetch capture, and lifecycle rules.",
       },
       {
         label: "Root-cause reference",
@@ -698,12 +705,12 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Coverage validator",
         path: "skills/debug/scripts/debug_plan.py",
-        description: "Validate the shared coverage plan and fail closed before reproduction.",
+        description: "Validate the strict debugger strategy, breakpoint batch, structured probes, and shared coverage gates before reproduction.",
       },
       {
-        label: "Browser instrumentation validator",
-        path: "skills/debug/scripts/validate_browser_instrumentation.py",
-        description: "Mask comments and classified literals, fail closed on ambiguous slash/brace syntax, require one top-level canonical transport, and conservatively reject direct or aliased ingest, shadowed or fake sinks, steady keepalive, silent failures, duplicate factories, and common occurrence gates.",
+        label: "File-relative helper resolver",
+        path: "skills/debug/scripts/debug_import_path.py",
+        description: "Compute and verify slash-delimited file-relative debug helper references after the importer and target exist; package, namespace, and alias resolution remains project-native.",
       },
       {
         label: "Session helper",
@@ -711,14 +718,9 @@ export const SKILLS: SkillDetail[] = [
         description: "Start, exact-ready-file resume, confirm, recover, and stop the local collector and dashboard session.",
       },
       {
-        label: "Browser transport",
-        path: "skills/debug/assets/browser-debug-transport.mjs",
-        description: "Realm-registry-owned queue with conflict-on-active, release-then-reacquire HMR producers, strict byte frames, persistence watermarks, and audited run termination.",
-      },
-      {
         label: "Log summarizer",
         path: "skills/debug/scripts/summarize_debug_log.py",
-        description: "Summarize NDJSON evidence and transport continuity before reading raw volume.",
+        description: "Summarize NDJSON evidence and event continuity before reading raw volume.",
       },
       {
         label: "Collector",
@@ -733,22 +735,12 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Coverage-plan tests",
         path: "skills/debug/scripts/test_debug_plan.py",
-        description: "Schema, mapping, sentinel, and gate validation regressions.",
+        description: "Debugger-strategy, breakpoint-batch, schema, mapping, sentinel, and gate validation regressions.",
       },
       {
         label: "Dashboard summary tests",
         path: "skills/debug/scripts/test_dashboard_utils.mjs",
         description: "Message, event-name, probe-ID, whitespace, and empty-state summary regressions.",
-      },
-      {
-        label: "Browser transport tests",
-        path: "skills/debug/scripts/test_browser_debug_transport.mjs",
-        description: "All-occurrence, producer/transport HMR, terminal-run recovery, strict-frame, checkpoint, timeout, and retry regressions.",
-      },
-      {
-        label: "Browser instrumentation tests",
-        path: "skills/debug/scripts/test_validate_browser_instrumentation.py",
-        description: "Direct/aliased-ingest, lexical-mask, canonical-binding, shadow/fake-sink, occurrence-gate, keepalive, silent-catch, and registry-factory regressions.",
       },
     ],
   },
