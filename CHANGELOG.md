@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.9] - 2026-08-10
+
+### Changed
+
+- Reframed debug around one pre-execution native-breakpoint setup with deferred/unavailable/unsafe debugger strategy and first-pass batch review.
+- Removed the bundled browser transport and validate_browser_instrumentation stack in favor of language-neutral project/host logger or runtime-native HTTP adapters posting to a single /ingest endpoint.
+- Simplified the collector recording surface around collect/Freeze/Resume/Clear/Stop with detach-flush-reconcile before Freeze and frozen analysis through repair.
+- Added debug_import_path.py for slash-delimited file-relative helper resolution and synced README plus website catalog copy.
+
 ## [0.2.8] - 2026-07-24
 
 ### Changed
