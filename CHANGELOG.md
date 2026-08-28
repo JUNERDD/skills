@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.10] - 2026-08-28
+
+### Changed
+
+- Added `bugbot` for durable introduced-bug detection reports and report-scoped repair follow-up.
+- Added `composable-components` for accessible, configurable compound React APIs and private component folder layout guidance.
+- Added `github-context7-research` for version-matched Context7 documentation and read-only GitHub evidence.
+- Registered all three skills in the README and localized website catalog.
+
 ## [0.2.9] - 2026-08-10
 
 ### Changed
