@@ -116,6 +116,47 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
       ],
     },
+    "composable-components": {
+      category: "组件架构",
+      blurb: "构建公共 Part 真正可配置的 React 复合组件 API。",
+      lead: "一套自包含的组件创作契约，用于构建公共接缝诚实的无障碍 primitive 与产品 composer。",
+      overview:
+        "在创建或重构 React compound component、数据驱动 Part、多态宿主元素或其私有文件布局时使用此 skill。它明确规定调用方数量不影响契约质量：即使当前只有一个生产调用方，公共 Part 仍必须可达，原生 props 与 ref 必须透明，事件与样式必须可组合，状态所有权必须清晰，而组件拥有重复数据时必须提供真实的渲染边界。",
+      bestFor: [
+        "设计带受控状态、语义 Part、asChild、焦点、键盘和 ARIA 契约的 Radix 风格 primitive。",
+        "构建视觉 Part 不依赖具体 store 或同步实现的产品 compound component。",
+        "让集合 Item、空状态、Trigger 与 Content 区域无需复制内部行为即可替换。",
+        "用职责明确的下划线目录组织组件本地私有文件。",
+      ],
+      workflow: [
+        "先判断 primitive 与 product 行为，再决定重复数据迭代归消费者还是组件所有。",
+        "根据状态、数据、语义、内容、样式、交互和集成职责确定公共接缝，而不是根据当前调用方数量。",
+        "定义会在缺失 owner 时抛错的 Context 边界，以及合适的受控或 Provider 驱动状态契约。",
+        "让每个公共宿主 Part 透明传递 props 与 ref，明确组合事件和样式，并暴露稳定状态属性。",
+        "移除 child type 发现、静默丢弃 children，以及让导出 Part 无法触达的固定嵌套默认实现。",
+        "应用私有目录分类，并在完成前验证至少一种有意义的替代排列或渲染器。",
+      ],
+      outputs: [
+        "一个所声明 Part 均可直接使用或通过显式边界替换的 compound namespace。",
+        "类型化的状态、Item 渲染、宿主 props、无障碍和元素替换契约。",
+        "最小私有目录布局，以及所声明组合接缝确实可用的证据。",
+      ],
+      guardrails: [
+        "不要因为只有一个生产调用方就降低 API 质量，也不要为了显得可复用而臆造配置。",
+        "不要导出会被便利 facade 永久替换为内部副本的装饰性 Part。",
+        "不要把 child.type 身份扫描、只取第一个匹配项或静默丢弃 children 当作组合协议。",
+        "不要让样式 hooks 取代语义 HTML、键盘行为、焦点管理或 ARIA。",
+        "保持 skill 自包含；它的组合决策不能要求预先安装其他 skills。",
+      ],
+      entryPoints: [
+        { description: "分类、核心决策、创作清单和完成门槛。", label: "工作流" },
+        {
+          description: "与调用方数量无关的质量、Part 可达性、数据渲染、状态、宿主 props 和无障碍规则。",
+          label: "组合契约",
+        },
+        { description: "私有下划线目录职责、命名、树形结构、导入和紧凑布局指导。", label: "目录布局" },
+      ],
+    },
     "find-local-skill": {
       category: "Agent 工作流",
       blurb: "先拆解请求，再寻找相关本地 skills。",
@@ -155,6 +196,42 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "Skill 盘点、选择和分析顺序规则。", label: "工作流" },
         { description: "扫描常见本地 skill roots 的文件系统工具。", label: "本地 skill 扫描器" },
         { description: "此 skill 的可选 agent 运行时元数据。", label: "运行时元数据" },
+      ],
+    },
+    "github-context7-research": {
+      category: "依赖库研究",
+      blurb: "用源码与变更历史验证第三方库文档。",
+      lead:
+        "一个版本感知的证据工作流，用只读 GitHub 源码、测试和变更历史核对 Context7 公共文档。",
+      overview:
+        "当编码决策依赖外部库、SDK 或框架的精确 API 或行为时，使用这个可隐式自动调用的 skill。它会解析库与目标版本，通过 Context7 建立受支持的公共契约，把 GitHub 证据映射到同一发布版本，并区分文档用法、实现细节、测试以及 Issue 或 PR 的历史上下文。",
+      bestFor: [
+        "针对当前版本或项目锁定版本实现外部依赖接入。",
+        "诊断公共文档未充分解释的运行时行为。",
+        "检查 API 变化、回归、Bug workaround 和发布历史。",
+        "用公共文档、精确 ref 源码和聚焦测试验证建议。",
+      ],
+      workflow: [
+        "从用户输入或消费项目中识别包、规范仓库、具体问题和目标版本。",
+        "解析 Context7 library ID，并只查询该版本与问题所需的公共文档。",
+        "把包版本映射到不可变的 GitHub tag 或 commit，而不是静默使用默认分支。",
+        "检查公共导出、类型、实现、测试和示例，只在需要时补充 release、commit、Issue 或 PR。",
+        "核对两组证据，并把受支持用法与观察到的内部实现、历史上下文和 workaround 分开报告。",
+      ],
+      outputs: [
+        "基于受支持公共契约的直接实现或诊断建议。",
+        "用于验证的 Context7 library ID 与版本，以及 GitHub 仓库 ref 或 commit。",
+        "对证据一致、冲突、版本映射未决、证据缺口和推断的明确说明。",
+      ],
+      guardrails: [
+        "GitHub MCP 只用于只读研究；隐式调用永远不授权仓库写操作。",
+        "不要把版本化文档与无关分支或发布版本的源码静默比较。",
+        "不要把私有、生成、弃用、兼容层、测试专用或 feature-flagged 内部 API 推荐为公共 API。",
+        "不要向 Context7 发送凭证、私有源码、专有标识符或个人数据。",
+      ],
+      entryPoints: [
+        { description: "版本匹配、证据路由、核对、报告和只读 guardrails。", label: "工作流" },
+        { description: "GitHub 与 Context7 MCP 依赖及隐式调用策略。", label: "运行时元数据" },
       ],
     },
     "git-commit": {
@@ -444,6 +521,46 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         { description: "提问标准、覆盖地图和最终化流程。", label: "工作流" },
         { description: "本地 transcript 和 outcome 文件支持。", label: "会话脚本" },
         { description: "已记录追问行为和会话生命周期说明。", label: "参考" },
+      ],
+    },
+    bugbot: {
+      category: "代码审查",
+      blurb: "持久化引入 Bug 报告，并识别报告修复意图。",
+      lead:
+        "一个两阶段本地 diff 审查器，提供持久 Markdown 报告与低摩擦、报告范围内的修复。",
+      overview:
+        "对本地 branch 或未提交改动执行窄范围 Bugbot 工作流时使用此 skill。检测会盘点 tracked 与 untracked 文件，递归追踪 diff 派生候选项直到有界固定点，并把每个已验证的生产 Bug 写入唯一 Markdown 报告；该报告是检测阶段唯一允许的写入。报告展示后，Bugbot 会结合完整对话识别修复意图，而不是匹配固定确认文字。修复意图明确且没有更窄范围时，选择最新无歧义报告中的全部未解决 findings；对具体 finding 的语义指代可以缩小范围。Bugbot 会验证有范围的修复，不会静默处理新 findings，也不会改变 Git 发布状态。",
+      bestFor: [
+        "针对仓库默认分支或指定 base 审查当前 branch work。",
+        "针对 HEAD 审查 staged、unstaged 与 untracked 本地改动。",
+        "生成不限 finding 数量的持久报告，再根据上下文识别的意图修复全部或选定 findings。",
+      ],
+      workflow: [
+        "解析仓库、比较模式、baseline、tracked diff 与 untracked 文件清单。",
+        "从每个 changed hunk 与 untracked 文件建立候选前沿。",
+        "只沿与改动有因果关系的控制流、依赖、契约、状态和失败路径追踪候选项。",
+        "持续加入新暴露的 diff 相关风险直到固定点，再按根因验证和去重。",
+        "把每个已验证 finding 写入带稳定报告内 ID、证据、coverage 与 recommendation 的唯一 Markdown 报告。",
+        "当对话上下文确立报告修复意图时，重新验证推断出的 finding 范围，应用有范围修复并运行相称检查。",
+      ],
+      outputs: [
+        "一份持久 Markdown 报告，包含每个引入生产 Bug 的 finding card 与完整索引。",
+        "完整审查无 Bug 时的明确 clean report，或列出精确 coverage gaps 的 incomplete report。",
+        "修复后的 Markdown 摘要，包含验证结果与仍未确认的问题。",
+      ],
+      guardrails: [
+        "检测期间只写报告 artifact；不要编辑被审查源码或 Git 状态。",
+        "只为 Bugbot 请求启动新检测；隐式路由用于报告跟进，而不是普通 code review。",
+        "通过语义识别报告修复意图，不匹配固定短语；只有意图、报告来源或范围真正不清楚时才询问。",
+        "不要限制 findings 数量，也不要在最高严重度或最容易的问题后停止。",
+        "不要把递归前沿扩展到与被审查改动没有因果关系的路径。",
+        "不要 stage、commit、push、deploy，或在没有单独请求时修复不同的新 findings。",
+      ],
+      entryPoints: [
+        { description: "阶段路由、上下文修复意图识别、递归检测和报告持久化。", label: "工作流" },
+        { description: "标准 Markdown 报告、finding cards、coverage ledger、证据与自检。", label: "报告模板" },
+        { description: "确认解析、有范围修复、验证与停止规则。", label: "修复工作流" },
+        { description: "此 skill 的可选 agent 运行时元数据与自动调用策略。", label: "运行时元数据" },
       ],
     },
     "code-review": {

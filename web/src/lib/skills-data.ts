@@ -189,6 +189,59 @@ export const SKILLS: SkillDetail[] = [
     ],
   },
   {
+    slug: "composable-components",
+    title: "composable-components",
+    category: "Component architecture",
+    blurb: "Build compound React APIs whose public parts are genuinely configurable.",
+    lead:
+      "A self-contained component-authoring contract for accessible primitives and product composers with honest public seams.",
+    overview:
+      "Use this skill when creating or refactoring compound React components, data-driven component parts, polymorphic hosts, or their private file layout. It treats caller count as irrelevant to contract quality: one production use can still require reachable public parts, transparent native props and refs, composable events and styles, explicit state ownership, and a real rendering boundary wherever the component owns repeated data.",
+    bestFor: [
+      "Designing Radix-style primitives with controlled state, semantic parts, asChild behavior, focus, keyboard, and ARIA contracts.",
+      "Building product compound components whose visual parts do not depend on a concrete store or synchronization implementation.",
+      "Making collection items, empty states, triggers, and content regions replaceable without copying internal behavior.",
+      "Organizing component-local private files under focused underscore directories.",
+    ],
+    workflow: [
+      "Classify primitive versus product behavior, then decide whether repeated-data iteration belongs to the consumer or the component.",
+      "Derive public seams from state, data, semantics, content, styling, interaction, and integration responsibilities rather than current caller count.",
+      "Define a throwing context boundary and controlled or provider-backed state contract appropriate to the component.",
+      "Give every public host part transparent props and refs, deliberate event and style composition, and stable state attributes.",
+      "Remove child-type discovery, silent child dropping, and fixed nested defaults that make exported parts unreachable.",
+      "Apply the private folder taxonomy and verify at least one meaningful alternative arrangement or renderer before completion.",
+    ],
+    outputs: [
+      "A compound namespace whose advertised parts are directly usable or replaceable through an explicit boundary.",
+      "A typed state, item-rendering, host-prop, accessibility, and element-substitution contract.",
+      "A minimal private folder layout plus evidence that the claimed composition seams work.",
+    ],
+    guardrails: [
+      "Do not lower API quality because only one production caller exists, and do not invent speculative configuration merely to appear reusable.",
+      "Do not export decorative parts that a convenience facade permanently replaces with internal copies.",
+      "Do not use child.type identity scanning, first-match selection, or silent child dropping as a composition protocol.",
+      "Do not let styling hooks replace semantic HTML, keyboard behavior, focus management, or ARIA.",
+      "Keep the skill self-contained; its composition decisions must not require other skills to be installed.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/composable-components/SKILL.md",
+        description: "Classification, core decisions, authoring checklist, and completion gates.",
+      },
+      {
+        label: "Composition contract",
+        path: "skills/composable-components/house-rules.md",
+        description: "Caller-independent quality, public-part reachability, data rendering, state, host props, and accessibility rules.",
+      },
+      {
+        label: "Folder layout",
+        path: "skills/composable-components/folder-layout.md",
+        description: "Private underscore folder ownership, naming, trees, imports, and compact-layout guidance.",
+      },
+    ],
+  },
+  {
     slug: "find-local-skill",
     title: "find-local-skill",
     category: "Agent workflow",
@@ -240,6 +293,52 @@ export const SKILLS: SkillDetail[] = [
         label: "Runtime metadata",
         path: "skills/find-local-skill/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "github-context7-research",
+    title: "github-context7-research",
+    category: "Library research",
+    blurb: "Verify library docs against source and history.",
+    lead:
+      "A version-aware evidence workflow that reconciles Context7 public documentation with read-only GitHub source, tests, and change history.",
+    overview:
+      "Use this implicitly discoverable skill when a coding decision depends on the exact API or behavior of an external library, SDK, or framework. It resolves the library and target version, establishes the supported public contract through Context7, maps GitHub evidence to the same release, and distinguishes documented usage from implementation details, tests, and historical issue or pull-request context.",
+    bestFor: [
+      "Implementing against a current or project-pinned dependency version.",
+      "Diagnosing behavior that public documentation does not fully explain.",
+      "Checking API changes, regressions, bug workarounds, and release history.",
+      "Verifying a recommendation against public docs, exact-ref source, and focused tests.",
+    ],
+    workflow: [
+      "Identify the package, canonical repository, concrete question, and target version from the user or consuming project.",
+      "Resolve the Context7 library ID and query the narrow public documentation needed for that version and question.",
+      "Map the package version to an immutable GitHub tag or commit instead of silently using the default branch.",
+      "Inspect public exports, types, implementation, tests, and examples, adding releases, commits, issues, or pull requests only when needed.",
+      "Reconcile the two evidence sets and report supported usage separately from observed internals, historical context, and workarounds.",
+    ],
+    outputs: [
+      "A direct implementation or diagnostic recommendation grounded in the supported public contract.",
+      "The Context7 library ID and version plus the GitHub repository ref or commit used for verification.",
+      "An explicit account of agreements, conflicts, unresolved version mappings, evidence gaps, and inferences.",
+    ],
+    guardrails: [
+      "Use GitHub MCP only for read-only research; implicit invocation never authorizes repository mutations.",
+      "Do not silently compare versioned documentation with source from an unrelated branch or release.",
+      "Do not recommend private, generated, deprecated, compatibility, test-only, or feature-flagged internals as public APIs.",
+      "Do not send credentials, private source, proprietary identifiers, or personal data to Context7.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/github-context7-research/SKILL.md",
+        description: "Version matching, evidence routing, reconciliation, reporting, and read-only guardrails.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/github-context7-research/agents/openai.yaml",
+        description: "GitHub and Context7 MCP dependencies plus implicit invocation policy.",
       },
     ],
   },
@@ -790,6 +889,64 @@ export const SKILLS: SkillDetail[] = [
         label: "Reference",
         path: "skills/grill-me/references/logged-grilling.md",
         description: "Logged grilling behavior and session lifecycle notes.",
+      },
+    ],
+  },
+  {
+    slug: "bugbot",
+    title: "bugbot",
+    category: "Code review",
+    blurb: "Persist introduced-bug reports and recognize repair intent.",
+    lead:
+      "A two-phase local-diff reviewer with durable Markdown reports and low-friction, report-scoped repair.",
+    overview:
+      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection inventories tracked and untracked files, recursively follows diff-derived candidates until a bounded fixed point, and persists every distinct verified production bug in a unique Markdown report; that report artifact is its only detection-time write. After seeing the report, Bugbot infers repair intent from the full conversation rather than matching fixed confirmation phrases. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can identify a subset. Bugbot verifies scoped repairs without silently fixing new findings or mutating Git publication state.",
+    bestFor: [
+      "Reviewing current branch work against the repository default branch or a named base.",
+      "Reviewing staged, unstaged, and untracked local changes against HEAD.",
+      "Producing an uncapped durable report, then repairing all or selected findings from contextually recognized intent.",
+    ],
+    workflow: [
+      "Resolve the repository, comparison mode, baseline, tracked diff, and untracked-file inventory.",
+      "Seed a candidate frontier from every changed hunk and untracked file.",
+      "Trace each candidate only through causally relevant control flow, dependencies, contracts, state, and failure paths.",
+      "Add newly exposed diff-connected risks until the frontier reaches a fixed point, then verify and de-duplicate by root cause.",
+      "Write every distinct verified finding to a unique Markdown report with stable report-local IDs, evidence, coverage, and a recommendation.",
+      "When conversation context establishes report-repair intent, reverify the inferred finding scope, apply scoped repairs, and run proportionate checks.",
+    ],
+    outputs: [
+      "A durable Markdown report with one card per introduced production bug plus a complete findings index.",
+      "An explicit clean report when a complete review finds no bugs, or an incomplete report with exact coverage gaps.",
+      "A Markdown repair summary after confirmed fixes, including verification and remaining unconfirmed issues.",
+    ],
+    guardrails: [
+      "During detection, write only the report artifact; do not edit reviewed source files or Git state.",
+      "Start fresh detection for Bugbot requests; implicit routing exists for report follow-ups, not generic code review.",
+      "Infer report-repair intent semantically rather than matching phrases; ask only when intent, source report, or scope is genuinely unclear.",
+      "Do not cap findings or stop after the highest-severity or easiest bugs.",
+      "Do not widen the recursive frontier beyond paths causally connected to the reviewed change.",
+      "Do not stage, commit, push, deploy, or repair distinct new findings without separate authorization.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/bugbot/SKILL.md",
+        description: "Phase routing, contextual repair-intent handling, recursive detection, and report persistence.",
+      },
+      {
+        label: "Report template",
+        path: "skills/bugbot/references/report-template.md",
+        description: "Canonical Markdown report, finding cards, coverage ledger, evidence, and self-check.",
+      },
+      {
+        label: "Fix workflow",
+        path: "skills/bugbot/references/fix-workflow.md",
+        description: "Confirmation validation, scoped repair, verification, and stopping rules.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/bugbot/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
       },
     ],
   },

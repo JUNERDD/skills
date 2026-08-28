@@ -30,7 +30,9 @@ If you are deciding what to install, start here:
 - [`comment-strategist`](#comment-strategist) - add high-value code comments without comment noise
 - [`exhaustive-code-slimmer`](#exhaustive-code-slimmer) - exhaustively reduce maintained code while preserving behavior
 - [`reduce-reinvention`](#reduce-reinvention) - find duplicated effort and guide reuse-first consolidation
+- [`composable-components`](#composable-components) - author compound React APIs with genuinely configurable public parts
 - [`find-local-skill`](#find-local-skill) - decompose requests, then find relevant local skills
+- [`github-context7-research`](#github-context7-research) - verify library docs against version-matched source and history
 - [`git-commit`](#git-commit) - draft a Conventional Commit message from the staged diff
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
@@ -38,6 +40,7 @@ If you are deciding what to install, start here:
 - [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through cursor-delegate with reviewed packets and owned cleanup
 - [`plan-mode`](#plan-mode) - plan complex or risky work before editing
 - [`debug`](#debug) - batch broad first-pass breakpoints, then prove, repair, and verify runtime bugs
+- [`bugbot`](#bugbot) - persist introduced-bug reports, then recognize report-repair intent
 - [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
 - [`thermo-review`](#thermo-review) - write harsh structural quality review reports
 - [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
@@ -90,7 +93,10 @@ npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
 npx skills@latest add JUNERDD/skills --skill reduce-reinvention
+npx skills@latest add JUNERDD/skills --skill composable-components
 npx skills@latest add JUNERDD/skills --skill find-local-skill
+npx skills@latest add JUNERDD/skills --skill github-context7-research
+npx skills@latest add JUNERDD/skills --skill bugbot
 npx skills@latest add JUNERDD/skills --skill code-review
 npx skills@latest add JUNERDD/skills --skill thermo-review
 npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
@@ -193,6 +199,30 @@ Key entry points:
 - Reuse catalog script: [`skills/reduce-reinvention/scripts/reuse_catalog.py`](./skills/reduce-reinvention/scripts/reuse_catalog.py)
 - Optional runtime metadata: [`skills/reduce-reinvention/agents/openai.yaml`](./skills/reduce-reinvention/agents/openai.yaml)
 
+### `composable-components`
+
+[`skills/composable-components/`](./skills/composable-components/) authors and refactors accessible primitive and product compound React components. It treats API quality independently of caller count: exported parts must be reachable or explicitly replaceable, host-rendering parts must preserve native props, refs, styles, and events, and data-owning lists must expose a real item-rendering boundary instead of hiding fixed defaults behind a namespace. The skill is self-contained and also defines the repository's private underscore folder layout for component internals.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill composable-components
+```
+
+Best for:
+
+- designing or refactoring Radix-style compound primitives and product composers
+- making triggers, content regions, collection items, and empty states genuinely configurable
+- separating controlled state, provider adapters, data iteration, and visual composition
+- replacing brittle `child.type` discovery and fixed nested renderers with explicit contracts
+- organizing component-local `_components`, `_types`, `_hooks`, `_helpers`, and related private folders
+
+Key entry points:
+
+- Workflow and completion gates: [`skills/composable-components/SKILL.md`](./skills/composable-components/SKILL.md)
+- Composition and public-part contract: [`skills/composable-components/house-rules.md`](./skills/composable-components/house-rules.md)
+- Private folder taxonomy: [`skills/composable-components/folder-layout.md`](./skills/composable-components/folder-layout.md)
+
 ### `find-local-skill`
 
 [`skills/find-local-skill/`](./skills/find-local-skill/) helps agents decompose a request into deliverables, workflow phases, tools, domains, and implicit prerequisites before inspecting available local skills, selecting the ones that match, and applying those workflows before normal analysis. It includes a local scanner for plain project `skills/` folders, Cursor, Claude Code, OpenCode, Codex, shared Agent Skills roots, and plugin skill caches.
@@ -216,6 +246,28 @@ Key entry points:
 - Workflow and guardrails: [`skills/find-local-skill/SKILL.md`](./skills/find-local-skill/SKILL.md)
 - Local skill scanner: [`skills/find-local-skill/scripts/list_agent_skills.py`](./skills/find-local-skill/scripts/list_agent_skills.py)
 - Optional runtime metadata: [`skills/find-local-skill/agents/openai.yaml`](./skills/find-local-skill/agents/openai.yaml)
+
+### `github-context7-research`
+
+[`skills/github-context7-research/`](./skills/github-context7-research/) reconciles current or version-specific public library documentation from Context7 with read-only GitHub evidence from source, types, tests, examples, releases, issues, pull requests, and commits. It first identifies the package and pinned version, maps both evidence sources to the same release, then distinguishes supported public usage from implementation details and historical context. Normal implicit invocation is enabled, so matching third-party library questions can activate it without an explicit `$github-context7-research` mention.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill github-context7-research
+```
+
+Best for:
+
+- implementing against a current or pinned version of an external library, SDK, or framework
+- diagnosing runtime behavior that public documentation does not fully explain
+- checking API changes, regressions, bug workarounds, and release history
+- verifying recommendations against public docs, exact-ref source, and focused tests
+
+Key entry points:
+
+- Evidence workflow and guardrails: [`skills/github-context7-research/SKILL.md`](./skills/github-context7-research/SKILL.md)
+- MCP dependencies and automatic invocation policy: [`skills/github-context7-research/agents/openai.yaml`](./skills/github-context7-research/agents/openai.yaml)
 
 ### `git-commit`
 
@@ -500,6 +552,30 @@ python3 skills/debug/scripts/local_log_collector/main.py \
   --session-id "demo-session"
 ```
 
+### `bugbot`
+
+[`skills/bugbot/`](./skills/bugbot/) uses a two-phase workflow for local branch or uncommitted changes. Detection inventories tracked and untracked changes, recursively expands a diff-derived candidate frontier through relevant callers, callees, contracts, state, and error paths, and persists every distinct verified bug in a unique Markdown report with finding IDs, coverage, evidence, and a gate recommendation. The report is detection's only write: reviewed code and Git state remain untouched. After the report is shown, Bugbot infers repair intent from the full conversation rather than matching fixed confirmation phrases. Clear intent with no narrower scope applies to all unresolved findings in the latest unambiguous report; semantic references to particular findings narrow the repair. Bugbot still avoids staging, committing, pushing, or silently fixing newly discovered issues.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill bugbot
+```
+
+Best for:
+
+- reviewing current branch changes against the default or a named base branch
+- reviewing staged, unstaged, and untracked local work against `HEAD`
+- producing a durable Markdown artifact with every introduced production bug, evidence, and detection coverage
+- repairing and verifying all or selected findings from contextually recognized report-repair intent
+
+Key entry points:
+
+- Detection, report persistence, and intent routing: [`skills/bugbot/SKILL.md`](./skills/bugbot/SKILL.md)
+- Report template: [`skills/bugbot/references/report-template.md`](./skills/bugbot/references/report-template.md)
+- Report-scoped repair workflow: [`skills/bugbot/references/fix-workflow.md`](./skills/bugbot/references/fix-workflow.md)
+- Optional runtime metadata: [`skills/bugbot/agents/openai.yaml`](./skills/bugbot/agents/openai.yaml)
+
 ### `code-review`
 
 [`skills/code-review/`](./skills/code-review/) turns a generic `/code-review` request into one frozen-scope deep review. It begins with a read-only orchestration assessment, requires authoritative expected-behavior evidence before treating product choices as defects, assigns stable semantic issue fingerprints, and persists a validated lineage-aware report. A receiving workflow may produce one implementation-delta post-review, but that generation is terminal and cannot automatically start another receiving cycle. The skill does not edit code or Git state unless the user separately requests fixes. Invocation is explicit-only: a user must invoke `$code-review`; matching prompts do not activate it automatically.
@@ -712,6 +788,17 @@ When you add more skills later:
     │   ├── SKILL.md
     │   └── agents/
     │       └── openai.yaml
+    ├── composable-components/
+    │   ├── SKILL.md
+    │   ├── folder-layout.md
+    │   └── house-rules.md
+    ├── bugbot/
+    │   ├── SKILL.md
+    │   ├── agents/
+    │   │   └── openai.yaml
+    │   └── references/
+    │       ├── fix-workflow.md
+    │       └── report-template.md
     ├── code-review/
     │   ├── SKILL.md
     │   ├── agents/
@@ -777,6 +864,10 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── scripts/
     │       └── list_agent_skills.py
+    ├── github-context7-research/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
     ├── git-commit/
     │   ├── SKILL.md
     │   └── agents/
