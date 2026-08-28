@@ -1,0 +1,7 @@
+interface:
+  display_name: "Bugbot"
+  short_description: "Persist bug reports and honor repair intent"
+  default_prompt: "Use $bugbot to detect every introduced production bug in the current local changes and persist the report before fixing anything."
+
+policy:
+  allow_implicit_invocation: true
