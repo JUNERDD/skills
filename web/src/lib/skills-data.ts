@@ -1382,6 +1382,68 @@ export const SKILLS: SkillDetail[] = [
       },
     ],
   },
+  {
+    slug: "artifact-template-soft-focus-color-haze",
+    title: "Soft-Focus Color Haze",
+    category: "Image generation",
+    blurb: "Create restrained abstract color-haze images with freshly composed layouts.",
+    lead:
+      "A mode-aware image-generation template for soft, grainy color fields and ambiguous defocused subjects.",
+    overview:
+      "Use this skill to create new images in the Soft-Focus Color Haze visual language without copying either retained reference's subject or layout. It routes background-only and subject-led requests through separate style references, composes from broad low-frequency color masses, and enforces calm negative space, matte grain, and readable warm-cool separation.",
+    bestFor: [
+      "Generating full-bleed abstract backgrounds with restrained color movement and quiet low-detail space.",
+      "Turning a supplied or named subject into a semi-abstract, defocused color presence.",
+      "Creating variants whose placement, crop, flow, and empty-space direction are compositionally distinct.",
+      "Maintaining subject-field separation without sharp contours, hard shadows, or literal surface detail.",
+    ],
+    workflow: [
+      "Resolve the canonical background reference and dedicated subject-led style reference from the skill package.",
+      "Classify each requested output as background-only or subject-led and keep the two modes independent.",
+      "Select exactly one mode-specific style reference and treat it as visual-language evidence rather than an edit target.",
+      "For subject-led work, resolve placement first with the user's direction or an explicit randomized composition card.",
+      "Generate from broad defocused color volumes, then inspect abstraction, chromatic separation, placement, grain, and reference-layout independence.",
+    ],
+    outputs: [
+      "A newly composed full-bleed image in the Soft-Focus Color Haze visual language.",
+      "Background-only images with no implied focal object or recognizable motif.",
+      "Subject-led images whose semantic seed remains ambiguous unless legibility is explicitly required.",
+      "Compositionally distinct variants when multiple outputs are requested.",
+    ],
+    guardrails: [
+      "Do not copy the retained references' subject, geometry, color coordinates, crop, or spatial arrangement.",
+      "Do not pass both template references unless the user explicitly requests a comparison or blend.",
+      "Do not build a realistic object and blur it afterward; construct the image from defocused color planes from the outset.",
+      "Do not let a subject merge into its field, become instantly literal at thumbnail size, or drift away from its locked placement.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/artifact-template-soft-focus-color-haze/SKILL.md",
+        description: "Mode routing, style grammar, placement cards, contrast gates, and visual QA rules.",
+      },
+      {
+        label: "Template metadata",
+        path: "skills/artifact-template-soft-focus-color-haze/artifact-template.json",
+        description: "Canonical background reference and preview paths.",
+      },
+      {
+        label: "Background reference",
+        path: "skills/artifact-template-soft-focus-color-haze/assets/reference.png",
+        description: "Style-only reference for background-only generation.",
+      },
+      {
+        label: "Subject reference",
+        path: "skills/artifact-template-soft-focus-color-haze/assets/subject-reference.png",
+        description: "Style-only reference for subject-led generation.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/artifact-template-soft-focus-color-haze/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
 ];
 
 export function getSkillBySlug(slug: string) {

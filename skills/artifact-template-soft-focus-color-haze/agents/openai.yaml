@@ -1,0 +1,7 @@
+interface:
+  display_name: "Soft-Focus Color Haze"
+  short_description: "Create images with the Soft-Focus Color Haze template"
+  icon_large: "./assets/preview.png"
+  default_prompt: "Use $artifact-template-soft-focus-color-haze to create an image with this template."
+policy:
+  allow_implicit_invocation: true
