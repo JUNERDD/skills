@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.11] - 2026-08-30
+
+### Changed
+
+- Added `artifact-template-soft-focus-color-haze` with separate background-only and subject-led style references, explicit composition locks, and chromatic contrast gates.
+- Registered the new skill in the README and localized English/Chinese website catalog.
+
 ## [0.2.10] - 2026-08-28
 
 ### Changed
