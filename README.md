@@ -49,6 +49,7 @@ If you are deciding what to install, start here:
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
 - [`receiving-regression-review`](#receiving-regression-review) - consume a regression-review report and verify each finding before changing code
+- [`artifact-template-soft-focus-color-haze`](#artifact-template-soft-focus-color-haze) - create restrained abstract color-haze images from mode-specific style references
 
 ## 📦 Install
 
@@ -105,6 +106,7 @@ npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
 npx skills@latest add JUNERDD/skills --skill receiving-regression-review
+npx skills@latest add JUNERDD/skills --skill artifact-template-soft-focus-color-haze
 ```
 
 Manual symlink install still works if you prefer not to use the agent prompt:
@@ -763,6 +765,31 @@ Key entry points:
 
 - Workflow and guardrails: [`skills/receiving-regression-review/SKILL.md`](./skills/receiving-regression-review/SKILL.md)
 - Optional runtime metadata: [`skills/receiving-regression-review/agents/openai.yaml`](./skills/receiving-regression-review/agents/openai.yaml)
+
+### `artifact-template-soft-focus-color-haze`
+
+[`skills/artifact-template-soft-focus-color-haze/`](./skills/artifact-template-soft-focus-color-haze/) creates freshly composed Soft-Focus Color Haze images while treating its retained PNGs as style-language references rather than layouts to copy. It separates background-only and subject-led generation, preserving soft grain, low-frequency color masses, calm negative space, and clear warm-cool relationships.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill artifact-template-soft-focus-color-haze
+```
+
+Best for:
+
+- generating full-bleed abstract backgrounds with restrained color movement and tactile grain
+- translating a supplied or named subject into an ambiguous, defocused color presence
+- producing subject-led variants with explicit placement locks and distinct compositions
+- preserving chromatic separation without outlines, hard shadows, or literal detail
+
+Key entry points:
+
+- Workflow and style grammar: [`skills/artifact-template-soft-focus-color-haze/SKILL.md`](./skills/artifact-template-soft-focus-color-haze/SKILL.md)
+- Template metadata: [`skills/artifact-template-soft-focus-color-haze/artifact-template.json`](./skills/artifact-template-soft-focus-color-haze/artifact-template.json)
+- Background style reference: [`skills/artifact-template-soft-focus-color-haze/assets/reference.png`](./skills/artifact-template-soft-focus-color-haze/assets/reference.png)
+- Subject-led style reference: [`skills/artifact-template-soft-focus-color-haze/assets/subject-reference.png`](./skills/artifact-template-soft-focus-color-haze/assets/subject-reference.png)
+- Optional runtime metadata: [`skills/artifact-template-soft-focus-color-haze/agents/openai.yaml`](./skills/artifact-template-soft-focus-color-haze/agents/openai.yaml)
 
 ## 🌱 Growing The Repository
 
