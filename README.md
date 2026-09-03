@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.11`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.12`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -109,12 +109,21 @@ npx skills@latest add JUNERDD/skills --skill receiving-regression-review
 npx skills@latest add JUNERDD/skills --skill artifact-template-soft-focus-color-haze
 ```
 
-Manual symlink install still works if you prefer not to use the agent prompt:
+For a live checkout that also works with runtimes which only inspect
+`~/.agents/skills/*/SKILL.md`, install the managed flat link farm:
 
 ```bash
-mkdir -p ~/.agents/skills
-ln -s "$PWD/skills" ~/.agents/skills/junerdd-skill
+node scripts/sync-skill-links.mjs install
+node scripts/sync-skill-links.mjs doctor
 ```
+
+This creates one top-level symlink per skill. Existing skill contents update
+through the links immediately, while managed Git hooks and a pinned synchronizer
+stored outside the checkout reconcile skill additions, removals, and renames.
+The installer refuses name collisions and only removes links recorded as
+belonging to this checkout. See
+[`docs/INSTALL.md`](./docs/INSTALL.md) for migration, hook integration, manual
+sync, and uninstall details.
 
 ## 🧱 Repository Model
 

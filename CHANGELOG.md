@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.12] - 2026-09-03
+
+### Changed
+
+- Added `scripts/sync-skill-links.mjs` to expose every skill as a direct `~/.agents/skills/<skill-name>` link for harnesses that do not recurse through collection symlinks.
+- Added checkout-independent managed Git hooks that reconcile added, removed, and renamed skills after Git updates while preserving custom hooks and unrelated installs.
+- Hardened ownership, migration, rollback, path validation, diagnostics, and uninstall behavior, with 24 regression tests and updated install documentation.
+
 ## [0.2.11] - 2026-08-30
 
 ### Changed
