@@ -31,6 +31,20 @@ skill catalog changes, then inspect the relevant page or component if the
 changed skill is surfaced elsewhere. If no README or website change is needed,
 mention that both sync checks were performed in the final response.
 
+## Local Skill Link Sync
+
+After creating, updating, renaming, or deleting any project skill under
+`skills/`, run the managed link synchronizer before finishing:
+
+```bash
+node scripts/sync-skill-links.mjs sync
+```
+
+Do not rely on a Git hook to perform this step because local skill changes may
+not include a Git operation. If the checkout has no matching managed link
+installation or synchronization cannot run, do not install it implicitly;
+report that the required sync was skipped and explain why in the final response.
+
 ## Editing Notes
 
 - Keep changes scoped to the requested skill, repository docs, or web surface.
