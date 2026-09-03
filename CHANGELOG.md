@@ -4,6 +4,12 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.13] - 2026-09-03
+
+### Changed
+
+- Required repository agents to run the managed skill-link synchronizer after creating, updating, renaming, or deleting project skills, including changes made without a Git operation.
+
 ## [0.2.12] - 2026-09-03
 
 ### Changed
