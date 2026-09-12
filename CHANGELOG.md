@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.15] - 2026-09-12
+
+### Changed
+
+- Close debug collection from an ordinary user completion message, without an extra click or Dashboard Stop/Freeze.
+- Freeze persisted evidence as incomplete when checkpoint, producer shutdown, or delivery cannot be confirmed, then analyze usable records without another user completion action.
+- Synchronize README and English/Chinese website catalog guidance with the updated debug workflow.
+
 ## [0.2.14] - 2026-09-08
 
 ### Changed

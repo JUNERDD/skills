@@ -160,7 +160,7 @@ Linearize Freeze, Resume, Clear, and append operations with the collector's writ
 
 These controls require no producer-side delivery state or terminalization protocol. A request that spans a Freeze/Resume transition is rejected with `recording_state_changed`, persists zero events, and cannot spill into the next recording window. A frozen or transition-rejected response is not evidence persistence. Treat the affected observation window as incomplete and reproduce after Resume if the event is needed.
 
-`FROZEN` is not collector-health failure, a completed run, or proof that every planned event arrived. Use it to stabilize the current evidence view only after the reproduction reaches its declared terminal or observation checkpoint and the target runtime has completed any ordinary logging calls it owns.
+`FROZEN` is not collector-health failure, a completed product flow, or proof that every planned event arrived. Prefer to detach producers and complete ordinary logging calls at the planned checkpoint before Freeze. If that cannot be established after the user reports completion, use Freeze as an explicit cutoff of incomplete capture under [Analysis recording lock](../SKILL.md#analysis-recording-lock); do not require another user action to make the checkpoint arrive.
 
 ## Session commands
 
@@ -215,13 +215,13 @@ Use `--keep-artifacts` on `stop` only when the user asks to retain raw evidence.
 
 ## Post-run analysis snapshot
 
-After a failing, blind-spot, or verification run reaches its completion signal:
+After a failing, blind-spot, or verification handoff is complete, including through an ordinary user message, the agent closes collection:
 
 1. Recover the investigation ledger's exact active ready file with session `resume`.
-2. Require the planned terminal or observation checkpoint to occur. Let any finite, target-runtime logging call at that boundary finish without adding a universal client drain protocol.
-3. Verify that the expected terminal/checkpoint event and the generic persisted counts available for the bounded run are present. If delivery cannot be established, record that limitation and do not use a missing interior event as proof.
-4. Run `freeze-recording --ready-file <READY_FILE>`, then refresh `dashboard-status` and require `recording: frozen` before taking a stable analysis snapshot.
-5. Summarize and read bounded evidence. Keep the collector frozen while that snapshot is being analyzed when doing so prevents unrelated traffic from mixing into it.
+2. Use the available, already-authorized cleanup path to detach run-owned producers and finish finite pending logging calls. Preserve available checkpoint and source/accepted-count metadata without inventing a universal client drain protocol.
+3. If the checkpoint, shutdown, or delivery cannot be confirmed, record the limitation and close the capture as incomplete. Do not wait for an instrumentation-only seal or require the user to click, blur, navigate, open DevTools, or operate Dashboard Stop/Freeze solely to finish collection.
+4. Run `freeze-recording --ready-file <READY_FILE>`, then refresh `dashboard-status` and require `recording: frozen` before taking a stable analysis snapshot. Record the cutoff and capture completeness separately; a user message is not a runtime sentinel.
+5. Summarize and read the bounded persisted evidence, checking checkpoint presence and source/accepted/persisted counts. Analyze usable records even when capture is incomplete. Keep absence claims inconclusive where delivery is unproven, and request another run only for a material evidence gap identified during analysis. Keep the collector frozen throughout analysis and repair.
 
 Freeze is a write gate, not a delivery checkpoint. Do not require a language-specific client state machine before using it.
 
@@ -477,7 +477,7 @@ The summarizer reports persisted NDJSON record counts, valid/invalid lines, prob
 After summarization:
 
 1. Verify the expected run and correlation exist.
-2. Verify flow start and the configured terminal or observation-checkpoint sentinel.
+2. Check flow start and the configured terminal or observation-checkpoint sentinel; record missing evidence as a capture limitation rather than requesting another completion action from the user.
 3. Compare available source/emitted counts with persisted NDJSON records for the same bounded interval.
 4. Check send errors, invalid lines, missing planned probes, and source or causal-sequence gaps.
 5. Treat an unexplained missing event as incomplete delivery or `INCONCLUSIVE`, not as proof that product code did not execute.
@@ -503,7 +503,7 @@ Use this manual recovery sequence only for newly established sessions whose dash
 5. If the page still does not load, surface the exact URL and errors. Do not restart a healthy collector merely to open the page.
 6. Continue evidence collection through the CLI and NDJSON file.
 
-Dashboard visibility, frontend confirmation, and opener recovery must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Authoritative collection state is separate: require live before a deliberate recording pass and frozen only when a stable snapshot is desired. Use `--no-open-dashboard` only when the collector host is verified to have no local graphical browser; do not use it merely because the user owns the reproduction.
+Dashboard visibility, frontend confirmation, and opener recovery must not block logging, reproduction, analysis, or cleanup and must not appear in the coverage plan as evidence. Authoritative collection state is separate: require live before a deliberate recording pass and frozen before collector-evidence analysis. Use `--no-open-dashboard` only when the collector host is verified to have no local graphical browser; do not use it merely because the user owns the reproduction.
 
 Preserve these frontend behaviors:
 
@@ -535,9 +535,9 @@ Before sending that handoff, inspect every active probe and emitter. Require it 
 
 For a bundled session, run `debug_session.py dashboard-status --ready-file <READY_FILE>` immediately before the handoff. If it reports frozen, run `debug_session.py resume-recording`, rerun `dashboard-status`, and require live before reproduction; session `resume` does not change this state. For a newly established browser-capable local session that reports `disabled`, run `debug_session.py open-dashboard`, refresh `dashboard-status`, and copy its refreshed line as the opening paragraph. After a successful ledger-based resume, preserve the existing dashboard and do not reopen it. Surface the exact URL and error if bounded startup recovery fails; do not block reproduction.
 
-Define the final reproduction step as the exact observable product or flow condition that closes the evidence window. Arrange instrumentation to emit the terminal or checkpoint sentinel automatically at that boundary. Do not invent a product-page command, DevTools step, or `window` or `globalThis` helper as the host completion action.
+Define the product result the user should observe and invite an ordinary message reporting completion and what happened. Arrange instrumentation to emit the terminal or checkpoint sentinel automatically at the natural boundary; identify the agent's cleanup path before handoff. Do not add a product-page interaction, DevTools step, or `window` or `globalThis` helper solely to emit a checkpoint or close collection.
 
-Make the reproduction request the final visible section and stop. Use a completion action already exposed by the current Codex host when available; otherwise invite the user to briefly report whether reproduction is complete and what happened, in their own words. Apply [Interpreting reproduction replies](../SKILL.md#interpreting-reproduction-replies) to resume the same run from the reply's contextual intent without requiring a fixed phrase. Treat the reply as the user's report, never as proof that the checkpoint occurred or logs persisted; seal and freeze before evidence analysis. For a validated agent-autonomous plan, execute the reproduction directly after the runtime gate instead of asking the user.
+Make the reproduction request the final visible section and stop. An existing host completion action may be offered as an alternative to a message, never an additional requirement. Apply [Interpreting reproduction replies](../SKILL.md#interpreting-reproduction-replies): a clear completion report starts the agent-owned post-run snapshot procedure immediately in the same run, even if an injected checkpoint or seal is missing. Treat the reply as the user's report, never as proof that the checkpoint occurred or logs persisted. For a validated agent-autonomous plan, execute the reproduction directly after the runtime gate instead of asking the user.
 
 Use one `runId` for the clean initial reproduction. Do not mix setup activity with the failing flow. For an intentionally long-lived flow, give the user the plan's exact checkpoint condition; reaching it ends the evidence window, not the business stream. When the run completes, record its purpose, owner, delegation, evidence filter, persisted-count confidence, and status in the ledger before changing the plan's `run` block.
 

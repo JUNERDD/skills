@@ -432,7 +432,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
       lead:
         "一个 coverage-first 调试与修复系统，提供可机器校验的原生断点与探针计划、丢失与序列缺口可审计的运行时证据、持续演进的调查账本，以及独立的修复后验证。",
       overview:
-        "当只读代码不足以证明问题，且运行时 bug 需要从失败契约一路跟进到已验证修复时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，并校验包含 attached/unavailable/unsafe 调试器策略、initial/deferred 断点批次、结构化探针以及 terminal 或 observation-checkpoint 完成模式的 coverage plan。原生调试器已连接且暂停安全时，agent 会在执行前一次性安装全部安全、非冗余的首批断点，而不是只下一个或两个断点逐步推进；暂停不安全或调试器不可用时，仍会保留完整候选集并为每个延后断点记录结构化原因，同时改用经过校验的非暂停探针。collector 位置同步与 expected-probe 分析会复用同一计划。每个活动探针都采用固定的 all-occurrences/every-execution 契约：每个被接受的 occurrence 恰好形成一个独立序列化事件和一条持久化 NDJSON；多事件 envelope 只改变网络封装，不改变事件数。运行时事件交付保持语言无关：优先复用项目或宿主已有 logger，其次使用目标语言的原生 HTTP 客户端；仅在不使用 collector 生命周期控制且具备安全写入所有权时，才直接追加 NDJSON。skill 不再向目标项目注入预设的 JavaScript transport。collector 只暴露 `POST /ingest`，接受单条事件或精确的 `{\"events\":[...]}` envelope，并提供收集、Freeze、Resume、Clear 和 Stop；重试、去重、envelope 身份、generation 与应用生命周期策略都留给目标项目。新建的本地图形环境会话仍会自动打开并确认 dashboard，实时列表、筛选、详情、IDE 源码打开、location sync 与配置交互全部保留。`FROZEN` 时新 ingest 会被拒绝且不会写入，但所有 dashboard 继续刷新，Clear 仍可用且不会恢复记录，所有标签页、刷新与后续分析轮次都会看到同一状态。相关 NDJSON 会先按 run 与实际需要的应用 correlation 字段摘要，再读取必要的原始事件。除非用户明确要求仅诊断，否则 debug、troubleshoot、fix、repair 或 resolve 请求会继续完成证据充分的修复、独立验证、账本收尾与清理。",
+        "当只读代码不足以证明问题，且运行时 bug 需要从失败契约一路跟进到已验证修复时使用此 skill。它构建有代码依据的因果图，为每个 material hypothesis 同时记录确认与否定证据，并校验包含 attached/unavailable/unsafe 调试器策略、initial/deferred 断点批次、结构化探针以及 terminal 或 observation-checkpoint 完成模式的 coverage plan。原生调试器已连接且暂停安全时，agent 会在执行前一次性安装全部安全、非冗余的首批断点，而不是只下一个或两个断点逐步推进；暂停不安全或调试器不可用时，仍会保留完整候选集并为每个延后断点记录结构化原因，同时改用经过校验的非暂停探针。collector 位置同步与 expected-probe 分析会复用同一计划。每个活动探针都采用固定的 all-occurrences/every-execution 契约：每个被接受的 occurrence 恰好形成一个独立序列化事件和一条持久化 NDJSON；多事件 envelope 只改变网络封装，不改变事件数。用户通过普通消息明确表示复现完成后，agent 会立即接管采集收尾与冻结，无需额外点击或手动 Stop/Freeze。若无法确认 checkpoint、producer 解绑或日志交付，则将已保存记录标为采集不完整，继续分析其中可用的证据，并保持记录冻结。运行时事件交付保持语言无关：优先复用项目或宿主已有 logger，其次使用目标语言的原生 HTTP 客户端；仅在不使用 collector 生命周期控制且具备安全写入所有权时，才直接追加 NDJSON。skill 不再向目标项目注入预设的 JavaScript transport。collector 只暴露 `POST /ingest`，接受单条事件或精确的 `{\"events\":[...]}` envelope，并提供收集、Freeze、Resume、Clear 和 Stop；重试、去重、envelope 身份、generation 与应用生命周期策略都留给目标项目。新建的本地图形环境会话仍会自动打开并确认 dashboard，实时列表、筛选、详情、IDE 源码打开、location sync 与配置交互全部保留。`FROZEN` 时新 ingest 会被拒绝且不会写入，但所有 dashboard 继续刷新，Clear 仍可用且不会恢复记录，所有标签页、刷新与后续分析轮次都会看到同一状态。相关 NDJSON 会先按 run 与实际需要的应用 correlation 字段摘要，再读取必要的原始事件。除非用户明确要求仅诊断，否则 debug、troubleshoot、fix、repair 或 resolve 请求会继续完成证据充分的修复、独立验证、账本收尾与清理。",
       bestFor: [
         "昂贵、偶发、时序敏感、破坏性、环境特定或只能由用户完成的复现。",
         "很容易猜测、但难以跨因果边界证明的运行时失败。",
@@ -450,7 +450,7 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "原生调试器已连接且暂停安全时，在第一次 run/continue 前安装全部安全、非冗余的 initial 断点；若工具一次只能设置一个位置，则连续设置完再恢复执行。暂停后若暴露新的因果区间，也先一次性补齐该区间的断点再继续；暂停不安全时改用非暂停探针。",
         "从调查账本记录的精确 ready file 恢复日志会话；健康会话跨轮次与 run ID 复用同一 collector、dashboard、IDE 选择和 location 状态，不扫描工作区也不重复打开 UI。新建的本地图形环境会话仍自动尝试打开并确认 dashboard，明确无界面、CI、容器内或远程会话才显式关闭。",
         "对共享 causal cuts 与 invariants 插桩，选择项目 logger 或目标运行时原生 adapter；使用目标项目的模块系统逐一解析每条临时 helper 引用（slash 分隔的文件相对引用可选用路径助手），再通过原生解析、编译、collector、expected-probe 与事件基数门禁；上一轮冻结分析和下一轮准备完成后运行 `resume-recording`，要求 collector 为 live，并在每次请求用户复现前复制规范化的 `dashboard-status` 状态与 URL 行。",
-        "收集一次干净 terminal 运行或有界观察窗口，结合上下文理解用户回复的意图，识别复现交接是否完成，无需回复固定词语；随后解绑 producer、flush 选定的 logger 或 runtime adapter、核对被接受的写入与持久化 NDJSON、冻结 collector，并在 recording 保持 frozen 时按 run 与相关应用 correlation 字段摘要证据。",
+        "收集一次 terminal 运行或有界观察窗口。结合上下文识别用户的完成消息后，agent 立即使用可用控制解绑 producer、完成日志写入并冻结 collector，再核对持久化记录。若无法确认 checkpoint、清理或交付，则记录采集不完整并分析已保存的证据，无需用户再执行结束动作；仅在分析发现影响因果证明或验证的证据缺口后，才请求新一轮复现。",
         "证明从起点到症状的传播链；若仍不足，只为最小未决因果区间补探针，并全程更新同一份调查账本。",
         "仅诊断时先保存证据并清理临时 instrumentation；否则把诊断视为中间结果，立即修复已证明的机制、独立验证并清理 owned artifacts。",
       ],
@@ -469,8 +469,8 @@ const skillTranslations: Partial<Record<Locale, Record<string, SkillTranslation>
         "不要把原生调试器控制台 logpoint 当作完整证据；承担证据作用的 logpoint 必须同时是经过校验、并通过选定 runtime adapter 写入的结构化探针。",
         "临时 correlation header 可能改变 CORS、缓存、路由、签名、授权或产品行为时，不要添加它。",
         "不要把 dashboard 可见性当作证据，也不要让打开失败阻塞证据采集或复现。",
-        "不要发明 DevTools 或页面全局 helper 作为用户完成动作；应把 checkpoint instrumentation 绑定到自然边界，使用宿主已有动作或自然语言回复。应理解整条回复的意图，避免匹配关键词；用户报告完成后，仍须独立核验 checkpoint、acknowledgement 与持久化记录。",
-        "不要把 collector 全局 `FROZEN` 当作健康故障、证据完成或持久化 checkpoint，也不要在 producer 尚未解绑或 adapter 尚未 flush 时 Freeze；在分析与修复期间保持冻结，仅在下一轮准备完成且即将记录时 Resume。",
+        "用户明确表示复现完成后，不要仅为结束采集要求额外点击、失焦、导航、DevTools 命令或 Dashboard Stop/Freeze。checkpoint instrumentation 应绑定到自然边界；应结合上下文理解消息，而非匹配固定词语。用户消息结束复现等待，运行时证据独立决定采集是否完整。",
+        "不要把 collector 全局 `FROZEN` 当作健康故障、产品流程完成或持久化证明。优先解绑 producer 并完成日志写入后 Freeze；无法确认时仍由 agent 冻结已有记录，明确标注采集缺口。在分析与修复期间保持冻结，清理上一轮残留 producer，仅在下一轮准备完成且即将记录时 Resume。",
         "仅诊断任务不要实施修复，也不要保留仍让因果机制继续生效的较小 workaround。",
         "不要对任何活动探针 occurrence 做采样、节流、debounce、first-N、change-gate、once-per-key、聚合、合并、覆盖、去重或丢弃。",
         "不要要求目标项目导入预设的语言专用 transport，不要 fire-and-forget collector 写入，也不要假定 collector 会去重而自动重试结果不明确的请求。",

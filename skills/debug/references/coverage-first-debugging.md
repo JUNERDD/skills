@@ -306,6 +306,8 @@ Native pause breakpoints are separate from `probes`: they do not emit all-occurr
 
 Omitting `run.completion` preserves the default `flow-terminal` requirement. For an intentionally long-lived flow, set `run.completion` to `{"mode":"observation-checkpoint","condition":"<bounded observable stop condition>"}` and include an `observation-checkpoint` sentinel. The checkpoint closes only the evidence window; it does not claim that the business stream terminated.
 
+This schema describes planned runtime evidence, not the user's conversational completion signal. Arrange automatic checkpoint capture and agent-owned collection shutdown; reject reproduction steps that add an interaction solely to end debugging. A clear user completion message starts [Analysis recording lock](../SKILL.md#analysis-recording-lock) even when the planned sentinel is absent. Record that gap as incomplete capture; do not fabricate a runtime event or require another completion action. No extra plan field or completion mode is needed.
+
 Write every probe location as a workspace-relative source path followed by a positive numeric line, for example `src/save.ts:88`. Revalidate after instrumentation moves a probe.
 
 Give every probe the fixed `expectedOccurrence: "every-execution"` value and an `eventPolicy` object containing exactly `mode` and `payloadControl`. Set `mode` to `all-occurrences`; neither field accepts free-form cardinality policy.
@@ -368,9 +370,10 @@ Treat SSE, WebSocket, subscription, long-poll, and `ReadableStream` flows as fir
 
 1. Distinguish connection/request state from evidence delivery. A browser Network-panel `Pending` row can be a live business stream or an unfinished debug HTTP request; it is not itself proof of a stall or lost event.
 2. Instrument the real dispatch, decoder, or reader loop. Record open/headers, every source-event occurrence at each active probe with the correlation-scoped top-level logging sequence plus a separately named domain source sequence when its owner differs, reconnect, close, cancel, error, and the configured observation checkpoint. Do not clone, tee, or consume a response body merely to observe it when that would change backpressure, cancellation, or memory behavior.
-3. Choose a checkpoint condition tied to an observable assertion, event count, protocol state, operator action, or justified product deadline. Do not wait for an intentionally open business stream to terminate.
-4. At the checkpoint, emit the planned sentinel, snapshot the producer's available source/emitted count, and verify the corresponding persisted NDJSON records through that sentinel. Let later business events continue; the checkpoint closes only the bounded evidence interval.
-5. If the selected logger exposes an ordinary completion signal, wait for it only at the natural checkpoint. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unfinished event, use an authoritative producer/server-side logger or mark continuity incomplete.
+3. Choose a checkpoint condition tied to an observable assertion, event count, protocol state, actual product operation, or justified product deadline. Do not wait for an intentionally open business stream to terminate or require an extra operation solely to emit the checkpoint.
+4. At the checkpoint, emit the planned sentinel, snapshot the producer's available source/emitted count, and detach the temporary probes. Let later business events continue; the checkpoint closes only the bounded evidence interval.
+5. Finish finite pending logging when possible, then freeze collection under Analysis recording lock and verify the persisted NDJSON records through the sentinel. If reload, navigation, process loss, memory exhaustion, or unavailable durable storage can discard an unfinished event, use an authoritative producer/server-side logger or mark continuity incomplete.
+6. If the user reports completion while the checkpoint or logger completion is still unconfirmed, let the agent close the capture under Analysis recording lock and analyze the persisted evidence with its limitations.
 
 No page-local logging path can guarantee an unbounded producer across every lifecycle failure. The enforceable contract is: emit one independent event for every active-probe occurrence, never filter, coalesce, aggregate, suppress, deduplicate, overwrite, or delete it, and claim only the bounded interval whose sentinels and generic persisted counts are actually present. If the selected logger cannot establish exact delivery, record that limitation and keep absence claims inconclusive.
 
@@ -418,6 +421,8 @@ Before the first failing reproduction, require:
 Do not include dashboard visibility in this gate. A dashboard can improve operator experience but does not prove evidence delivery.
 
 ## Post-run analysis
+
+First apply Analysis recording lock after the completed handoff. Capture completeness and the end of the user's reproduction are separate: an incomplete capture may still contain decisive positive evidence, while missing events remain inconclusive unless continuity proves their absence.
 
 1. Summarize the exact run before reading raw volume.
 2. Select the failing parent correlation, operation, request, and attempt.

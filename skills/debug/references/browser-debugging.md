@@ -66,7 +66,7 @@ When the collector is frozen:
 - Clear and Stop remain available;
 - a browser reload does not Resume collection.
 
-Resume accepts only future requests and requires no collector-specific producer state. Before a deliberate run, refresh `dashboard-status` and require live collection. After the run reaches its planned terminal or observation checkpoint and its final ordinary logging call completes, Freeze may be used to stabilize the evidence view for analysis.
+Resume accepts only future requests and requires no collector-specific producer state. Before a deliberate run, refresh `dashboard-status` and require live collection. After a completed reproduction handoff, the agent uses [Analysis recording lock](../SKILL.md#analysis-recording-lock) to close and freeze collection. Prefer natural checkpoint capture and completed logging; when these cannot be confirmed, freeze the persisted records as incomplete instead of requiring another user action.
 
 ## Flow correlation
 
@@ -131,16 +131,16 @@ The collector's single `/ingest` endpoint accepts either one object or an exact 
 
 Do not require a universal retry algorithm. If the project's logger retries, preserve its documented semantics and avoid retrying a request when doing so could duplicate evidence. When exact-once delivery is not available, use stable event fields to recognize possible duplicates during analysis and report the limitation. The bundled collector does not maintain producer-specific replay or deduplication state.
 
-For a stream that continues producing, close the evidence window at the planned natural checkpoint:
+For a stream that continues producing, arrange automatic closure at the planned natural checkpoint:
 
 1. emit the `observation-checkpoint` sentinel from the real dispatch, decoder, or reader-loop boundary;
 2. snapshot the source occurrence count available to that producer;
-3. wait only for the selected logger's ordinary completion signal when it has one;
-4. verify the checkpoint and available persisted count in NDJSON;
-5. detach the temporary probe using the application's normal cleanup path;
-6. Freeze the collector only after the checkpoint evidence has arrived when a stable analysis view is needed.
+3. detach the temporary probe using the application's normal cleanup path;
+4. wait only for finite pending logging calls and the selected logger's ordinary completion signal when it has one;
+5. Freeze the collector and confirm its state before evidence analysis;
+6. summarize the run, then verify the checkpoint and available persisted count in NDJSON.
 
-Do not expose an instrumentation-only helper through `window` or `globalThis`, and do not ask the user to evaluate console JavaScript merely to close the evidence window.
+If the user reports completion before this automatic closure is confirmed, the agent must still close collection under Analysis recording lock. Missing checkpoint evidence or unavailable browser cleanup makes capture incomplete; it does not require the user to click an unrelated element, blur the page, navigate, or manually Stop/Freeze collection. Do not expose an instrumentation-only helper through `window` or `globalThis`, or ask the user to evaluate console JavaScript merely to close the evidence window. A completion message does not expand browser-control permissions.
 
 ## Long-lived response and event streams
 
@@ -156,7 +156,7 @@ Record:
 
 Do not automatically clone, tee, or consume `response.body` merely to observe it. Those techniques can change backpressure, cancellation, buffering, and memory behavior. Add probes to the consumer the application already owns, or use an authoritative producer/server-side logger.
 
-At the observation boundary, verify the sentinel and available generic persisted counts, then detach only the temporary debug producer. The business stream may remain open. If the collector is frozen before required events arrive, mark that interval incomplete; Resume applies only to a later observation interval.
+At the observation boundary, detach only the temporary debug producer and complete pending logging when possible; then freeze and verify the sentinel and available persisted counts. The business stream may remain open. If required events have not arrived at the cutoff, mark that interval incomplete; Resume applies only to a later observation interval.
 
 ## Lifecycle boundaries
 
@@ -198,6 +198,7 @@ Before the failing run, require:
 - [ ] Expected peak event and byte volume can drain without unbounded product-side backlog.
 - [ ] Collector state is live before the deliberate run.
 - [ ] Every long-lived flow has a natural observation checkpoint and does not depend on business-stream termination.
+- [ ] Collection can close on an ordinary user completion message through agent-owned cleanup or an explicitly incomplete collector cutoff, without an extra user action.
 - [ ] Reload, navigation, termination, and memory-loss boundaries are covered or declared residual.
 - [ ] Sensitive request fields are excluded.
 - [ ] Flow start, pre-boundary when applicable, and the configured terminal or observation-checkpoint sentinel are planned.

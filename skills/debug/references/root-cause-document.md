@@ -76,7 +76,7 @@ Use these hypothesis statuses, matching the coverage plan:
 
 Use `NOT_REACHED` only when enclosing evidence proves the flow terminated or branched before the hypothesized path. Treat an otherwise missing probe as `INCONCLUSIVE`.
 
-Set the document status to `Analyzing` after the completed run's terminal or observation checkpoint, generic persisted-count confidence, and current collector state are recorded. When a stable snapshot is needed, confirm that the collector is frozen before reading evidence. Resume only for future requests after the next run is prepared.
+Set the document status to `Analyzing` after recording the completed handoff, available terminal/checkpoint evidence, capture completeness, and confirmed frozen collector state. A user completion message is sufficient to end the handoff; a missing runtime checkpoint is a capture limitation, not a reason to keep waiting for the user. Follow [Analysis recording lock](../SKILL.md#analysis-recording-lock) to close collection and analyze persisted evidence. Resume only for future requests after the next run is prepared.
 
 ## Collector-session history
 
@@ -86,7 +86,7 @@ Use statuses such as `active`, `missing`, `unreachable`, `replaced`, and `stoppe
 
 ## Reproduction-run history
 
-Record every completed failing, blind-spot, and verification run. Include its terminal or observation checkpoint, available source/emitted/persisted counts, delivery limitations, and collector state used for analysis. Treat ownership as run-scoped and immutable. For non-user ownership, record the delegation target, scope, effective run ID, and current-user directive. A request for the agent to investigate completed evidence changes neither the completed run nor any future run owner.
+Record every completed failing, blind-spot, and verification handoff, including runs with incomplete capture. Distinguish the user's completion report from runtime terminal/checkpoint evidence. Include the agent's recording cutoff, producer/flush status, available source/accepted/persisted counts, delivery limitations, capture completeness, and frozen collector state used for analysis; never synthesize a runtime sentinel from a user message. Treat ownership as run-scoped and immutable. For non-user ownership, record the delegation target, scope, effective run ID, and current-user directive. A request for the agent to investigate completed evidence changes neither the completed run nor any future run owner.
 
 ## Root-cause proof
 
@@ -150,7 +150,7 @@ For an in-scope repair, additionally record:
 
 ## Reproduction Runs
 
-- `[runId]` — purpose: `[failing | blind-spot | verification]`; owner: `[user | agent | external]`; delegation: `[not applicable | target, scope, effectiveRunId, current-user directive]`; status: `[completed | incomplete]`; checkpoint: `[terminal or bounded observation]`; delivery: `[source/emitted/persisted counts or stated limitation]`; analysis state: `[frozen | live | unavailable]`; evidence: `[path and bounded filter]`
+- `[runId]` — purpose: `[failing | blind-spot | verification]`; owner: `[user | agent | external]`; delegation: `[not applicable | target, scope, effectiveRunId, current-user directive]`; handoff completion: `[user report or observed completion]`; capture: `[complete | incomplete with reason]`; checkpoint: `[observed terminal or bounded observation | missing]`; closure: `[agent cutoff and producer/flush status]`; delivery: `[source/accepted/persisted counts or stated limitation]`; analysis state: `[frozen | blocked: unavailable/unknown]`; evidence: `[path and bounded filter]`
 
 ## Current Root Cause
 
