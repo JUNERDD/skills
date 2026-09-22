@@ -352,6 +352,8 @@ Key entry points:
 
 [`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with hierarchical, dependency-aware subagent scheduling. The root parent builds a task and decision graph, assigns one owner per decision domain and write boundary, delegates exclusive subtrees to subplanners when justified, materializes owned ephemeral shared memory when hierarchy or context handoffs require it, dispatches ready work event by event, routes conflicts, and integrates evidence into a verified result. Invocation is explicit-only: a user must invoke `$multitask-coordinator`; matching prompts do not activate it automatically.
 
+Workers resolve routine, reversible details within accepted contracts and existing authorization. Shared memory separates the shared container from the owned run directory and keeps consumed versions readable. Before retrying a failed writer, the parent reviews partial changes and supplies a recovery baseline. Validation finishes after required and risk-matched checks pass, unless new changes, failures, or unresolved concerns justify more.
+
 Install:
 
 ```bash
@@ -364,7 +366,7 @@ Best for:
 - delegating independently decomposable decision domains to bounded recursive subplanners
 - sharing accepted decisions and handoffs through owned, single-writer ephemeral documents when needed
 - preventing decision split-brain, stale contracts, and overlapping writes in large or dirty repositories
-- keeping healthy workers uninterrupted while accepted results unlock dependent work
+- preserving healthy workers while accepted results unlock dependent work, with defined intervention conditions for failures, conflicts, or superseding instructions
 - auditing hierarchical orchestration for ownership drift, uncontrolled recursion, contention, or verification gaps
 
 Key entry points:

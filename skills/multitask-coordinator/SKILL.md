@@ -1,11 +1,13 @@
 ---
 name: multitask-coordinator
-description: Explicit-only coordination for non-trivial multi-step work with dependency-aware, hierarchical subagent scheduling. Use only when the user explicitly invokes or names `$multitask-coordinator` to coordinate parallel or dependent workstreams, recursive subplanners, ephemeral shared memory, migrations, large repositories, dirty or isolated worktrees, uninterrupted workers, or multi-agent orchestration audits; otherwise do not select it proactively. After invocation, build a task and decision graph, assign one owner per decision domain and write boundary, dispatch useful ready work, preserve healthy workers, route conflicts to the correct owner, integrate evidence, and verify the result.
+description: Coordinate non-trivial parallel or dependent work through hierarchical subagents, clear decision and write ownership, and evidence-based integration. Use only when the user explicitly invokes or names `$multitask-coordinator` for coordination or orchestration audits; do not select it proactively.
 ---
 
 # Multitask Coordinator
 
-Use the root parent as scheduler, root decision owner, integrator, and final verifier. Treat useful parallelism as a consequence of clear ownership, stable inputs, and bounded context rather than as a goal by itself. Delegate execution aggressively without delegating final responsibility. If subagents are unavailable or prohibited, apply the same task, decision, and ownership model locally.
+Use the root parent as scheduler, root decision owner, integrator, and final verifier. Delegate useful independent work within clear ownership, stable inputs, and bounded context. If subagents are unavailable or prohibited, apply the same task, decision, and ownership model locally.
+
+Apply this workflow within higher-priority instructions and the user's current scope and authorization. Planner acceptance is an internal coordination step: it neither expands authorization nor requires renewed user approval for already-authorized work.
 
 ## Core Invariants
 
@@ -13,7 +15,7 @@ Use the root parent as scheduler, root decision owner, integrator, and final ver
 2. **Keep one owner per decision and write boundary.** Assign exactly one owner to every material decision domain and every shared write surface. Cross-subtree decisions belong to the nearest common ancestor planner.
 3. **Separate planning from leaf execution.** Planners own decomposition and decisions; workers execute stable leaf contracts. A worker must not delegate further unless explicitly appointed as a subtree planner.
 4. **Freeze consumed inputs.** A node becomes ready only when its dependencies, decisions, and required contracts are stable. Do not silently change an input already consumed by a running worker.
-5. **Preserve healthy workers.** Do not cancel, restart, reassign, preempt, duplicate, or scope-change healthy work.
+5. **Preserve healthy workers.** Do not cancel, restart, reassign, preempt, duplicate, or scope-change healthy work except under the intervention conditions in [Healthy Worker Continuity](#healthy-worker-continuity).
 6. **Require evidence.** Treat summaries as claims until supported by diffs, paths, logs, tests, screenshots, or concrete artifacts.
 7. **Externalize shared state selectively.** Use owned ephemeral documents when hierarchy, context handoffs, or repeated shared discoveries justify them. Keep one writer per document and pass exact paths instead of broad history.
 8. **Retain final ownership.** The root parent owns objective interpretation, global decisions, sequencing, conflict escalation, integration, validation, cleanup, and user communication.
@@ -32,7 +34,7 @@ Use the root parent as scheduler, root decision owner, integrator, and final ver
 
 ## Decision And Conflict Control
 
-- Let workers report decision gaps, propose options, and provide compatibility feedback; do not let them accept or replace shared decisions outside their domain.
+- Let workers resolve routine, reversible implementation details within their scope and accepted contracts. Route shared decision gaps, contract or scope changes, and blockers to the owning planner while independent authorized work continues. Workers may propose options but must not accept or replace shared decisions outside their domain.
 - When a material shared decision changes, record its owner, concise statement, version or digest, and affected nodes. Reconfirm queued nodes. Let healthy running nodes finish unless continuation is invalid or unsafe, then review their output against the new decision before adoption.
 - Route a **semantic conflict** to the decision owner or nearest common ancestor planner.
 - Route a **textual conflict** between compatible accepted decisions to the root parent or a neutral merge arbiter that must not invent architecture.
@@ -69,9 +71,11 @@ Treat a worker as healthy when it has reported no error or blocker, has not exce
 
 Intervene only for a reported failure, blocker, required decision, defined timeout, confirmed scope or contract conflict, safety risk, superseding user or system instruction, or hard resource limit. Use the least disruptive response: supply one missing fact or narrow correction, pause dependents, and cancel only when continuation is unsafe, invalid, or unrecoverable. Restart only with a materially improved contract.
 
+Before retrying or replacing a failed writer, confirm it can no longer write and inspect its partial artifacts and current diff. Preserve unrelated changes; retain or revert only attributable worker changes within existing authorization, and record the resulting baseline in the next contract. If the writer's stop state or recovery baseline is uncertain, keep that write boundary blocked while independent work continues.
+
 ## Worker Prompt Contract
 
-Give each worker a compact contract:
+Give each worker a compact contract; omit fields that do not apply:
 
 ```text
 Role and delegation:
@@ -96,7 +100,8 @@ Scope and environment:
 
 Coordination:
 - Preserve changes you did not make.
-- Do not accept shared decisions or expand scope; report proposals and conflicts.
+- Resolve routine, reversible details within scope and accepted contracts.
+- Escalate shared decision gaps, contract or scope changes, and blockers to their owner.
 - Do not delegate unless authorized above.
 
 Validation and output:
@@ -107,6 +112,10 @@ Validation and output:
 
 ## Synthesis And Verification
 
-Inspect returned artifacts and evidence rather than relying on summaries. Synthesize agreement, conflict, coverage gaps, blockers, and residual risk. Resolve decision conflicts through their owners, adopt only compatible evidence-backed work, and run risk-matched integrated validation. Retain shared memory only by user request or repository convention; otherwise let the root cleanup owner remove only the exact proven-owned run root after all dependents and evidence are reconciled.
+Inspect returned artifacts and evidence rather than relying on summaries. Synthesize agreement, conflict, coverage gaps, blockers, and residual risk. Resolve decision conflicts through their owners and adopt only compatible evidence-backed work.
+
+Complete required checks and the smallest meaningful validation of the change, including affected cross-boundary behavior. Reuse inspected evidence for unchanged inputs. Avoid tests that merely restate a reversible, low-impact edit. Once the relevant checks pass, expand or repeat validation only for new changes, failures, or unresolved concerns.
+
+Apply the shared-memory reference's ownership and cleanup policy after all dependents and evidence are reconciled; remove only a proven-owned run root and report any retained memory with its reason.
 
 When evaluating or tuning orchestration, read [references/scheduler-audit.md](references/scheduler-audit.md). Use its metrics and scenario tests to detect hidden serialization, decision split-brain, stale contracts or memory, uncontrolled recursion, context waste, contention, unsafe cleanup, unnecessary interruption, and verification gaps.

@@ -24,6 +24,7 @@ Capture the smallest useful set of observations:
 - Shared-memory entry count, injected memory volume, stale-entry rate, rediscovery rate, and cleanup disposition.
 - Completion, blocker, failure, cancellation, restart, and retry rates.
 - Reviewer unique findings, duplicate findings, and verification coverage.
+- User-facing approval pauses and repeated validation calls, with their triggering rule or reason.
 
 Do not optimize worker count in isolation. Optimize intent preservation, end-to-end latency, correctness, coverage, and coordination cost.
 
@@ -68,7 +69,7 @@ Check for these bottlenecks:
 12. **Memory ownership ambiguity:** Multiple agents write one ledger or a non-root agent changes the session marker or cleanup policy.
 13. **Ownership ambiguity:** Multiple writers touch a shared surface without isolation and a merge plan.
 14. **Duplicate work:** The parent or siblings repeat healthy delegated work without a review purpose.
-15. **Excess intervention:** Healthy workers receive scope changes, cancellation, restart, or unsolicited follow-ups.
+15. **Excess intervention:** Healthy workers receive scope changes, cancellation, restart, or unsolicited follow-ups without a defined intervention condition.
 16. **Conflict misrouting:** A semantic disagreement is treated as a textual merge, or an acceptance dispute lacks an independent verifier.
 17. **Hot-path amplification:** One path repeatedly attracts writers, conflicts, and wait time.
 18. **Review correlation:** Reviewers receive the same context and repeatedly produce the same findings.
@@ -98,25 +99,30 @@ Apply only changes that address an observed bottleneck:
 
 ## Scenario Tests
 
-Use these tests after changing the policy:
+Select scenarios that exercise the changed behavior and adjacent invariants:
 
 - **Single trivial action:** Handle directly because delegation overhead is larger than the task.
+- **Authorized local choice:** Resolve routine, reversible details within the accepted contract without asking the user to reapprove the work; escalate a shared contract change to its owner.
 - **Several independent modules:** Dispatch up to effective capacity after the safety preflight.
 - **Dependent migration:** Stabilize one owned contract, then unlock consumers immediately after acceptance.
 - **Recursive subtree:** Appoint a subplanner only for an exclusive domain with multiple descendant workstreams and reserved capacity.
 - **Unauthorized recursion:** Prevent an ordinary worker from spawning descendants.
 - **Ephemeral shared memory:** Create one unique owned run root, give subplanners only relevant exact paths, and prevent concurrent writes to one document.
+- **Pre-existing shared container:** Create an owned child run root, preserve existing caller files, and leave the container intact after cleanup. Honor an explicitly designated exact run root under its ownership policy.
 - **Memory fallback:** Avoid disk-backed memory when workers do not share a filesystem; use bounded handoffs instead.
 - **Memory cleanup:** Retain an incomplete or ambiguously owned run; remove only a terminal, marker-validated, exact owned root.
 - **Decision change:** Reconfirm queued nodes and review running output against the new version without reflexively cancelling healthy work.
+- **Mutable memory reread:** Keep the worker on its assigned content when a shared path changes version; report a blocker if that content is unavailable instead of silently adopting the new version.
 - **Decision split-brain:** Route overlapping architectural decisions to the nearest common ancestor before implementation continues.
 - **Shared file without isolation:** Permit one writer and use other workers for read-only audit or verification.
 - **Semantic versus textual conflict:** Send incompatible intent to the decision owner and compatible edits to a neutral merge path.
 - **Healthy long-running worker:** Continue coordinator work without cancelling, restarting, reassigning, or changing scope.
-- **Blocked or failed worker:** Apply one narrow correction and restart only when recovery requires it.
+- **Superseding user instruction:** Update affected decisions and queued work; stop or redirect invalidated execution under the intervention rules while preserving unaffected work.
+- **Blocked or failed worker:** Apply a narrow correction; before retrying a writer, confirm it stopped, inspect partial work, preserve unrelated changes, and pass the reviewed recovery baseline.
 - **Completed worker unlocks downstream:** Dispatch the dependent node without waiting for the rest of the wave.
 - **Hot path:** Stop assigning new writers and create one convergence or decomposition node.
 - **High-risk integrated change:** Use distinct independent review and reproducible final verification.
+- **Sufficient verification:** Complete required and risk-matched checks, then finish; expand or repeat only when new changes, failures, or unresolved concerns warrant it.
 
 ## Audit Output
 
