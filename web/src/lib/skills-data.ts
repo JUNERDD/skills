@@ -505,13 +505,14 @@ export const SKILLS: SkillDetail[] = [
       "Auditing hierarchical orchestration for ownership drift, uncontrolled recursion, contention, or verification gaps.",
     ],
     workflow: [
-      "Frame the root specification, then read applicable rules and dirty state before dispatching writers.",
+      "Frame the root specification within existing authorization, then read applicable rules and dirty state before dispatching writers.",
       "Build a task and decision graph with dependencies, owners, stable inputs, scopes, evidence, and acceptance criteria.",
-      "Create one owned ephemeral shared-memory root only when hierarchy, context handoffs, or repeated discoveries justify it.",
+      "Use an owned run directory inside a shared container for temporary memory when needed, respecting any explicitly designated run path and retention policy.",
       "Keep small or tightly coupled work with the current planner; appoint a subplanner only for an exclusive decomposable subtree.",
-      "Freeze consumed decisions and contracts, then dispatch useful ready work within ownership, isolation, and integration capacity.",
+      "Bind workers to accepted decision and contract versions, then dispatch useful ready work within ownership, isolation, and integration capacity.",
       "Inspect terminal evidence incrementally, route conflicts by type, and unlock dependents immediately after acceptance.",
-      "Verify the integrated result, decision consistency, and residual risk under root-parent ownership.",
+      "Before retrying a failed writer, confirm it stopped, review partial changes, and supply a recovery baseline.",
+      "Complete required and risk-matched integration checks, then finish unless new changes, failures, or unresolved concerns justify more validation.",
     ],
     outputs: [
       "A task and decision graph with explicit hierarchy, dependencies, decision owners, and write boundaries.",
@@ -522,9 +523,10 @@ export const SKILLS: SkillDetail[] = [
     guardrails: [
       "Do not dispatch a writer before repository rules, dirty state, decision ownership, and write ownership are known.",
       "Do not assign more than one owner to a material decision domain or shared write boundary.",
+      "Workers may resolve routine, reversible details within accepted contracts; internal acceptance neither expands authorization nor requires renewed approval for already-authorized work.",
       "Do not let an ordinary worker delegate; only an explicitly appointed subplanner receives descendant capacity and scope.",
       "Do not scan for, broadly inject, concurrently edit, or unsafely delete ephemeral shared-memory documents.",
-      "Do not cancel, restart, reassign, or send unsolicited follow-ups to healthy workers.",
+      "Preserve healthy workers except under defined intervention conditions, including failures, conflicts, timeouts, safety risks, superseding instructions, or resource limits.",
       "Do not accept worker output as fact without reviewing changed files, artifacts, command output, or other concrete evidence.",
     ],
     entryPoints: [

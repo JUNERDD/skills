@@ -19,21 +19,22 @@ Skip it for trivial work, a single self-contained worker, or a run whose state a
 
 ## Placement
 
-Choose one unique run root in this order:
+By default, create a unique coordinator-owned `<run-id>/` directory inside a shared container. The container may already exist and is never a cleanup target. Choose the container in this order:
 
-1. Use an exact user- or host-provided shared session directory when its ownership and cleanup policy are explicit.
+1. Use the exact user- or host-provided shared session directory when creation of an owned child directory is permitted.
 2. Use an established repository-local temporary convention when it is shared by all participating workers and is already ignored or expected by the repository.
-3. Otherwise create a unique directory below the operating system's temporary root when every participating worker can access the same host filesystem.
-4. Use `<workspace-root>/tmp/multitask-coordinator/<run-id>/` only when workers share the workspace but cannot share the operating-system temporary root. Do not edit ignore rules automatically; record the transient dirty-state impact and clean it before closeout.
+3. Otherwise use the operating system's temporary root when every participating worker can access the same host filesystem.
+4. Use `<workspace-root>/tmp/multitask-coordinator/` only when workers share the workspace but cannot share the operating-system temporary root. Do not edit ignore rules automatically; record the transient dirty-state impact and clean the owned run root before closeout when the cleanup gate permits it.
 
-Use a unique, non-sensitive run ID and refuse to reuse an existing directory. Record and pass the exact absolute path; never recover a session by scanning a temp directory or selecting the latest match.
+If the user or host explicitly designates an exact run root, preserve that path and its ownership and retention policy; retain caller-owned roots. When creating a new run root, use a unique, non-sensitive run ID and refuse an existing-path collision. Record and pass the exact absolute run-root path. Continue an existing run only through that recorded path and matching session marker. Never recover a session by scanning a temp directory or selecting the latest match.
 
 Do not place ephemeral memory in:
 
 - the installed skill directory;
 - source, generated, or package directories;
-- `docs/plans`, `.codex/plans`, or another durable documentation path unless the user requests retention;
-- a caller-owned artifact directory whose contents the coordinator does not exclusively own.
+- `docs/plans`, `.codex/plans`, or another durable documentation path unless the user requests retention.
+
+Do not claim ownership of the container or existing caller-owned artifacts when placing memory.
 
 If workers do not share a filesystem, do not create disk-backed shared memory. Use bounded handoffs or runtime-native messages instead.
 
@@ -77,9 +78,11 @@ Label proposals, inferences, and superseded entries explicitly. Prefer reference
 
 Every material entry identifies its scope, owner, status, evidence, and last update. A worker reports the decision or memory version it consumed so the parent can detect stale work.
 
+Bind each worker to the assigned version's content and keep that content readable while it is in use. If a later read of a mutable path shows a different version, continue with the assigned content or report a blocker to its owner if that content is unavailable. Adopt a revision only through an updated contract under the skill's decision-change rules.
+
 ## Lifecycle
 
-1. Create one run root and marker before the first shared-memory-dependent dispatch.
+1. Establish the run root and matching marker before the first shared-memory-dependent dispatch; preserve them when continuing the same run.
 2. Initialize `index.md` with the root objective, active decision domains, subtree owners, and exact relevant file paths.
 3. Pass exact paths in subplanner and worker contracts.
 4. Read the owned file before updating it; preserve superseded decisions with their replacement evidence.
@@ -93,4 +96,4 @@ Only the root cleanup owner may remove the run root. Clean up only when no worke
 
 Before deletion, verify the exact marker, run ID, path containment, and expected owned entries. Refuse cleanup if the marker is missing, the root contains a symlink or unowned file, ownership is ambiguous, or the run is incomplete. Never use a broad recursive target, glob, shared directory, `latest` path, or unresolved environment variable.
 
-Retain and report the exact path when the user requests retention, repository convention requires it, or safe cleanup cannot be proven. Never delete caller-owned or host-owned artifacts. After successful cleanup, report that the owned ephemeral memory was removed.
+Retain and report the exact path when the user or host requires retention, repository convention requires it, or safe cleanup cannot be proven. Never delete a shared container or caller-owned or host-owned artifacts. After successful cleanup, report that the owned ephemeral memory was removed.
