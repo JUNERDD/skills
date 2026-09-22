@@ -4,6 +4,13 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.16] - 2026-09-22
+
+### Changed
+
+- Document that the managed skill link farm can target any runtime discovery directory, including the Claude Code skills directory.
+- Record that one checkout owns a single target, and describe the hub plus root symlink layout that serves several runtimes without per-entry drift.
+
 ## [0.2.15] - 2026-09-12
 
 ### Changed
