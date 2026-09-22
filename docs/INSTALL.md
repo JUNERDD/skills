@@ -47,6 +47,41 @@ live.
 - If the user explicitly says the agent can choose the install location, use
   `~/.junerdd/JUNERDD-skills` as the default checkout path.
 
+## Discovery Directory Policy
+
+The installer links into `~/.agents/skills` by default. Not every runtime reads
+that path. Claude Code discovers only `~/.claude/skills/<skill-name>/SKILL.md`
+and project-level `.claude/skills/<skill-name>/SKILL.md`, and exposes no setting
+that adds another discovery root. Point the installer at the directory the
+runtime actually reads:
+
+```bash
+node scripts/sync-skill-links.mjs install --target ~/.claude/skills
+```
+
+The installer creates that directory when it is missing, leaves unrelated
+entries inside it untouched, and records ownership exactly as it does for the
+default target.
+
+One checkout owns one target. Reinstalling with a different `--target` migrates
+the installation: managed links at the previous target are removed before the
+new ones are created. Do not pass a second `--target` to serve a second runtime.
+
+When several runtimes must see the same skills, keep one real directory as the
+hub, install the link farm into that hub once, and give every other runtime a
+single directory symlink to it:
+
+```bash
+ln -s ~/.agents/skills ~/.claude/skills
+```
+
+Claude Code follows symlinked entries inside a discovery directory, so a
+per-entry mirror also works. It needs continuous maintenance: the managed Git
+hooks reconcile only the installed target, which leaves every added, removed, or
+renamed skill missing from the mirror until someone links it by hand. A single
+root symlink cannot drift. After creating it, restart the runtime once and
+confirm that it lists the skills.
+
 ## Installation
 
 1. Determine the absolute path of this repository.
@@ -66,6 +101,9 @@ live.
    ```bash
    node scripts/sync-skill-links.mjs install
    ```
+
+   Add `--target <path>` when the runtime reads a different discovery
+   directory, as described in the discovery directory policy above.
 
    The command:
 
