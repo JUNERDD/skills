@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.17] - 2026-09-22
+
+### Changed
+
+- Let multitask-coordinator workers resolve routine, reversible details inside accepted contracts and existing authorization, without a renewed approval round for already-authorized work.
+- Replace the blanket no-intervention rule with defined intervention conditions, and require a reviewed recovery baseline before retrying a failed writer.
+- Separate the shared memory container from the owned run root, keep consumed memory versions readable, and close validation once required and risk-matched checks pass.
+- Synchronize README and English/Chinese website catalog guidance with the updated coordinator workflow.
+
 ## [0.2.16] - 2026-09-22
 
 ### Changed
