@@ -1,3 +1,23 @@
+# Report Directory Template
+
+A Thermobot report is a directory, so a large review stays navigable and the fix phase can open only the files it needs. Keep the backticked tokens these templates fix (finding IDs, severities, statuses, thresholds, recommendation, completion) verbatim in English, because `scripts/check_report.py` reads them; prose may follow the user's language.
+
+## Layout
+
+```text
+<report-dir>/
+├── README.md     entry point: contract, scope, snapshot, findings index, ledgers, verification
+├── findings/
+│   └── F<n>.md   one card per finding; omit the folder when there are no findings
+├── coverage.md   recursive coverage ledger
+└── files.md      file inventory with 350-line diagnoses
+```
+
+When a ledger would run to several hundred rows, split it by top-level area into `coverage/<area>.md` or `files/<area>.md` in place of the single file, and link every part from the README.
+
+## README.md
+
+```markdown
 # Thermobot Report
 
 ## Report Contract
@@ -5,7 +25,7 @@
 - Report type: `thermobot`
 - Report ID: `tb-YYYYMMDD-<random-id>`
 - Review date: `YYYY-MM-DD`
-- Report path: `[absolute or repository-relative path]`
+- Report directory: `[absolute or repository-relative path]`
 - Repository root: `[absolute path]`
 - Artifact status: `Fixed review input; do not rewrite during repair`
 
@@ -26,23 +46,35 @@
 - Coverage confidence: `[high | medium | low]`
 - Biggest blind spot: `[short phrase, or None identified]`
 
-## Complete Findings Index
+## Findings Index
 
-If no findings exist, write `No structural findings identified in the reviewed scope.` Otherwise add one row per finding, ordered by severity.
+[If no findings exist, write `No structural findings identified in the reviewed scope.` Otherwise add one row per finding, ordered by severity, each linking its card.]
 
 | ID | Severity | Surface | Structural risk | Confidence |
 | --- | --- | --- | --- | --- |
-| `F1` | `[Blocker | Major | Minor | Question]` | `[file, module, API, helper, state model, type boundary, test, or config]` | `[one-line risk or open question]` | `[high | medium | low]` |
+| [`F1`](findings/F1.md) | `[Blocker, Major, Minor, or Question]` | `[file, module, API, helper, state model, type boundary, test, or config]` | `[one-line risk or open question]` | `[high, medium, or low]` |
 
-## Findings
+## Ledgers
 
-If no findings exist, write `None.` Otherwise repeat this card for every finding in the order `Blocker`, `Major`, `Minor`, `Question`.
+- [Recursive coverage ledger](coverage.md): `[candidate count by status]`
+- [File inventory](files.md): `[file count; files over 350 lines]`
 
-### F1 [Severity] - [Short title]
+## Verification Commands
+
+- `[read-only command and key outcome]`
+- `python3 <skill-folder>/scripts/check_report.py <report-dir>` -> `OK`
+```
+
+## findings/F<n>.md
+
+Write one file per finding, named by its ID. For a `Question`, replace `Simpler path` with `Needed context: [the intent, ownership, or constraint that decides the gate]`.
+
+```markdown
+# F1 [Blocker, Major, Minor, or Question] - [Short title]
 
 - Surface: `[file, module, component, API, ownership boundary, state model, or type boundary]`
 - Look here first: `[primary](/abs/path/file.ts#L10)`, `[secondary](/abs/path/other.ts#L42)`
-- Confidence: `[high | medium | low]`
+- Confidence: `[high, medium, or low]`
 
 Impact: `[one or two sentences: the maintainability, ownership, or future-change cost and why it earns this severity]`
 
@@ -53,36 +85,35 @@ Structural failure:
 
 Simpler path: `[one to three sentences: the responsibility split, ownership move, branch deletion, type model, helper reuse, or reframing; for a threshold finding, how the dependency surface narrows]`
 
-For a `Question`, replace `Simpler path` with `Needed context: [the intent, ownership, or constraint that decides the gate]`.
-
 Evidence:
 
 - `[file:line pointers, line counts, search or command results, or the proof still missing]`
+```
 
-## Recursive Coverage Ledger
+## coverage.md
 
-Account for every changed structural area and every candidate the sweep added, including dismissed and merged ones.
+Account for every changed structural area and every candidate the sweep added, including dismissed and merged ones. A `Not covered` row names its blocker and next step, and makes the README completion `Incomplete`.
+
+```markdown
+# Recursive Coverage Ledger
 
 | Area / candidate | Source | Entry points | Status | Evidence / next step |
 | --- | --- | --- | --- | --- |
-| `[area or candidate]` | `[initial inventory | discovered from F# | discovered from trace]` | `[file or entry-point links]` | `[Finding F# | Merged into F# | Reviewed - no issue | Not review-relevant | Not covered]` | `[short conclusion, or blocker plus concrete next step]` |
+| `[area or candidate]` | `[initial inventory, discovered from F#, or discovered from trace]` | `[file or entry-point links]` | `[Finding F#, Merged into F#, Reviewed - no issue, Not review-relevant, or Not covered]` | `[short conclusion, or blocker plus concrete next step]` |
+```
 
-## File Inventory
+## files.md
 
 Add one row per changed file. Every `crossed 350` or `already over 350` row needs a boundary diagnosis (responsibilities, dependency direction, canonical owner) and must map to a finding or an evidence-backed waiver; `reviewed - no issue` is valid only under 350 lines.
 
+```markdown
+# File Inventory
+
 | Path | Class | Baseline lines | Current lines | Threshold | Boundary diagnosis and decision |
 | --- | --- | ---: | ---: | --- | --- |
-| `[path]` | `[source | test | config | docs | generated | vendored]` | `[n]` | `[n]` | `[under 350 | crossed 350 | already over 350 | excluded]` | `[diagnosis; Finding F# | waived - reason | excluded - reason | reviewed - no issue | not covered]` |
+| `[path]` | `[source, test, config, docs, generated, or vendored]` | `[n]` | `[n]` | `[under 350, crossed 350, already over 350, or excluded]` | `[diagnosis; Finding F#, waived - reason, excluded - reason, reviewed - no issue, or not covered]` |
+```
 
-## Verification Commands
+## Consistency Check
 
-- `[read-only command and key outcome]`
-
-## Report Self-Check
-
-- `[yes | no]` Every finding appears in both `Complete Findings Index` and `Findings`, and the severity counts match the cards.
-- `[yes | no]` Every changed structural area and sweep candidate appears in `Recursive Coverage Ledger`, and every `Finding F#` or `Merged into F#` row resolves to a card.
-- `[yes | no]` Every `Not covered` row names a blocker and next step, and completion is `Incomplete`.
-- `[yes | no]` Every maintained source file over 350 lines has a boundary diagnosis that maps to a finding or an evidence-backed waiver, and no threshold decision relies on a count-only tactic.
-- `[yes | no]` The recommendation follows the skill's mapping.
+After writing the directory, run `python3 <skill-folder>/scripts/check_report.py <report-dir>` and fix every problem it prints. It confirms that the index and finding files match one to one, severity counts and the recommendation follow the cards, ledger rows point at real findings, `Not covered` rows come with an `Incomplete` completion, and every file over 350 lines maps to a finding or waiver. It cannot judge whether the sweep was complete or a waiver is sound; that stays with the reviewer.

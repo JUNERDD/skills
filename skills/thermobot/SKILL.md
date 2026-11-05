@@ -1,13 +1,13 @@
 ---
 name: thermobot
-description: Run an extremely strict structural code-quality review of a change set, persist every finding in a fresh Markdown report, then verify and resolve the findings the user wants fixed through scoped, behavior-preserving repairs. The gate targets missed simplifications, responsibility concentration, abstraction and ownership boundaries, type contracts, branching growth, duplication, and 350-line file pressure; correct behavior alone does not pass. Use when the user explicitly requests Thermobot or a thermo review, or when conversation context shows an unambiguous intent to act on a Thermobot report. The review phase writes only its report and never modifies reviewed code or Git state.
+description: Run an extremely strict structural code-quality review of a change set, persist every finding in a fresh Markdown report directory, then verify and resolve the findings the user wants fixed through scoped, behavior-preserving repairs. The gate targets missed simplifications, responsibility concentration, abstraction and ownership boundaries, type contracts, branching growth, duplication, and 350-line file pressure; correct behavior alone does not pass. Use when the user explicitly requests Thermobot or a thermo review, or when conversation context shows an unambiguous intent to act on a Thermobot report. The review phase writes only its report and never modifies reviewed code or Git state.
 ---
 
 # Thermobot
 
 Thermobot is a harsh maintainability gate: correct behavior is not enough, and the change must also leave the code simpler to reason about. It runs in two phases:
 
-- **Review:** sweep the requested scope for every distinct structural finding and persist the result in a fresh Markdown report. The report is the only file review may write; reviewed code and Git state stay untouched.
+- **Review:** sweep the requested scope for every distinct structural finding and persist the result in a fresh report directory. That directory is the only thing review may write; reviewed code and Git state stay untouched.
 - **Fix:** after the report is persisted, verify and resolve the findings that the user's repair request covers. That request may arrive with the review request or after the report.
 
 ## Route And Authorization
@@ -96,16 +96,16 @@ Map the recommendation mechanically:
 
 ### Persistent Report
 
-Read [references/report-template.md](references/report-template.md) completely and use it as the report contract.
+Write the report as a directory rather than one file: a single file grows unwieldy on a large review, while a directory keeps the entry point short, lets each finding be read on its own, and lets the fix phase load only what it needs. Read [references/report-template.md](references/report-template.md) completely and use it as the contract for the layout and every file in it.
 
-- Write a fresh report once the scope is resolved, including when nothing is found or coverage is incomplete.
-- Generate one random lowercase identifier per run, such as 8 hex characters from `openssl rand -hex 4`, and use it in report ID `tb-YYYYMMDD-<random-id>` and in the filename.
-- Follow an obvious repository convention for review artifacts when one exists; otherwise write `tmp/reviews/YYYY-MM-DD-thermobot-report-<random-id>.md` under the reviewed repository. Never overwrite an existing file; generate a new identifier instead.
-- Number findings `F1`, `F2`, and so on; report ID, finding ID, and location together identify a finding durably.
-- Keep the report terse: a sentence or two per card field, evidence as `file:line` pointers, and no restated diff. The report records a gate decision for someone to act on, and extra narrative only makes it slower to write and to read.
-- Run the template's self-check before handoff and correct any mismatch.
+- Write a fresh report directory once the scope is resolved, including when nothing is found or coverage is incomplete.
+- Generate one random lowercase identifier per run, such as 8 hex characters from `openssl rand -hex 4`, and use it in report ID `tb-YYYYMMDD-<random-id>` and in the directory name.
+- Follow an obvious repository convention for review artifacts when one exists; otherwise create `tmp/reviews/YYYY-MM-DD-thermobot-report-<random-id>/` under the reviewed repository. Never reuse an existing directory; generate a new identifier instead.
+- Number findings `F1`, `F2`, and so on, one file each; report ID, finding ID, and location together identify a finding durably.
+- Keep every file terse: a sentence or two per card field, evidence as `file:line` pointers, and no restated diff. The report records a gate decision for someone to act on, and extra narrative only makes it slower to write and to read.
+- Before handoff, run `python3 <this skill's folder>/scripts/check_report.py <report-dir>` and fix every problem it prints. [The checker](scripts/check_report.py) catches mismatches between the index, finding files, counts, recommendation, and ledgers; whether the sweep was complete remains your judgment.
 
-Return a short summary with the report path, report ID, recommendation, completion status, severity counts, and top structural risks. Do not reproduce the full report in chat.
+Return a short summary with the report directory, report ID, recommendation, completion status, severity counts, and top structural risks. Do not reproduce the report in chat.
 
 ## Fix
 

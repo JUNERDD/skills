@@ -1030,23 +1030,23 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A two-phase structural quality gate: a strict persisted review, then report-scoped, behavior-preserving repair in the same skill.",
     overview:
-      "Use this skill for strict maintainability review; it replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope until a recursive candidate frontier reaches a fixed point or is marked incomplete, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique Markdown report; that report is review's only write. Fix verifies each selected finding against current code, pushes back on stale or incorrect claims, applies the smallest cohesive behavior-preserving repair, and checks behavior parity before returning a disposition ledger. A request to review and fix continues into repair once the report is persisted, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.",
+      "Use this skill for strict maintainability review; it replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope until a recursive candidate frontier reaches a fixed point or is marked incomplete, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique report directory (an entry README, one file per finding, and separate ledgers kept consistent by a bundled checker); that directory is review's only write. Fix reads only the report files the selected findings need, verifies each against current code, pushes back on stale or incorrect claims, applies the smallest cohesive behavior-preserving repair, and checks behavior parity before returning a disposition ledger. A request to review and fix continues into repair once the report is persisted, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.",
     bestFor: [
       "Reviewing whether a diff makes the implementation more tangled, oversized, indirect, or hard to extend.",
       "Finding missed code-judo simplifications, cohesive responsibility splits, canonical-ownership moves, and clearer type boundaries.",
-      "Producing a durable structural review artifact, then resolving all or selected findings through verified fixes, evidence-backed waivers, or carry-forward decisions.",
+      "Producing a report directory that stays navigable on large reviews, then resolving all or selected findings through verified fixes, evidence-backed waivers, or carry-forward decisions.",
     ],
     workflow: [
       "Set the review scope and baseline, preferring staged changes, then the working tree plus untracked files, when the user does not name a scope.",
       "Inventory changed files and line counts; for 350-line candidates, map responsibilities, dependency seams, and canonical owners.",
       "Seed a recursive candidate frontier from file growth, branches, helpers, abstractions, types, ownership boundaries, orchestration, tests, and duplicated blocks, then trace each candidate inward and outward.",
       "Add newly exposed candidates until the frontier reaches a fixed point or uncovered areas are explicitly marked.",
-      "Persist a unique Markdown report with every finding, a coverage ledger, a file inventory, and a gate recommendation.",
-      "When repair is authorized, reverify the selected findings, push back on stale or incorrect claims, apply cohesive behavior-preserving fixes, and run targeted plus required checks.",
+      "Persist a unique report directory (README index, one file per finding, coverage and file ledgers) and confirm its consistency with the bundled checker.",
+      "When repair is authorized, read only the selected findings' files, reverify them, push back on stale or incorrect claims, apply cohesive behavior-preserving fixes, and run targeted plus required checks.",
     ],
     outputs: [
-      "A Markdown structural quality report with one card per finding and a complete findings index.",
-      "A short summary with the report path, recommendation, completion status, severity counts, and top structural risks.",
+      "A report directory: an entry README with the findings index and gate recommendation, one file per finding, and separate coverage and file ledgers.",
+      "A short summary with the report directory, recommendation, completion status, severity counts, and top structural risks.",
       "After repair, a disposition ledger with behavior-parity status, verification results, and the remaining gate status.",
     ],
     guardrails: [
@@ -1066,12 +1066,22 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Report template",
         path: "skills/thermobot/references/report-template.md",
-        description: "Canonical report sections, finding cards, coverage ledger, file inventory, and self-check.",
+        description: "Report directory layout, README index, finding cards, ledgers, and consistency check.",
       },
       {
         label: "Fix workflow",
         path: "skills/thermobot/references/fix-workflow.md",
         description: "Confirmation, finding dispositions, behavior parity, verification, and Git guardrails.",
+      },
+      {
+        label: "Report checker",
+        path: "skills/thermobot/scripts/check_report.py",
+        description: "Checks that the index, finding files, counts, recommendation, and ledgers agree.",
+      },
+      {
+        label: "Checker tests",
+        path: "skills/thermobot/scripts/test_check_report.py",
+        description: "Regression coverage for the report consistency rules.",
       },
       {
         label: "Runtime metadata",

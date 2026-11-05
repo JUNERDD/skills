@@ -617,7 +617,7 @@ Key entry points:
 
 ### `thermobot`
 
-[`skills/thermobot/`](./skills/thermobot/) runs a two-phase structural quality gate in one skill and replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope through a recursive candidate frontier, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique Markdown report with a coverage ledger, file inventory, and gate recommendation; the report is review's only write. Fix verifies each selected finding against current code, pushes back on stale or incorrect claims with evidence, applies the smallest cohesive behavior-preserving repair, checks behavior parity on reachable user-visible surfaces, and returns a disposition ledger against the unchanged report. A request to review and fix continues into repair once the report is persisted; review-only requests stop at the report, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Fixes stay unstaged, and there is no automatic review-fix-review loop. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.
+[`skills/thermobot/`](./skills/thermobot/) runs a two-phase structural quality gate in one skill and replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope through a recursive candidate frontier, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique report directory: a README entry point with the findings index and gate recommendation, one file per finding, and separate coverage and file-inventory ledgers that a bundled checker keeps consistent, so large reviews stay navigable. The directory is review's only write. Fix reads only the report files the selected findings need, verifies each against current code, pushes back on stale or incorrect claims with evidence, applies the smallest cohesive behavior-preserving repair, checks behavior parity on reachable user-visible surfaces, and returns a disposition ledger against the unchanged report. A request to review and fix continues into repair once the report is persisted; review-only requests stop at the report, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Fixes stay unstaged, and there is no automatic review-fix-review loop. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.
 
 Install:
 
@@ -629,14 +629,16 @@ Best for:
 
 - reviewing whether a change makes the implementation more tangled, oversized, or indirect
 - finding missed simplification, cohesive responsibility splits, canonical-ownership moves, and type-boundary opportunities
-- producing a durable structural review artifact with candidate coverage, line-count evidence, and residual blind spots
+- producing a durable report directory with candidate coverage, line-count evidence, and residual blind spots that stays navigable on large reviews
 - resolving all or selected findings through verified, behavior-preserving fixes, evidence-backed waivers, or carry-forward decisions
 
 Key entry points:
 
 - Phase routing, review workflow, and structural standards: [`skills/thermobot/SKILL.md`](./skills/thermobot/SKILL.md)
-- Report template: [`skills/thermobot/references/report-template.md`](./skills/thermobot/references/report-template.md)
+- Report directory template: [`skills/thermobot/references/report-template.md`](./skills/thermobot/references/report-template.md)
 - Report-scoped fix workflow: [`skills/thermobot/references/fix-workflow.md`](./skills/thermobot/references/fix-workflow.md)
+- Report consistency checker: [`skills/thermobot/scripts/check_report.py`](./skills/thermobot/scripts/check_report.py)
+- Checker regression tests: [`skills/thermobot/scripts/test_check_report.py`](./skills/thermobot/scripts/test_check_report.py)
 - Optional runtime metadata: [`skills/thermobot/agents/openai.yaml`](./skills/thermobot/agents/openai.yaml)
 
 ### `receiving-code-review`
@@ -831,9 +833,12 @@ When you add more skills later:
     │   ├── SKILL.md
     │   ├── agents/
     │   │   └── openai.yaml
-    │   └── references/
-    │       ├── fix-workflow.md
-    │       └── report-template.md
+    │   ├── references/
+    │   │   ├── fix-workflow.md
+    │   │   └── report-template.md
+    │   └── scripts/
+    │       ├── check_report.py
+    │       └── test_check_report.py
     ├── debug/
     │   ├── SKILL.md
     │   ├── agents/

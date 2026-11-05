@@ -6,11 +6,11 @@ Use this workflow only for the fix phase selected by `SKILL.md`. Treat each find
 
 Before editing:
 
-1. Resolve the source report from an explicit path or the unambiguous report in the conversation, confirm that it is a Thermobot report or one written by the earlier `thermo-review` skill, and read it completely. Reports without a `Report Contract` section are still valid; treat any standalone `D#` decomposition gap in them as a finding.
+1. Resolve the source report from an explicit path or the unambiguous report in the conversation. A current report is a directory: read its `README.md` completely, run `python3 <skill folder>/scripts/check_report.py <report-dir>` to confirm its index, finding files, and ledgers agree, then read the finding files for the selected findings. Open `coverage.md` or `files.md` only when a selected finding or the gate status depends on them. A single-file report from an earlier version of this skill or from `thermo-review` is still valid: read it completely, and treat any standalone `D#` decomposition gap in it as a finding.
 2. Confirm repair intent and the selection with the routing rules in `SKILL.md`. Severity alone never defines a subset, and the user never has to repeat details already present.
 3. Reconcile checkout drift. Authorization holds for a finding whose failure mode still exists within the original scope; mark stale, already-fixed, or unmappable findings explicitly, and report anything that needs a broader review instead of absorbing it.
 
-Authorization covers only the selected findings. The source report is fixed input; never rewrite it to record progress.
+Authorization covers only the selected findings. The source report is fixed input; never rewrite it or add files to it to record progress.
 
 ## Reverify Each Finding
 
@@ -71,7 +71,7 @@ Do not repair a newly discovered issue unless it shares a selected root cause an
 
 Return a concise Markdown summary containing:
 
-- the source report ID and path
+- the source report ID and its directory or file path
 - the disposition ledger:
 
   | ID | Severity | Disposition | Structural evidence | Behavior parity | Next action |
