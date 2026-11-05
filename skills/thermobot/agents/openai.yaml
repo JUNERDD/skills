@@ -1,0 +1,7 @@
+interface:
+  display_name: "Thermobot"
+  short_description: "Harsh structural reports with scoped repair"
+  default_prompt: "Use $thermobot to perform an extremely strict structural quality review of the current changes and write a Markdown report with recursive coverage, boundary-aware 350-line checks, and a gate recommendation."
+
+policy:
+  allow_implicit_invocation: false

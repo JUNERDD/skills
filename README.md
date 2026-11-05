@@ -42,8 +42,7 @@ If you are deciding what to install, start here:
 - [`debug`](#debug) - batch broad first-pass breakpoints, then prove, repair, and verify runtime bugs
 - [`bugbot`](#bugbot) - persist introduced-bug reports, then recognize report-repair intent
 - [`code-review`](#code-review) - run product-grounded deep reviews with bounded report lineage
-- [`thermo-review`](#thermo-review) - write harsh structural quality review reports
-- [`receiving-thermo-review`](#receiving-thermo-review) - consume thermo reports and verify structural plus behavior-parity items
+- [`thermobot`](#thermobot) - write harsh structural quality reports, then resolve the findings you want fixed
 - [`receiving-code-review`](#receiving-code-review) - trace findings end to end, preserve intent, and resolve confirmed items without recursive review loops
 - [`hack-review`](#hack-review) - review whether an implementation relies on brittle hack-like shortcuts
 - [`receiving-hack-review`](#receiving-hack-review) - consume a hack-review report and verify each finding before changing code
@@ -99,8 +98,7 @@ npx skills@latest add JUNERDD/skills --skill find-local-skill
 npx skills@latest add JUNERDD/skills --skill github-context7-research
 npx skills@latest add JUNERDD/skills --skill bugbot
 npx skills@latest add JUNERDD/skills --skill code-review
-npx skills@latest add JUNERDD/skills --skill thermo-review
-npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
+npx skills@latest add JUNERDD/skills --skill thermobot
 npx skills@latest add JUNERDD/skills --skill receiving-code-review
 npx skills@latest add JUNERDD/skills --skill hack-review
 npx skills@latest add JUNERDD/skills --skill receiving-hack-review
@@ -617,48 +615,29 @@ Key entry points:
 - Validator regression tests: [`skills/code-review/scripts/test_validate_review_report.py`](./skills/code-review/scripts/test_validate_review_report.py)
 - Optional runtime metadata: [`skills/code-review/agents/openai.yaml`](./skills/code-review/agents/openai.yaml)
 
-### `thermo-review`
+### `thermobot`
 
-[`skills/thermo-review/`](./skills/thermo-review/) performs an extremely strict structural code-quality review. It writes a Markdown report with a recursive candidate sweep, a 350-line maintained-source trigger for cohesion, dependency, and ownership analysis, severity-ordered findings, and a quality-gate recommendation. The threshold drives responsibility-boundary diagnosis. Review-only requests end at the report; already-authorized repairs continue after the report is preserved. Invocation is explicit-only: a user must invoke `$thermo-review`; matching prompts do not activate it automatically.
+[`skills/thermobot/`](./skills/thermobot/) runs a two-phase structural quality gate in one skill and replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope through a recursive candidate frontier, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique Markdown report with a coverage ledger, file inventory, and gate recommendation; the report is review's only write. Fix verifies each selected finding against current code, pushes back on stale or incorrect claims with evidence, applies the smallest cohesive behavior-preserving repair, checks behavior parity on reachable user-visible surfaces, and returns a disposition ledger against the unchanged report. A request to review and fix continues into repair once the report is persisted; review-only requests stop at the report, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Fixes stay unstaged, and there is no automatic review-fix-review loop. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.
 
 Install:
 
 ```bash
-npx skills@latest add JUNERDD/skills --skill thermo-review
+npx skills@latest add JUNERDD/skills --skill thermobot
 ```
 
 Best for:
 
 - reviewing whether a change makes the implementation more tangled, oversized, or indirect
 - finding missed simplification, cohesive responsibility splits, canonical-ownership moves, and type-boundary opportunities
-- producing a durable structural review artifact with candidate coverage and residual blind spots
+- producing a durable structural review artifact with candidate coverage, line-count evidence, and residual blind spots
+- resolving all or selected findings through verified, behavior-preserving fixes, evidence-backed waivers, or carry-forward decisions
 
 Key entry points:
 
-- Workflow and guardrails: [`skills/thermo-review/SKILL.md`](./skills/thermo-review/SKILL.md)
-- Report template: [`skills/thermo-review/references/report-template.md`](./skills/thermo-review/references/report-template.md)
-- Optional runtime metadata: [`skills/thermo-review/agents/openai.yaml`](./skills/thermo-review/agents/openai.yaml)
-
-### `receiving-thermo-review`
-
-[`skills/receiving-thermo-review/`](./skills/receiving-thermo-review/) verifies structural feedback, decomposition, coverage, and line-count evidence against current code. It checks behavior parity and cohesive responsibility boundaries; a smaller count alone is not closure. Stale items are reconciled individually so independent authorized fixes can continue. It preserves the source report and unrelated Git state, accounts for unresolved gate items, and bounds justified follow-up review to affected changes without recursive receiving cycles. Invocation is explicit-only: a user must invoke `$receiving-thermo-review`; matching prompts do not activate it automatically.
-
-Install:
-
-```bash
-npx skills@latest add JUNERDD/skills --skill receiving-thermo-review
-```
-
-Best for:
-
-- verifying harsh structural review findings against the current diff before changing code
-- resolving 350-line concerns through clearer responsibility ownership and dependency seams, alongside decomposition and recursive coverage gaps
-- applying scoped structural fixes while preserving Git staging, checking behavior parity, and avoiding unapproved architecture refactors
-
-Key entry points:
-
-- Workflow and guardrails: [`skills/receiving-thermo-review/SKILL.md`](./skills/receiving-thermo-review/SKILL.md)
-- Optional runtime metadata: [`skills/receiving-thermo-review/agents/openai.yaml`](./skills/receiving-thermo-review/agents/openai.yaml)
+- Phase routing, review workflow, and structural standards: [`skills/thermobot/SKILL.md`](./skills/thermobot/SKILL.md)
+- Report template: [`skills/thermobot/references/report-template.md`](./skills/thermobot/references/report-template.md)
+- Report-scoped fix workflow: [`skills/thermobot/references/fix-workflow.md`](./skills/thermobot/references/fix-workflow.md)
+- Optional runtime metadata: [`skills/thermobot/agents/openai.yaml`](./skills/thermobot/agents/openai.yaml)
 
 ### `receiving-code-review`
 
@@ -848,16 +827,13 @@ When you add more skills later:
     │   └── scripts/
     │       ├── test_validate_review_report.py
     │       └── validate_review_report.py
-    ├── thermo-review/
+    ├── thermobot/
     │   ├── SKILL.md
     │   ├── agents/
     │   │   └── openai.yaml
     │   └── references/
+    │       ├── fix-workflow.md
     │       └── report-template.md
-    ├── receiving-thermo-review/
-    │   ├── SKILL.md
-    │   └── agents/
-    │       └── openai.yaml
     ├── debug/
     │   ├── SKILL.md
     │   ├── agents/
