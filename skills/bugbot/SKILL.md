@@ -30,7 +30,7 @@ After detection, write the report and provide its short handoff summary. Stop fo
 - Use this skill for a narrow defect-first review, a persisted Bugbot report, and intent-gated local repairs.
 - Use `code-review` for a deep merge-safety report.
 - Use `regression-review` for a coverage-led user-visible behavior audit.
-- Use `thermo-review` or `hack-review` for structural quality or brittle-shortcut analysis.
+- Use `thermobot` or `hack-review` for structural quality or brittle-shortcut analysis.
 
 ## Inputs
 
