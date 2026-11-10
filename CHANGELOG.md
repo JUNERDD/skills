@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.18] - 2026-11-10
+
+### Changed
+
+- Replace thermo-review and receiving-thermo-review with thermobot, combining structural review and authorized report-scoped repairs in one explicitly invoked skill.
+- Write scalable review report directories with a README findings index, individual finding files, coverage and file-inventory ledgers, and a consistency checker with regression tests.
+- Preserve evidence-backed finding verification and behavior-parity checks during repairs, while supporting reports from the former thermo-review skill.
+- Synchronize README, bugbot guidance, and the English/Chinese website catalog with the consolidated thermobot workflow.
+
 ## [0.2.17] - 2026-09-22
 
 ### Changed
