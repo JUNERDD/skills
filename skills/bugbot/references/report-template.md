@@ -14,7 +14,10 @@
 - Diff mode: `[branch changes | uncommitted changes]`
 - Requested base: `[branch or None]`
 - Resolved baseline: `[merge-base commit | HEAD commit]`
+- Reviewed HEAD: `[commit ID]`
 - Reviewed target: `[current working tree plus untracked non-ignored files]`
+- Input fingerprint: `[SHA-256 and construction: tracked binary diff plus sorted untracked paths/content hashes; exclude the new report and out-of-scope prior reports, retain explicitly requested review documentation]`
+- Snapshot consistency: `[unchanged at handoff | reconciled changes | drift causing incomplete coverage]`
 - Changed files: `[count]`
 - Completion: `[Complete within reviewed scope | Incomplete - exact reason]`
 - Custom instructions: `[None | concise summary]`
@@ -36,7 +39,7 @@ If no findings exist, write `No introduced production bugs identified in the rev
 
 | ID | Severity | Category | Location | Title |
 | --- | --- | --- | --- | --- |
-| `B1` | `[high | medium | low]` | `[category]` | `[path:start-end](/absolute/path#Lstart)` | `[title]` |
+| `B1` | `[high / medium / low]` | `[category]` | `[path:start-end](/absolute/path#Lstart)` | `[title]` |
 
 ## Findings
 
@@ -59,11 +62,13 @@ Evidence:
 
 ## Detection Coverage Ledger
 
-Account for every changed area and every meaningful candidate added by the recursive sweep.
+Account for every changed area, its affected behaviors, and every meaningful candidate added by the recursive sweep. Use event sequences for stateful behavior and input/output cases for stateless behavior; include relevant intermediate outcomes. Expected behavior needs a source, not just an assertion that the implementation is intended.
 
-| Area / candidate | Changed entry point | Status | Result | Evidence / next step |
-| --- | --- | --- | --- | --- |
-| `[candidate]` | `[repository-relative path:start-end]` | `[Finding B# | Reviewed - no bug found | Not production-relevant | Not covered]` | `[short conclusion]` | `[evidence, or blocker plus concrete next step]` |
+| Area / behavior / candidate | Changed entry point | Trigger / event sequence | Expected behavior and source | Status | Evidence / exclusion / next step |
+| --- | --- | --- | --- | --- | --- |
+| `[candidate]` | `[repository-relative path:start-end]` | `[input or ordered events, relevant identity/scope and intermediate outcome]` | `[contract and its source]` | `[Finding B# / Reviewed - no bug found / Not production-relevant / Not covered]` | `[static causal trace, existing test, or authorized runtime evidence; for dismissal, the invariant excluding failure; for uncovered work, blocker and concrete next step]` |
+
+`Reviewed - no bug found` describes the examined case and its exclusion evidence, not exhaustive safety. A material unresolved dependency or platform assumption belongs in `Not covered`. Runtime absence alone is not a blocker when static evidence resolves the behavior.
 
 ## Evidence Appendix
 
@@ -71,7 +76,7 @@ Account for every changed area and every meaningful candidate added by the recur
 
 | Path | Change status | Production surfaces considered |
 | --- | --- | --- |
-| `[repository-relative path]` | `[modified | added | deleted | renamed | untracked]` | `[contracts, callers, persistence, async effects, tests, none, or unknown]` |
+| `[repository-relative path]` | `[modified / added / deleted / renamed / untracked]` | `[contracts, callers, persistence, async effects, tests, none, or unknown]` |
 
 ### Verification Commands
 
@@ -82,9 +87,9 @@ Account for every changed area and every meaningful candidate added by the recur
 
 If none exist, write `None.`
 
-| Candidate | Decision | Reason |
+| Candidate | Decision | Reason / exclusion evidence |
 | --- | --- | --- |
-| `[candidate]` | `[dismissed | merged into B# | not production-relevant]` | `[evidence]` |
+| `[candidate]` | `[dismissed / merged into B# / not production-relevant]` | `[evidence]` |
 
 ### Blind Spots
 
@@ -97,7 +102,10 @@ If none exist, write `None identified.`
 ## Report Self-Check
 
 - `[yes | no]` Every finding appears in both `Complete Findings Index` and `Findings`.
-- `[yes | no]` Every meaningful recursive candidate appears in `Detection Coverage Ledger`.
+- `[yes | no]` The reviewed input snapshot is identified and consistent with the evidence.
+- `[yes | no]` Every changed area, affected behavior, and meaningful recursive candidate appears in `Detection Coverage Ledger`.
+- `[yes | no]` Relevant entry, exit, replacement, intermediate, and terminal behavior is accounted for; inapplicable transitions are not required.
+- `[yes | no]` Substantive no-bug conclusions name examined cases and concrete exclusion evidence.
 - `[yes | no]` Every `Finding B#` ledger row maps to a finding card.
 - `[yes | no]` Every `Not covered` row names a blocker and next step, and completion is `Incomplete`.
 - `[yes | no]` Severity counts match the finding cards.

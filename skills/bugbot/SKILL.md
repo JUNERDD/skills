@@ -15,6 +15,7 @@ Execute the workflow here; do not delegate detection to Cursor's builtin `bugbot
 ## Route And Authorization
 
 - Use `Action: detect` for a fresh Bugbot review request.
+- Requests to explain, evaluate, or modify this skill are maintenance tasks, not fresh detection requests.
 - Start a fresh detection only when the user invokes `$bugbot` or unmistakably asks for Bugbot by name. Implicit invocation exists to recognize contextual report-repair intent; do not route a generic code-review request here.
 - Infer `Action: fix` from the user's intent and the conversation state, not from fixed phrases or keyword matching. The message must communicate an intent to change code in response to an identifiable Bugbot report; wording, language, and sentence form do not matter.
 - Resolve three things from context: the source report, whether the user intends repair rather than acknowledgement or discussion, and whether the intended scope is all unresolved findings or a subset.
@@ -27,9 +28,9 @@ After detection, write the report and provide its short handoff summary. Stop fo
 
 ## Boundary
 
-- Use this skill for a narrow defect-first review, a persisted Bugbot report, and intent-gated local repairs.
+- Use this skill for a narrow defect-first review, a persisted Bugbot report, and intent-gated local repairs. User-visible correctness is in scope: wrong-object content, broken navigation, lost edits, and unusable input are functional defects when supported by evidence.
 - Use `code-review` for a deep merge-safety report.
-- Use `regression-review` for a coverage-led user-visible behavior audit.
+- Use `regression-review` for broader user-journey coverage beyond behavior causally affected by this diff.
 - Use `thermobot` or `hack-review` for structural quality or brittle-shortcut analysis.
 
 ## Inputs
@@ -67,18 +68,32 @@ For either mode, also inventory untracked, non-ignored files with `git ls-files 
 
 Do not recursively review Bugbot's own prior report artifacts as production changes. When a persisted report falls inside the resolved change set and the user did not explicitly include review documentation, classify it as `Not production-relevant` in the report inventory and continue.
 
+Record the baseline and reviewed HEAD commit IDs, the complete file inventory, and a SHA-256 fingerprint of the tracked binary diff plus sorted untracked paths and content hashes. Capture this before writing the report. Exclude the new report and prior review artifacts outside the requested scope; include review documentation the user explicitly asked to review. Recheck the inputs before handoff. If they changed, reconcile the affected traces or mark their coverage incomplete rather than combining evidence from different snapshots.
+
 If the repository, baseline, or complete change set cannot be resolved, stop and return a concise explanation without fabricating a report. Once a reviewable change set has been obtained, always persist the result. If later evidence gaps prevent complete coverage, mark the report `Incomplete`, name the exact uncovered candidates, and never present the partial review as complete.
+
+### Map Affected Behavior
+
+Use the diff inventory to identify the behaviors the change can affect before judging individual candidates. For each substantive behavior, establish its expected result from user requirements, repository contracts, callers, or preserved baseline behavior. Treat comments as claims to check against the implementation, not independent proof that it is correct.
+
+For stateful or asynchronous behavior, identify the state owner, the identity or scope in which it is valid, and the events that change it. Trace relevant event sequences through intermediate observable results as well as the final state. Choose sequences supported by the changed code: for example, switching objects during pending work, leaving and re-entering a view, cancellation racing completion, or the same resource acquiring a new identifier. Include platform or layout variants when they change these transitions. Do not impose an exhaustive cross-product or a framework-specific checklist on unrelated changes.
+
+Challenge the assumptions joining those steps. A selected object need not be the currently open object; a mounted component need not be visible; a fulfilled request need not still belong to the current owner. Determine which invariant or lifecycle boundary actually prevents incorrect behavior. For stateless changes, trace the relevant input/output and failure contracts instead.
 
 ### Recursive Defect Sweep
 
 Use a bounded recursive frontier derived from the change set:
 
-1. Seed the frontier from every changed hunk and untracked file, including changed conditions, contracts, call sites, state transitions, data shapes, side effects, and error paths.
-2. For each candidate, inspect its local control flow and trace outward only as far as needed through callers, callees, shared contracts, validation, persistence, async boundaries, and tests to prove or dismiss an introduced production bug.
+1. Seed the frontier from the affected behaviors and every changed hunk or untracked file, including changed conditions, contracts, call sites, state transitions, data shapes, side effects, and error paths.
+2. For each candidate, inspect its local control flow and trace outward only as far as needed through callers, callees, shared contracts, validation, persistence, async boundaries, and existing tests to prove or dismiss an introduced production bug. Unchanged code may complete the causal path; anchor a finding to the changed trigger and cite the unchanged failure site as supporting evidence.
 3. When that trace exposes another risk causally connected to the reviewed change, add it to the frontier. Merge candidates that share one root cause and production impact.
-4. Continue until no unreviewed diff-derived candidate remains. Do not widen the frontier into an unrelated whole-repository or structural-quality audit.
+4. Cross-check the frontier against the file inventory and affected behaviors, including relevant entry, exit, replacement, and terminal states. Finish only when both that coverage and the candidate sweep are accounted for. An empty frontier alone does not establish complete coverage. Do not widen the frontier into an unrelated whole-repository or structural-quality audit.
 
 Account for each meaningful frontier item in the report's `Detection Coverage Ledger` as `Finding B#`, `Reviewed - no bug found`, `Not production-relevant`, or `Not covered`. A material unresolved candidate makes the report incomplete.
+
+For a substantive `Reviewed - no bug found` entry, record the examined trigger or event sequence and the concrete evidence that excludes the suspected failure. Reading a file, accepting a comment, or passing a type check does not establish behavior correctness. If a consequential assumption about a dependency or platform remains unresolved, record the missing evidence and next step as `Not covered`, not a confirmed finding or a dismissal. Static causal evidence can be sufficient; lack of browser execution alone does not make every review incomplete. Runtime access and new tests remain subject to the user's authorization and repository rules.
+
+For large change sets, work in coherent behavior groups while maintaining the full inventory and cross-group contracts. Context or time limits do not justify silently dropping groups or declaring them reviewed; report their exact remaining coverage if completion is blocked.
 
 Do not cap the number of findings or stop after the most severe or easiest bugs. Include every distinct finding discovered before the frontier reaches its fixed point.
 
@@ -139,6 +154,8 @@ Map the report recommendation mechanically:
 - Otherwise: `Pass`.
 
 Before handoff, confirm that every indexed finding has one card, every `Finding B#` ledger row resolves to that card, every `Not covered` row names a blocker and next step, severity counts match the cards, and the recommendation follows the mapping.
+
+`Complete within reviewed scope` describes the accounted-for change and behavior coverage, not a guarantee that no bugs exist. Separate confirmed findings, evidence-backed dismissals, and remaining blind spots in the handoff.
 
 Return a short summary with the report path, report ID, recommendation, completion status, severity counts, and top risks. Do not reproduce the full report in chat or append a repair prompt.
 

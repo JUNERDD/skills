@@ -902,17 +902,17 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A two-phase local-diff reviewer with durable Markdown reports and low-friction, report-scoped repair.",
     overview:
-      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection inventories tracked and untracked files, recursively follows diff-derived candidates until a bounded fixed point, and persists every verified production bug in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
+      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection records a review snapshot and traces affected behavior contracts through state transitions, intermediate outcomes, and causally relevant dependencies. Completion accounts for both changed areas and affected behaviors, with concrete exclusion evidence for important dismissed candidates and explicit gaps for material unresolved assumptions. Every verified production bug is persisted in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
     bestFor: [
       "Reviewing current branch work against the repository default branch or a named base.",
       "Reviewing staged, unstaged, and untracked local changes against HEAD.",
       "Producing an uncapped durable report, then repairing all or selected findings from contextually recognized intent.",
     ],
     workflow: [
-      "Resolve the repository, comparison mode, baseline, tracked diff, and untracked-file inventory.",
-      "Seed a candidate frontier from every changed hunk and untracked file.",
-      "Trace each candidate only through causally relevant control flow, dependencies, contracts, state, and failure paths.",
-      "Add newly exposed diff-connected risks until the frontier reaches a fixed point, then verify and de-duplicate by root cause.",
+      "Resolve the change set and record the reviewed HEAD, baseline, inventory, and change-set fingerprint.",
+      "Derive affected behavior contracts from changed hunks and untracked files, including state ownership and relevant event sequences.",
+      "Trace intermediate outcomes and failure paths through causally relevant dependencies; add newly exposed risks and de-duplicate by root cause.",
+      "Require concrete exclusion evidence for important dismissed candidates and account for changed areas and affected behaviors before declaring completion.",
       "Write every distinct verified finding to a unique Markdown report with stable report-local IDs, evidence, coverage, and a recommendation.",
       "After report persistence, apply existing repair authorization from the initial request or later conversation, reverify the selected findings, and run targeted plus required checks without unnecessary repetition.",
     ],
@@ -927,6 +927,7 @@ export const SKILLS: SkillDetail[] = [
       "Resolve repair intent from current and prior user instructions, preserve review-only scope, and ask only when intent, report, or finding scope remains materially unclear.",
       "Do not cap findings or stop after the highest-severity or easiest bugs.",
       "Do not widen the recursive frontier beyond paths causally connected to the reviewed change.",
+      "Do not treat unverified dependency behavior as an excluded failure or infer permission for runtime checks.",
       "Do not stage, commit, push, deploy, or repair distinct new findings without separate authorization.",
     ],
     entryPoints: [
