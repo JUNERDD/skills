@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.18`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.19`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -37,7 +37,6 @@ If you are deciding what to install, start here:
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with hierarchical task and decision ownership
-- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through cursor-delegate with reviewed packets and owned cleanup
 - [`plan-mode`](#plan-mode) - create editable implementation plans within the requested scope
 - [`debug`](#debug) - batch broad first-pass breakpoints, then prove, repair, and verify runtime bugs
 - [`bugbot`](#bugbot) - persist introduced-bug reports, then recognize report-repair intent
@@ -88,7 +87,6 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
@@ -348,7 +346,7 @@ Key entry points:
 
 ### `multitask-coordinator`
 
-[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with hierarchical, dependency-aware subagent scheduling. The root parent builds a task and decision graph, assigns one owner per decision domain and write boundary, delegates exclusive subtrees to subplanners when justified, materializes owned ephemeral shared memory when hierarchy or context handoffs require it, dispatches ready work event by event, routes conflicts, and integrates evidence into a verified result. Invocation is explicit-only: a user must invoke `$multitask-coordinator`; matching prompts do not activate it automatically.
+[`skills/multitask-coordinator/`](./skills/multitask-coordinator/) coordinates non-trivial multi-step work with hierarchical, dependency-aware subagent scheduling. The root parent builds a task and decision graph, assigns one owner per decision domain and write boundary, delegates exclusive subtrees to subplanners when justified, materializes owned ephemeral shared memory when hierarchy or context handoffs require it, dispatches ready work event by event, routes conflicts, and integrates evidence into a verified result. Before freezing implementation contracts, it maps affected existing capabilities and their interaction with the addition into root acceptance. Integration checks meaningful coexistence and handoff scenarios, keeping visual, local-interaction, and end-to-end evidence distinct. Invocation is explicit-only: a user must invoke `$multitask-coordinator`; matching prompts do not activate it automatically.
 
 Workers resolve routine, reversible details within accepted contracts and existing authorization. Shared memory separates the shared container from the owned run directory and keeps consumed versions readable. Before retrying a failed writer, the parent reviews partial changes and supplies a recovery baseline. Validation finishes after required and risk-matched checks pass, unless new changes, failures, or unresolved concerns justify more.
 
@@ -373,39 +371,6 @@ Key entry points:
 - Ephemeral shared memory: [`skills/multitask-coordinator/references/ephemeral-shared-memory.md`](./skills/multitask-coordinator/references/ephemeral-shared-memory.md)
 - Scheduler audit: [`skills/multitask-coordinator/references/scheduler-audit.md`](./skills/multitask-coordinator/references/scheduler-audit.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
-
-### `delegate-to-cursor-sdk`
-
-[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through the independent `cursor-delegate` CLI with reviewed task packets. The skill owns delegation policy, templates, global authorization barriers, user link handoffs, review, acceptance, and a marker-validated private session for temporary packets/logs, while the separate TypeScript CLI owns all `@cursor/sdk` integration and the packaged Next.js authorization/dashboard frontend. Hierarchical mode adds dependency-aware workstream scheduling, effective-concurrency limits, isolated writers, and integration gates without coupling Cursor runtime code or dependencies into the skill.
-
-Install:
-
-```bash
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
-```
-
-This installs the skill only. It does not bundle the independent `cursor-delegate` CLI or its `@cursor/sdk` runtime/dependencies, but it does include a Python-standard-library session/lease wrapper for temporary packet and log ownership. Install `cursor-delegate` from its own project first and verify `cursor-delegate --version`.
-
-Best for:
-
-- dispatching bounded implementation, proposal, or inspect-only packets through `delegation_session.py run --session-file ... --log-name ... -- cursor-delegate ...`, with a foreground lease on every run
-- using the catalog-resolved Grok 4.5 High non-Fast preset for top-level Cursor runs while treating optional SDK result evidence and internal-subagent model labels without overstating verification
-- coordinating independent hierarchical workstreams through a dependency ledger, event-driven readiness, isolated apply-mode writers, and upstream acceptance gates
-- having non-root workstreams fail closed on missing authorization, then letting root recursively stop the full descendant tree, start the packaged Next.js frontend/control plane, and present its local authorization URL plus Cursor API Keys together without automatically opening either link before resuming the recorded agents after verification
-- allowing Cursor task/Agent-tool subagents only under an explicit packet policy
-- monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
-- following step/turn/request/tool/task progress in a sequence-ordered execution tape whose streamed assistant/reasoning text cannot disappear when shorter terminal payloads arrive, with explicit watermarks and snapshot recovery across bounded replay windows
-- reviewing Cursor output, diffs, verification evidence, and repair loops before final acceptance
-- keeping copied packets and ordinary skill-managed CLI logs outside the target repository, while explicit `--retained-log-dir` audit logs remain caller-owned and are never cleaned; the marker-owned session is removed only after terminal frontend shutdown and final upstream acceptance or reconciled/user-authorized abandonment
-
-Key entry points:
-
-- Workflow and guardrails: [`skills/delegate-to-cursor-sdk/SKILL.md`](./skills/delegate-to-cursor-sdk/SKILL.md)
-- Cursor internal subagent policy: [`skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md)
-- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-sdk/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-sdk/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-sdk/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-sdk/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-sdk/references/task-follow-up.md)
-- Independent CLI contract: [`skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md`](./skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md)
-- Temporary-artifact lifecycle and leased dispatch wrapper: [`owned-artifact-cleanup.md`](./skills/delegate-to-cursor-sdk/references/owned-artifact-cleanup.md) and [`delegation_session.py`](./skills/delegate-to-cursor-sdk/scripts/delegation_session.py)
-- Optional runtime metadata: [`skills/delegate-to-cursor-sdk/agents/openai.yaml`](./skills/delegate-to-cursor-sdk/agents/openai.yaml)
 
 ### `plan-mode`
 
@@ -566,7 +531,9 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `bugbot`
 
-[`skills/bugbot/`](./skills/bugbot/) uses a two-phase workflow for local branch or uncommitted changes. Detection inventories tracked and untracked changes, recursively expands a diff-derived candidate frontier through relevant callers, callees, contracts, state, and error paths, and persists every distinct verified bug in a unique Markdown report with finding IDs, coverage, evidence, and a gate recommendation. The report is detection's only write: reviewed code and Git state remain untouched during that phase. Bugbot recognizes repair intent from the full conversation, including an initial request to review and fix. Once the report is persisted, existing repair authorization carries into the fix phase without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope covers all unresolved findings in the latest unambiguous report, while semantic references select a subset. Repairs use targeted verification and required repository checks without unnecessary repeated testing. Bugbot still avoids staging, committing, pushing, or silently fixing distinct new issues.
+[`skills/bugbot/`](./skills/bugbot/) uses a two-phase workflow for local branch or uncommitted changes. Detection records the reviewed HEAD, baseline, and change-set fingerprint, then traces affected behavior contracts through relevant callers, state transitions, intermediate outcomes, and failure paths. Important dismissed candidates need concrete evidence that prevents the failure; material unresolved assumptions remain coverage gaps. Completion requires accounting for both changed areas and affected behaviors. Every distinct verified bug is persisted in a unique Markdown report with finding IDs, coverage, evidence, and a gate recommendation. The report is detection's only write: reviewed code and Git state remain untouched during that phase.
+
+Bugbot recognizes repair intent from the full conversation, including an initial request to review and fix. Once the report is persisted, existing repair authorization carries into the fix phase without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope covers all unresolved findings in the latest unambiguous report, while semantic references select a subset. Repairs use targeted verification and required repository checks without unnecessary repeated testing. Bugbot still avoids staging, committing, pushing, or silently fixing distinct new issues.
 
 Install:
 

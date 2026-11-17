@@ -32,6 +32,8 @@ Apply this workflow within higher-priority instructions and the user's current s
 8. **Process events incrementally.** Inspect each terminal result as it arrives; accept, reject, or request one bounded follow-up. Unlock dependents immediately after acceptance instead of waiting for an unrelated wave.
 9. **Close only on evidence.** Finish when required acceptance criteria are evidenced, required nodes are integrated, decision and contract versions are consistent, residual risks are explicit, and owned ephemeral memory is retained or safely cleaned according to policy.
 
+For changes to an existing system, include affected existing capabilities and their interaction with the addition in root acceptance before freezing implementation contracts. Trace entry points, state/data ownership, handoffs, and outcomes far enough to identify what must remain available. Assign exploration to unresolved boundaries; do not give workers an assumed mode split or ownership change as an established requirement.
+
 ## Decision And Conflict Control
 
 - Let workers resolve routine, reversible implementation details within their scope and accepted contracts. Route shared decision gaps, contract or scope changes, and blockers to the owning planner while independent authorized work continues. Workers may propose options but must not accept or replace shared decisions outside their domain.
@@ -113,6 +115,8 @@ Validation and output:
 ## Synthesis And Verification
 
 Inspect returned artifacts and evidence rather than relying on summaries. Synthesize agreement, conflict, coverage gaps, blockers, and residual risk. Resolve decision conflicts through their owners and adopt only compatible evidence-backed work.
+
+Check the integrated result against the existing-capability map, including meaningful coexistence and handoff scenarios. Passing leaf checks or reusing source components does not prove the combined behavior: an adapter may change action semantics, two surfaces may duplicate one operation, or a new mode may remove an existing entry point. Resolve such gaps at the shared decision owner before declaring acceptance; keep visual, local-interaction, and end-to-end claims distinct.
 
 Complete required checks and the smallest meaningful validation of the change, including affected cross-boundary behavior. Reuse inspected evidence for unchanged inputs. Avoid tests that merely restate a reversible, low-impact edit. Once the relevant checks pass, expand or repeat validation only for new changes, failures, or unresolved concerns.
 

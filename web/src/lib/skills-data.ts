@@ -506,12 +506,14 @@ export const SKILLS: SkillDetail[] = [
     ],
     workflow: [
       "Frame the root specification within existing authorization, then read applicable rules and dirty state before dispatching writers.",
+      "Map affected existing capabilities and their interactions into root acceptance before freezing contracts; explore unresolved boundaries without assuming a mode split or ownership change.",
       "Build a task and decision graph with dependencies, owners, stable inputs, scopes, evidence, and acceptance criteria.",
       "Use an owned run directory inside a shared container for temporary memory when needed, respecting any explicitly designated run path and retention policy.",
       "Keep small or tightly coupled work with the current planner; appoint a subplanner only for an exclusive decomposable subtree.",
       "Bind workers to accepted decision and contract versions, then dispatch useful ready work within ownership, isolation, and integration capacity.",
       "Inspect terminal evidence incrementally, route conflicts by type, and unlock dependents immediately after acceptance.",
       "Before retrying a failed writer, confirm it stopped, review partial changes, and supply a recovery baseline.",
+      "Check integrated behavior against the existing-capability map, including coexistence and handoffs; resolve gaps through the shared decision owner and keep visual, local-interaction, and end-to-end claims distinct.",
       "Complete required and risk-matched integration checks, then finish unless new changes, failures, or unresolved concerns justify more validation.",
     ],
     outputs: [
@@ -548,115 +550,6 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/multitask-coordinator/agents/openai.yaml",
-        description: "Optional agent runtime metadata for this skill.",
-      },
-    ],
-  },
-  {
-    slug: "delegate-to-cursor-sdk",
-    title: "delegate-to-cursor-sdk",
-    category: "Agent coordination",
-    blurb: "Route bounded work to Cursor with reviewed packets and owned cleanup.",
-    lead:
-      "A delegation workflow that calls the independent cursor-delegate CLI while keeping upstream ownership over scope, risk gates, monitoring, final acceptance, and temporary-artifact cleanup.",
-    overview:
-      "Use this skill when bounded coding work should be routed through the independent cursor-delegate CLI for inspect-only, proposal, or apply-mode execution. The skill owns reviewed task packets, orchestration, global authorization barriers, user link handoffs, acceptance, and a marker-validated private session plus standard-library lease wrapper for temporary packets/logs; the separate TypeScript CLI owns all Cursor SDK integration, model resolution, the packaged Next.js authorization/dashboard frontend, workspace safety, and status artifacts.",
-    bestFor: [
-      "Dispatching implementation slices through delegation_session.py run with an exact session marker, unique log name, foreground lease, explicit scope, non-goals, stop conditions, and verification commands.",
-      "Allowing Cursor task/Agent-tool internal subagents only under a packet policy with requested-model limits, concurrency, purpose, and write limits.",
-      "Running planned single-stream work, or coordinating dependency-aware hierarchical workstreams, while preserving parent-agent ownership of shared contracts, integration, and final approval.",
-      "Having non-root workstreams fail closed on missing authorization, then letting root stop the complete descendant tree, start the packaged Next.js frontend/control plane, and present its local authorization URL plus Cursor API Keys together without automatically opening either link before resuming the recorded agents after verification.",
-      "Monitoring long Cursor SDK runs through status.json, including active and recent internal subagents.",
-      "Following the real step/turn/request/tool/task sequence in a bounded execution tape while preserving streamed assistant and reasoning text across terminal reconciliation and replay gaps.",
-      "Running focused repair loops when Cursor output needs narrow follow-up rather than broad re-planning.",
-      "Keeping copied packets and ordinary skill-managed logs outside the target repository, while an explicit retained-log directory remains caller-owned and is never cleaned, then safely deleting only the root-owned temporary session after final acceptance or reconciled abandonment.",
-    ],
-    workflow: [
-      "Classify the task as direct Cursor, planned single-stream, hierarchical orchestration, or blocked; build a dependency ledger and effective-concurrency bound only for hierarchical work.",
-      "Create one private marker-owned session, then prepare the bounded task packet and run every dispatch through delegation_session.py with the exact marker and a unique log name; use an absolute caller-owned retained-log directory only for durable evidence that cleanup must never delete.",
-      "Resolve the catalog-defined Grok 4.5 High non-Fast preset for new top-level Cursor runs; validate any structured model evidence the SDK reports without inventing optional evidence, and treat internal task/Agent-tool model labels as requests because the current SDK does not expose their structured parameters.",
-      "Check that cursor-delegate is installed; non-root agents use fail-only auth, and root recursively confirms every descendant and owned process stopped before starting the CLI-owned loopback flow and presenting both status URLs to the user.",
-      "Review Cursor reports, task/Agent tool-call evidence, diffs, verification results, scope boundaries, and repair output before final acceptance.",
-      "After all CLI/frontend processes, authorization paths, follow-ups, and workstreams are terminal, preserve bounded evidence and run the allowlisted cleanup helper for the exact owned session.",
-    ],
-    outputs: [
-      "A routing decision with mode, risk gates, workspace strategy, Cursor mode, model defaults, internal subagent policy, and hierarchical scheduling limits when applicable.",
-      "A Cursor task packet or repair packet ready for reviewed CLI dispatch.",
-      "A final review verdict grounded in logs, diffs, verification evidence, and any internal subagent reports.",
-      "A cleanup disposition showing that the exact skill-owned session was removed or retained for a specific continuation/ownership reason.",
-    ],
-    guardrails: [
-      "Do not use this skill unless the user explicitly invokes delegate-to-cursor-sdk or $delegate-to-cursor-sdk.",
-      "Treat the independently installed cursor-delegate command as a prerequisite; installing the skill does not install the CLI.",
-      "Do not install SDK dependencies in the skill directory or recreate the CLI with ad hoc code when cursor-delegate is missing.",
-      "Do not allow Cursor internal subagents unless the task packet includes a Cursor Internal Subagent Policy.",
-      "Treat needs_authorization as a global barrier: do not leave other agents running, and do not resume them after cancellation or failure.",
-      "Keep loopback authorization root-owned; never interrupt a child with an unaccounted CLI/frontend process, and never automatically open either authorization URL.",
-      "Keep session cleanup ownership with root throughout; non-root agents hand over evidence and process disposition only, never ownership.",
-      "Never delete caller-owned packets, retained audit directories, repository files, branches/worktrees, or ambiguous sessions; cleanup is marker-bound, allowlisted, root-owned, and gated on final acceptance or explicitly reconciled abandonment.",
-      "Treat cleanup as a one-time ownership-proven action: after the marker is deleted, a repeated call must refuse because ownership cannot be proven again.",
-      "Do not treat support, planning, workstream, or internal subagent output as final authority without upstream review.",
-      "Do not commit, push, deploy, rotate credentials, alter billing, or broaden scope unless explicitly requested and reviewed.",
-    ],
-    entryPoints: [
-      {
-        label: "Workflow",
-        path: "skills/delegate-to-cursor-sdk/SKILL.md",
-        description: "Routing, model defaults, guardrails, review ownership, and final reporting rules.",
-      },
-      {
-        label: "Internal subagents",
-        path: "skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md",
-        description: "Cursor task/Agent-tool policy, evidence, and requested-model verification limits.",
-      },
-      {
-        label: "Direct task packet",
-        path: "skills/delegate-to-cursor-sdk/references/task-direct.md",
-        description: "Template for direct Cursor implementation packets.",
-      },
-      {
-        label: "Planned task packet",
-        path: "skills/delegate-to-cursor-sdk/references/task-planned.md",
-        description: "Template for upstream-reviewed plan implementation packets.",
-      },
-      {
-        label: "Local workstream packet",
-        path: "skills/delegate-to-cursor-sdk/references/task-local.md",
-        description: "Template for bounded hierarchical workstream packets.",
-      },
-      {
-        label: "User-plan packet",
-        path: "skills/delegate-to-cursor-sdk/references/task-user-plan.md",
-        description: "Template for accepted user-provided plan packets.",
-      },
-      {
-        label: "Follow-up packet",
-        path: "skills/delegate-to-cursor-sdk/references/task-follow-up.md",
-        description: "Template for bounded review follow-up packets.",
-      },
-      {
-        label: "Authorization barrier",
-        path: "skills/delegate-to-cursor-sdk/references/cursor-sdk-authorization.md",
-        description: "Agent-guided loopback authorization, two-link Cursor API-key guidance, secret handling, and all-agent pause/resume rules.",
-      },
-      {
-        label: "CLI contract",
-        path: "skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md",
-        description: "Independent CLI availability, command surface, defaults, overrides, logs, and maintenance contract.",
-      },
-      {
-        label: "Artifact cleanup",
-        path: "skills/delegate-to-cursor-sdk/references/owned-artifact-cleanup.md",
-        description: "Private session ownership, cleanup gates, retained evidence, and safe deletion rules.",
-      },
-      {
-        label: "Session helper",
-        path: "skills/delegate-to-cursor-sdk/scripts/delegation_session.py",
-        description: "Create marker-owned packet/log/lease sessions, run each dispatch under a foreground lease, and safely clean the owned session once while preserving retained logs.",
-      },
-      {
-        label: "Runtime metadata",
-        path: "skills/delegate-to-cursor-sdk/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],
@@ -902,17 +795,17 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A two-phase local-diff reviewer with durable Markdown reports and low-friction, report-scoped repair.",
     overview:
-      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection inventories tracked and untracked files, recursively follows diff-derived candidates until a bounded fixed point, and persists every verified production bug in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
+      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection records a review snapshot and traces affected behavior contracts through state transitions, intermediate outcomes, and causally relevant dependencies. Completion accounts for both changed areas and affected behaviors, with concrete exclusion evidence for important dismissed candidates and explicit gaps for material unresolved assumptions. Every verified production bug is persisted in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
     bestFor: [
       "Reviewing current branch work against the repository default branch or a named base.",
       "Reviewing staged, unstaged, and untracked local changes against HEAD.",
       "Producing an uncapped durable report, then repairing all or selected findings from contextually recognized intent.",
     ],
     workflow: [
-      "Resolve the repository, comparison mode, baseline, tracked diff, and untracked-file inventory.",
-      "Seed a candidate frontier from every changed hunk and untracked file.",
-      "Trace each candidate only through causally relevant control flow, dependencies, contracts, state, and failure paths.",
-      "Add newly exposed diff-connected risks until the frontier reaches a fixed point, then verify and de-duplicate by root cause.",
+      "Resolve the change set and record the reviewed HEAD, baseline, inventory, and change-set fingerprint.",
+      "Derive affected behavior contracts from changed hunks and untracked files, including state ownership and relevant event sequences.",
+      "Trace intermediate outcomes and failure paths through causally relevant dependencies; add newly exposed risks and de-duplicate by root cause.",
+      "Require concrete exclusion evidence for important dismissed candidates and account for changed areas and affected behaviors before declaring completion.",
       "Write every distinct verified finding to a unique Markdown report with stable report-local IDs, evidence, coverage, and a recommendation.",
       "After report persistence, apply existing repair authorization from the initial request or later conversation, reverify the selected findings, and run targeted plus required checks without unnecessary repetition.",
     ],
@@ -927,6 +820,7 @@ export const SKILLS: SkillDetail[] = [
       "Resolve repair intent from current and prior user instructions, preserve review-only scope, and ask only when intent, report, or finding scope remains materially unclear.",
       "Do not cap findings or stop after the highest-severity or easiest bugs.",
       "Do not widen the recursive frontier beyond paths causally connected to the reviewed change.",
+      "Do not treat unverified dependency behavior as an excluded failure or infer permission for runtime checks.",
       "Do not stage, commit, push, deploy, or repair distinct new findings without separate authorization.",
     ],
     entryPoints: [
