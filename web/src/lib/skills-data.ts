@@ -506,12 +506,14 @@ export const SKILLS: SkillDetail[] = [
     ],
     workflow: [
       "Frame the root specification within existing authorization, then read applicable rules and dirty state before dispatching writers.",
+      "Map affected existing capabilities and their interactions into root acceptance before freezing contracts; explore unresolved boundaries without assuming a mode split or ownership change.",
       "Build a task and decision graph with dependencies, owners, stable inputs, scopes, evidence, and acceptance criteria.",
       "Use an owned run directory inside a shared container for temporary memory when needed, respecting any explicitly designated run path and retention policy.",
       "Keep small or tightly coupled work with the current planner; appoint a subplanner only for an exclusive decomposable subtree.",
       "Bind workers to accepted decision and contract versions, then dispatch useful ready work within ownership, isolation, and integration capacity.",
       "Inspect terminal evidence incrementally, route conflicts by type, and unlock dependents immediately after acceptance.",
       "Before retrying a failed writer, confirm it stopped, review partial changes, and supply a recovery baseline.",
+      "Check integrated behavior against the existing-capability map, including coexistence and handoffs; resolve gaps through the shared decision owner and keep visual, local-interaction, and end-to-end claims distinct.",
       "Complete required and risk-matched integration checks, then finish unless new changes, failures, or unresolved concerns justify more validation.",
     ],
     outputs: [
