@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.19] - 2026-11-17
+
+### Changed
+
+- Strengthen Bugbot detection with review snapshot fingerprints, affected behavior traces, concrete exclusion evidence, and explicit coverage gaps.
+- Remove delegate-to-cursor-sdk and its README install guidance and website catalog entry from the collection.
+- Require multitask-coordinator to include existing capabilities in root acceptance and verify coexistence and handoffs before accepting integrated changes.
+- Synchronize README and English/Chinese website guidance with the updated skill workflows.
+
 ## [0.2.18] - 2026-11-10
 
 ### Changed
