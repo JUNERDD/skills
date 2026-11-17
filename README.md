@@ -37,7 +37,6 @@ If you are deciding what to install, start here:
 - [`mr`](#mr) - use and maintain the Git MR/PR helper CLI
 - [`split-commits`](#split-commits) - split a mixed working tree into focused local commits
 - [`multitask-coordinator`](#multitask-coordinator) - coordinate multi-step work with hierarchical task and decision ownership
-- [`delegate-to-cursor-sdk`](#delegate-to-cursor-sdk) - route bounded work through cursor-delegate with reviewed packets and owned cleanup
 - [`plan-mode`](#plan-mode) - create editable implementation plans within the requested scope
 - [`debug`](#debug) - batch broad first-pass breakpoints, then prove, repair, and verify runtime bugs
 - [`bugbot`](#bugbot) - persist introduced-bug reports, then recognize report-repair intent
@@ -88,7 +87,6 @@ npx skills@latest add JUNERDD/skills --skill git-commit
 npx skills@latest add JUNERDD/skills --skill mr
 npx skills@latest add JUNERDD/skills --skill split-commits
 npx skills@latest add JUNERDD/skills --skill multitask-coordinator
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
 npx skills@latest add JUNERDD/skills --skill plan-mode
 npx skills@latest add JUNERDD/skills --skill comment-strategist
 npx skills@latest add JUNERDD/skills --skill exhaustive-code-slimmer
@@ -373,39 +371,6 @@ Key entry points:
 - Ephemeral shared memory: [`skills/multitask-coordinator/references/ephemeral-shared-memory.md`](./skills/multitask-coordinator/references/ephemeral-shared-memory.md)
 - Scheduler audit: [`skills/multitask-coordinator/references/scheduler-audit.md`](./skills/multitask-coordinator/references/scheduler-audit.md)
 - Optional runtime metadata: [`skills/multitask-coordinator/agents/openai.yaml`](./skills/multitask-coordinator/agents/openai.yaml)
-
-### `delegate-to-cursor-sdk`
-
-[`skills/delegate-to-cursor-sdk/`](./skills/delegate-to-cursor-sdk/) routes bounded coding work through the independent `cursor-delegate` CLI with reviewed task packets. The skill owns delegation policy, templates, global authorization barriers, user link handoffs, review, acceptance, and a marker-validated private session for temporary packets/logs, while the separate TypeScript CLI owns all `@cursor/sdk` integration and the packaged Next.js authorization/dashboard frontend. Hierarchical mode adds dependency-aware workstream scheduling, effective-concurrency limits, isolated writers, and integration gates without coupling Cursor runtime code or dependencies into the skill.
-
-Install:
-
-```bash
-npx skills@latest add JUNERDD/skills --skill delegate-to-cursor-sdk
-```
-
-This installs the skill only. It does not bundle the independent `cursor-delegate` CLI or its `@cursor/sdk` runtime/dependencies, but it does include a Python-standard-library session/lease wrapper for temporary packet and log ownership. Install `cursor-delegate` from its own project first and verify `cursor-delegate --version`.
-
-Best for:
-
-- dispatching bounded implementation, proposal, or inspect-only packets through `delegation_session.py run --session-file ... --log-name ... -- cursor-delegate ...`, with a foreground lease on every run
-- using the catalog-resolved Grok 4.5 High non-Fast preset for top-level Cursor runs while treating optional SDK result evidence and internal-subagent model labels without overstating verification
-- coordinating independent hierarchical workstreams through a dependency ledger, event-driven readiness, isolated apply-mode writers, and upstream acceptance gates
-- having non-root workstreams fail closed on missing authorization, then letting root recursively stop the full descendant tree, start the packaged Next.js frontend/control plane, and present its local authorization URL plus Cursor API Keys together without automatically opening either link before resuming the recorded agents after verification
-- allowing Cursor task/Agent-tool subagents only under an explicit packet policy
-- monitoring Cursor runs through sanitized `status.json`, including active and recent internal subagents
-- following step/turn/request/tool/task progress in a sequence-ordered execution tape whose streamed assistant/reasoning text cannot disappear when shorter terminal payloads arrive, with explicit watermarks and snapshot recovery across bounded replay windows
-- reviewing Cursor output, diffs, verification evidence, and repair loops before final acceptance
-- keeping copied packets and ordinary skill-managed CLI logs outside the target repository, while explicit `--retained-log-dir` audit logs remain caller-owned and are never cleaned; the marker-owned session is removed only after terminal frontend shutdown and final upstream acceptance or reconciled/user-authorized abandonment
-
-Key entry points:
-
-- Workflow and guardrails: [`skills/delegate-to-cursor-sdk/SKILL.md`](./skills/delegate-to-cursor-sdk/SKILL.md)
-- Cursor internal subagent policy: [`skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md`](./skills/delegate-to-cursor-sdk/references/cursor-internal-subagents.md)
-- Task packet templates: [`task-direct.md`](./skills/delegate-to-cursor-sdk/references/task-direct.md), [`task-planned.md`](./skills/delegate-to-cursor-sdk/references/task-planned.md), [`task-local.md`](./skills/delegate-to-cursor-sdk/references/task-local.md), [`task-user-plan.md`](./skills/delegate-to-cursor-sdk/references/task-user-plan.md), [`task-follow-up.md`](./skills/delegate-to-cursor-sdk/references/task-follow-up.md)
-- Independent CLI contract: [`skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md`](./skills/delegate-to-cursor-sdk/references/cursor-delegate-cli-reference.md)
-- Temporary-artifact lifecycle and leased dispatch wrapper: [`owned-artifact-cleanup.md`](./skills/delegate-to-cursor-sdk/references/owned-artifact-cleanup.md) and [`delegation_session.py`](./skills/delegate-to-cursor-sdk/scripts/delegation_session.py)
-- Optional runtime metadata: [`skills/delegate-to-cursor-sdk/agents/openai.yaml`](./skills/delegate-to-cursor-sdk/agents/openai.yaml)
 
 ### `plan-mode`
 
