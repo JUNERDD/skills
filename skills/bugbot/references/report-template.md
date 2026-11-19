@@ -11,17 +11,17 @@
 
 ## Scope
 
-- Diff mode: `[branch changes | uncommitted changes]`
-- Requested base: `[branch or None]`
-- Resolved baseline: `[merge-base commit | HEAD commit]`
+- Diff mode: `[branch changes | commit range | uncommitted changes]`
+- Requested base: `[branch, revision range, or None]`
+- Resolved baseline: `[merge-base commit | range start commit | HEAD commit]`
 - Reviewed HEAD: `[commit ID]`
-- Reviewed target: `[current working tree plus untracked non-ignored files]`
-- Input fingerprint: `[SHA-256 and construction: tracked binary diff plus sorted untracked paths/content hashes; exclude the new report and out-of-scope prior reports, retain explicitly requested review documentation]`
+- Reviewed target: `[current working tree plus untracked non-ignored files | staged index | commit range end]`
+- Input fingerprint: `[SHA-256 and construction: tracked binary diff plus sorted untracked paths/content hashes when working tree is in scope; exclude the new report and out-of-scope prior reports, retain explicitly requested review documentation]`
 - Snapshot consistency: `[unchanged at handoff | reconciled changes | drift causing incomplete coverage]`
 - Changed files: `[count]`
 - Completion: `[Complete within reviewed scope | Incomplete - exact reason]`
 - Custom instructions: `[None | concise summary]`
-- Assumptions: `[None | scope, baseline, environment, or intent assumptions]`
+- Assumptions: `[None | scope, baseline, unreviewed branch commits outside scan, environment, or intent assumptions]`
 
 ## Detection Snapshot
 
@@ -68,7 +68,7 @@ Account for every changed area, its affected behaviors, and every meaningful can
 | --- | --- | --- | --- | --- | --- |
 | `[candidate]` | `[repository-relative path:start-end]` | `[input or ordered events, relevant identity/scope and intermediate outcome]` | `[contract and its source]` | `[Finding B# / Reviewed - no bug found / Not production-relevant / Not covered]` | `[static causal trace, existing test, or authorized runtime evidence; for dismissal, the invariant excluding failure; for uncovered work, blocker and concrete next step]` |
 
-`Reviewed - no bug found` describes the examined case and its exclusion evidence, not exhaustive safety. A material unresolved dependency or platform assumption belongs in `Not covered`. Runtime absence alone is not a blocker when static evidence resolves the behavior.
+`Reviewed - no bug found` describes the examined case and its exclusion evidence, not exhaustive safety. For shared or unkeyed mutable state, a `Reviewed - no bug found` dismissal must name both the checked non-normal exit paths (abort, error, empty payload) and the codebase writers checked outside the cited clearing path. A material unresolved dependency or platform assumption belongs in `Not covered`. Runtime absence alone is not a blocker when static evidence resolves the behavior.
 
 ## Evidence Appendix
 
@@ -106,6 +106,7 @@ If none exist, write `None identified.`
 - `[yes | no]` Every changed area, affected behavior, and meaningful recursive candidate appears in `Detection Coverage Ledger`.
 - `[yes | no]` Relevant entry, exit, replacement, intermediate, and terminal behavior is accounted for; inapplicable transitions are not required.
 - `[yes | no]` Substantive no-bug conclusions name examined cases and concrete exclusion evidence.
+- `[yes | no]` Any dismissal of a shared or unkeyed mutable-state leak accounts for non-normal exit paths (abort, error, empty payload) and all codebase writers outside the cited clearing path.
 - `[yes | no]` Every `Finding B#` ledger row maps to a finding card.
 - `[yes | no]` Every `Not covered` row names a blocker and next step, and completion is `Incomplete`.
 - `[yes | no]` Severity counts match the finding cards.

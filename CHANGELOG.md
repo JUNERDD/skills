@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.20] - 2026-11-19
+
+### Changed
+
+- Add youtube-analysis skill combining vidIQ MCP and YouTube Data API v3 for channel/video analysis and creator sourcing with dependency, quota, and credit gates.
+- Extend bugbot with commit-range diff mode, unreviewed-commit notices in uncommitted/staged scans, invariant candidate lenses, universal exclusion for shared mutable state, and large-diff behavior-group sweeps.
+- Synchronize README and English/Chinese website catalog guidance for youtube-analysis and bugbot.
+
 ## [0.2.19] - 2026-11-17
 
 ### Changed

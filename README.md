@@ -6,7 +6,7 @@
 
 Reusable AI agent skills published from a single repository.
 
-Current collection version: [`0.2.19`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
+Current collection version: [`0.2.20`](./VERSION). Release notes are tracked in [`CHANGELOG.md`](./CHANGELOG.md) and published through GitHub Releases.
 
 This repository is a skill collection, not a single-skill package. Installable skills live under [`skills/`](./skills/), and each subfolder is meant to be independently installable and expanded over time. The root [`VERSION`](./VERSION) file tracks the published version of the collection as a whole using SemVer; Git tags and GitHub Releases use the `vX.Y.Z` form. Individual tools or subpackages may keep their own runtime versions when needed.
 
@@ -48,6 +48,7 @@ If you are deciding what to install, start here:
 - [`regression-review`](#regression-review) - review code changes for user-visible behavioral regressions
 - [`receiving-regression-review`](#receiving-regression-review) - consume a regression-review report and verify each finding before changing code
 - [`artifact-template-soft-focus-color-haze`](#artifact-template-soft-focus-color-haze) - create restrained abstract color-haze images from mode-specific style references
+- [`youtube-analysis`](#youtube-analysis) - analyze YouTube channels and videos, or source a creator shortlist from a brief, with vidIQ and the YouTube Data API after dependency and credit checks
 
 ## 📦 Install
 
@@ -103,6 +104,7 @@ npx skills@latest add JUNERDD/skills --skill receiving-hack-review
 npx skills@latest add JUNERDD/skills --skill regression-review
 npx skills@latest add JUNERDD/skills --skill receiving-regression-review
 npx skills@latest add JUNERDD/skills --skill artifact-template-soft-focus-color-haze
+npx skills@latest add JUNERDD/skills --skill youtube-analysis
 ```
 
 For a live checkout that also works with runtimes which only inspect
@@ -531,7 +533,7 @@ python3 skills/debug/scripts/local_log_collector/main.py \
 
 ### `bugbot`
 
-[`skills/bugbot/`](./skills/bugbot/) uses a two-phase workflow for local branch or uncommitted changes. Detection records the reviewed HEAD, baseline, and change-set fingerprint, then traces affected behavior contracts through relevant callers, state transitions, intermediate outcomes, and failure paths. Important dismissed candidates need concrete evidence that prevents the failure; material unresolved assumptions remain coverage gaps. Completion requires accounting for both changed areas and affected behaviors. Every distinct verified bug is persisted in a unique Markdown report with finding IDs, coverage, evidence, and a gate recommendation. The report is detection's only write: reviewed code and Git state remain untouched during that phase.
+[`skills/bugbot/`](./skills/bugbot/) uses a two-phase workflow for local branch, commit-range, or uncommitted changes. Detection records the reviewed HEAD, baseline, and change-set fingerprint (noting any unreviewed branch commits outside uncommitted or staged-only scans), partitions large multi-subsystem diffs into coherent behavior groups with out-of-diff sweeps, applies matching invariant candidate lenses when relevant, and traces affected behavior contracts through relevant callers, state transitions, intermediate outcomes, and failure paths. Important dismissed candidates need concrete evidence that prevents the failure—including non-normal exits and all codebase writers for shared or unkeyed mutable state—while material unresolved assumptions remain coverage gaps. Completion requires accounting for both changed areas and affected behaviors. Every distinct verified bug is persisted in a unique Markdown report with finding IDs, coverage, evidence, and a gate recommendation. The report is detection's only write: reviewed code and Git state remain untouched during that phase.
 
 Bugbot recognizes repair intent from the full conversation, including an initial request to review and fix. Once the report is persisted, existing repair authorization carries into the fix phase without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope covers all unresolved findings in the latest unambiguous report, while semantic references select a subset. Repairs use targeted verification and required repository checks without unnecessary repeated testing. Bugbot still avoids staging, committing, pushing, or silently fixing distinct new issues.
 
@@ -543,14 +545,15 @@ npx skills@latest add JUNERDD/skills --skill bugbot
 
 Best for:
 
-- reviewing current branch changes against the default or a named base branch
-- reviewing staged, unstaged, and untracked local work against `HEAD`
+- reviewing current branch changes against an explicit base, merge target, or repository default branch
+- reviewing an explicit commit range or staged, unstaged, and untracked local work against `HEAD`
 - producing a durable Markdown artifact with every introduced production bug, evidence, and detection coverage
 - repairing and verifying all or selected findings from contextually recognized report-repair intent
 
 Key entry points:
 
 - Detection, report persistence, and intent routing: [`skills/bugbot/SKILL.md`](./skills/bugbot/SKILL.md)
+- Invariant candidate lenses: [`skills/bugbot/references/invariant-lenses.md`](./skills/bugbot/references/invariant-lenses.md)
 - Report template: [`skills/bugbot/references/report-template.md`](./skills/bugbot/references/report-template.md)
 - Report-scoped repair workflow: [`skills/bugbot/references/fix-workflow.md`](./skills/bugbot/references/fix-workflow.md)
 - Optional runtime metadata: [`skills/bugbot/agents/openai.yaml`](./skills/bugbot/agents/openai.yaml)
@@ -751,6 +754,32 @@ Key entry points:
 - Subject-led style reference: [`skills/artifact-template-soft-focus-color-haze/assets/subject-reference.png`](./skills/artifact-template-soft-focus-color-haze/assets/subject-reference.png)
 - Optional runtime metadata: [`skills/artifact-template-soft-focus-color-haze/agents/openai.yaml`](./skills/artifact-template-soft-focus-color-haze/agents/openai.yaml)
 
+### `youtube-analysis`
+
+[`skills/youtube-analysis/`](./skills/youtube-analysis/) analyzes YouTube channels and videos by combining the vidIQ MCP server with the official YouTube Data API v3. It first works out what the user needs to learn or decide, rather than matching the request to a fixed task type, and collects only the evidence that answers it. Before anything is spent it checks that both sources are ready, with per-client setup guidance for whatever is missing, and plans vidIQ credits against the live balance: it reuses paid async results, respects a user-stated cap, and asks before expensive calls. Free API scripts pull channel baselines, description audits, sponsor scans, and anonymized comment digests, and composable analysis modules (performance, content, audience, funnel, creator fit, forecast, benchmark, diagnosis, creator sourcing) turn that evidence into a Markdown report that labels inferences and data only the creator can provide. To find creators for a brief, it runs a quota-planned keyword search with competitor reverse lookup, batch-screens the pool against a scorecard derived from the brief, and deep-vets only the top candidates. It works in any MCP-capable agent; the bundled scripts need Python 3.8+. Implicit invocation is enabled: the agent can start it whenever a request depends on real YouTube channel or video data, and users can also invoke `/youtube-analysis` or `$youtube-analysis` directly. The preflight, credit, and quota gates still run before anything is spent.
+
+Install:
+
+```bash
+npx skills@latest add JUNERDD/skills --skill youtube-analysis
+```
+
+Best for:
+
+- post-mortems of sponsored or influencer videos that underperformed, including attribution gaps between comments and backend leads
+- vetting a creator before signing: audience fit, view stability, competing sponsors, and an assumption-labeled signup estimate
+- channel audits, competitor comparisons, video content breakdowns, and comment sentiment
+- sourcing a creator shortlist for a brief: keyword and competitor discovery, batch screening, public contact emails, and a tiered table
+
+Key entry points:
+
+- Workflow, preflight, and credit gates: [`skills/youtube-analysis/SKILL.md`](./skills/youtube-analysis/SKILL.md)
+- Setup guide per client: [`skills/youtube-analysis/references/setup.md`](./skills/youtube-analysis/references/setup.md)
+- Data source split, per-module credit costs, and API quota: [`skills/youtube-analysis/references/data-sources.md`](./skills/youtube-analysis/references/data-sources.md)
+- Analysis modules: [`skills/youtube-analysis/references/analysis-playbooks.md`](./skills/youtube-analysis/references/analysis-playbooks.md)
+- Scripts: [`skills/youtube-analysis/scripts/`](./skills/youtube-analysis/scripts/) (`preflight.py`, `credit_plan.py`, `fetch_youtube.py`, `analyze_metrics.py`, `discover_channels.py`, `screen_channels.py`)
+- Optional runtime metadata: [`skills/youtube-analysis/agents/openai.yaml`](./skills/youtube-analysis/agents/openai.yaml)
+
 ## 🌱 Growing The Repository
 
 When you add more skills later:
@@ -785,6 +814,7 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       ├── fix-workflow.md
+    │       ├── invariant-lenses.md
     │       └── report-template.md
     ├── code-review/
     │   ├── SKILL.md
@@ -902,10 +932,26 @@ When you add more skills later:
     │   │   └── openai.yaml
     │   └── references/
     │       └── report-template.md
-    └── split-commits/
+    ├── split-commits/
+    │   ├── SKILL.md
+    │   └── agents/
+    │       └── openai.yaml
+    └── youtube-analysis/
         ├── SKILL.md
-        └── agents/
-            └── openai.yaml
+        ├── agents/
+        │   └── openai.yaml
+        ├── references/
+        │   ├── analysis-playbooks.md
+        │   ├── data-sources.md
+        │   └── setup.md
+        └── scripts/
+            ├── analyze_metrics.py
+            ├── credit_plan.py
+            ├── discover_channels.py
+            ├── fetch_youtube.py
+            ├── preflight.py
+            ├── screen_channels.py
+            └── ytapi.py
 ```
 
 ## ⚖️ License
