@@ -795,17 +795,17 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A two-phase local-diff reviewer with durable Markdown reports and low-friction, report-scoped repair.",
     overview:
-      "Use this skill for a narrow Bugbot workflow over local branch or uncommitted changes. Detection records a review snapshot and traces affected behavior contracts through state transitions, intermediate outcomes, and causally relevant dependencies. Completion accounts for both changed areas and affected behaviors, with concrete exclusion evidence for important dismissed candidates and explicit gaps for material unresolved assumptions. Every verified production bug is persisted in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
+      "Use this skill for a narrow Bugbot workflow over local branch, commit-range, or uncommitted changes. Detection records a review snapshot (flagging unreviewed branch commits outside uncommitted or staged-only scans), partitions large multi-subsystem diffs with out-of-diff sweeps, applies matching invariant candidate lenses, and traces affected behavior contracts through state transitions, intermediate outcomes, and causally relevant dependencies. Completion accounts for both changed areas and affected behaviors, with concrete exclusion evidence for important dismissed candidates—including non-normal exit paths and all codebase writers for shared or unkeyed mutable state—and explicit gaps for material unresolved assumptions. Every verified production bug is persisted in a unique Markdown report; that report is its only detection-time write. Repair intent is resolved from the full conversation, including an initial request to review and fix. After persistence, continue authorized repairs without another approval round; review-only requests stop at the report. Clear repair intent with no narrower scope selects all unresolved findings in the latest unambiguous report, while semantic references can select a subset. Run targeted and required checks without silently fixing distinct new findings or mutating Git publication state.",
     bestFor: [
-      "Reviewing current branch work against the repository default branch or a named base.",
-      "Reviewing staged, unstaged, and untracked local changes against HEAD.",
+      "Reviewing current branch work against an explicit base, merge target, or repository default branch.",
+      "Reviewing an explicit commit range or staged, unstaged, and untracked local changes against HEAD.",
       "Producing an uncapped durable report, then repairing all or selected findings from contextually recognized intent.",
     ],
     workflow: [
-      "Resolve the change set and record the reviewed HEAD, baseline, inventory, and change-set fingerprint.",
-      "Derive affected behavior contracts from changed hunks and untracked files, including state ownership and relevant event sequences.",
-      "Trace intermediate outcomes and failure paths through causally relevant dependencies; add newly exposed risks and de-duplicate by root cause.",
-      "Require concrete exclusion evidence for important dismissed candidates and account for changed areas and affected behaviors before declaring completion.",
+      "Resolve the branch, commit-range, or uncommitted change set and record the reviewed HEAD, baseline, inventory, change-set fingerprint, and any unreviewed branch commits outside the scan.",
+      "Derive affected behavior contracts from changed hunks and untracked files, partitioning large diffs into behavior groups and applying matching invariant candidate lenses.",
+      "Trace intermediate outcomes and failure paths through causally relevant dependencies and out-of-diff shared writers; add newly exposed risks and de-duplicate by root cause.",
+      "Require concrete exclusion evidence for important dismissed candidates (including universal exclusion on shared mutable state) and account for changed areas and affected behaviors before declaring completion.",
       "Write every distinct verified finding to a unique Markdown report with stable report-local IDs, evidence, coverage, and a recommendation.",
       "After report persistence, apply existing repair authorization from the initial request or later conversation, reverify the selected findings, and run targeted plus required checks without unnecessary repetition.",
     ],
@@ -828,6 +828,11 @@ export const SKILLS: SkillDetail[] = [
         label: "Workflow",
         path: "skills/bugbot/SKILL.md",
         description: "Phase routing, contextual repair-intent handling, recursive detection, and report persistence.",
+      },
+      {
+        label: "Invariant lenses",
+        path: "skills/bugbot/references/invariant-lenses.md",
+        description: "Candidate lenses and precision guardrails for stateful, async, queue, timeout, fallback, and capability-boundary changes.",
       },
       {
         label: "Report template",
@@ -1303,6 +1308,75 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Runtime metadata",
         path: "skills/artifact-template-soft-focus-color-haze/agents/openai.yaml",
+        description: "Optional agent runtime metadata for this skill.",
+      },
+    ],
+  },
+  {
+    slug: "youtube-analysis",
+    title: "youtube-analysis",
+    category: "YouTube analytics",
+    blurb: "Analyze YouTube channels and videos, or source a creator shortlist from a brief, with vidIQ and the YouTube Data API after dependency and credit checks.",
+    lead:
+      "A YouTube analysis workflow that confirms its data sources are ready and budgets vidIQ credits before spending any.",
+    overview:
+      "Use this skill when the answer depends on real numbers from specific YouTube channels or videos: sponsored-video post-mortems, creator vetting before a deal, channel audits, competitor comparisons, content breakdowns, comment sentiment, or finding creators who fit a brief. It first works out what the user needs to learn or decide instead of matching the request to a fixed task type, then combines the vidIQ MCP server with the official YouTube Data API v3, keeps bulk data on the free API, reuses paid vidIQ results, and ends in a Markdown report that labels inferences and creator-only data. It works in any MCP-capable agent; the bundled scripts need Python 3.8+. Implicit invocation is enabled: the agent can start it whenever a request depends on real YouTube channel or video data, and users can also invoke `$youtube-analysis` directly. The preflight, credit, and quota gates still run before anything is spent.",
+    bestFor: [
+      "Post-mortems of sponsored or influencer videos that underperformed, including attribution gaps between comments and backend leads.",
+      "Vetting a creator before signing: audience fit, view stability, competing sponsors, and an assumption-labeled signup estimate.",
+      "Channel audits, competitor comparisons, video content breakdowns, and comment sentiment.",
+      "Sourcing a creator shortlist for a brief: keyword and competitor discovery, batch screening, public contact emails, and a tiered table.",
+    ],
+    workflow: [
+      "Recognize intent: the objective and the decision it feeds, the subjects and their roles, the evidence that could change the answer, spending limits, and the deliverable.",
+      "Check that vidIQ is connected (free balance call) and run the YouTube Data API preflight; guide setup for whatever is missing.",
+      "Reuse completed vidIQ jobs, then plan paid calls against the live balance or a user-stated cap and confirm expensive plans.",
+      "Pull channel baselines, description audits, sponsor scans, and anonymized comment digests with the free API scripts.",
+      "When creators must be found, discover channels with a quota-planned keyword matrix and competitor lookup, then batch-screen them against a scorecard from the brief.",
+      "Spend credits only on vidIQ-only data such as transcripts, scene timelines, and age-matched view curves.",
+      "Compose the analysis modules the evidence calls for and deliver a Markdown report with sources, inferences, gaps, and credits spent.",
+    ],
+    outputs: [
+      "A readiness table covering vidIQ and the YouTube Data API, with setup steps for anything missing.",
+      "A vidIQ credit plan with per-call costs, remaining balance, and reset date.",
+      "A Markdown report with anonymized commenters, labeled inferences, and a list of data to request from the creator.",
+      "A tiered creator shortlist in Markdown and CSV with median views, conflict flags, and public contact emails with their sources.",
+    ],
+    guardrails: [
+      "Do not spend vidIQ credits before checking the balance and budget; stay within any user-stated cap.",
+      "Do not ask users to paste API keys into chat, and do not scrape youtube.com with yt-dlp or browser automation.",
+      "Do not present demographics inferred from comments as measured data.",
+      "Do not guess creator email addresses; list hidden business emails for the user to reveal.",
+    ],
+    entryPoints: [
+      {
+        label: "Workflow",
+        path: "skills/youtube-analysis/SKILL.md",
+        description: "Intent recognition, preflight, credit gate, data collection, analysis, and delivery steps.",
+      },
+      {
+        label: "Setup guide",
+        path: "skills/youtube-analysis/references/setup.md",
+        description: "vidIQ MCP setup per client and YouTube Data API key storage.",
+      },
+      {
+        label: "Data sources",
+        path: "skills/youtube-analysis/references/data-sources.md",
+        description: "API vs. vidIQ split, tool costs, per-module credit costs, API quota, and data limits.",
+      },
+      {
+        label: "Analysis modules",
+        path: "skills/youtube-analysis/references/analysis-playbooks.md",
+        description: "Composable modules for performance, content, audience, funnel, creator fit, forecasting, benchmarking, diagnosis, and creator sourcing.",
+      },
+      {
+        label: "Scripts",
+        path: "skills/youtube-analysis/scripts/preflight.py",
+        description: "Preflight, credit planning, API fetch, metrics, channel discovery, and screening scripts live alongside this file.",
+      },
+      {
+        label: "Runtime metadata",
+        path: "skills/youtube-analysis/agents/openai.yaml",
         description: "Optional agent runtime metadata for this skill.",
       },
     ],
