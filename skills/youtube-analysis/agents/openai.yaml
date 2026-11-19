@@ -1,0 +1,7 @@
+interface:
+  display_name: "YouTube Analysis"
+  short_description: "Analyze YouTube channels and videos, or source creators for a brief, with vidIQ and the YouTube Data API"
+  default_prompt: "Use $youtube-analysis to check that vidIQ and the YouTube Data API are ready, plan the vidIQ credit spend against my balance, then analyze this YouTube channel or video and write a Markdown report."
+
+policy:
+  allow_implicit_invocation: true
