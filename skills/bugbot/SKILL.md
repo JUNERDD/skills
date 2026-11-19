@@ -1,6 +1,6 @@
 ---
 name: bugbot
-description: Detect introduced production bugs in local branch or uncommitted changes, persist the review as a fresh Markdown report, then repair confirmed findings and verify the fixes. Use when the user requests Bugbot detection or when conversation context shows an unambiguous intent to act on a Bugbot report; detection does not modify reviewed code or Git state.
+description: Detect introduced production bugs in local branch, commit-range, or uncommitted changes, persist the review as a fresh Markdown report, then repair confirmed findings and verify the fixes. Use when the user requests Bugbot detection or when conversation context shows an unambiguous intent to act on a Bugbot report; detection does not modify reviewed code or Git state.
 ---
 
 # Bugbot
@@ -39,8 +39,8 @@ Honor these fields when present:
 
 - `Action`: `detect` or `fix`. Infer `fix` from unambiguous report-repair intent in context; otherwise use `detect` for a fresh Bugbot review request.
 - `Full Repository Path`: absolute repository root. Work there when it differs from the current workspace.
-- `Diff`: `branch changes` or `uncommitted changes`. Default to `branch changes`.
-- `Base Branch`: comparison branch for `branch changes`; otherwise use the repository default branch.
+- `Diff`: `branch changes`, `commit range`, or `uncommitted changes`. Default to `branch changes`.
+- `Base Branch`: explicit comparison target for `branch changes`, or the baseline revision / revision range for `commit range`. When omitted for `branch changes`, resolve an identifiable merge or pull-request target branch before falling back to the repository default branch.
 - `Source Report`: path to the persisted Bugbot report being acted on. Use the most recent unresolved report when this is omitted and unambiguous. Valid only for `fix`.
 - `Selected Findings`: `all` or the confirmed `B#` findings from the source report. A title, file, or location is also valid when it identifies a subset unambiguously. Use only for `fix`.
 - `Custom Instructions`: treat as `<user_instructions>` together with extra constraints in the request.
@@ -51,24 +51,30 @@ Honor these fields when present:
 
 Review the real local change set; do not assume a diff was injected.
 
-For `branch changes`, find the merge-base with `Base Branch` or the repository default branch, then compare the working tree with that merge-base. This includes committed branch work plus staged and unstaged tracked changes.
+For `branch changes`, resolve the comparison target `<base>` in order: an explicit `Base Branch`, an identifiable upstream integration or merge/pull-request target branch when distinguishable from the branch's own remote tracking copy, or the repository default branch. Find the merge-base with `<base>` and compare the working tree against that merge-base. This includes committed branch work plus staged and unstaged tracked changes.
 
 ```bash
 git merge-base HEAD <base>
 git diff <merge-base>
 ```
 
-For `uncommitted changes`, compare the working tree with `HEAD`. This includes staged and unstaged tracked changes but no earlier branch commits.
+For `commit range`, compare the requested start and end revisions (defaulting `<end>` to `HEAD`, such as unpushed commits `@{u}..HEAD` or a merge-target range `<merge-base>..HEAD`). This includes committed changes in the range and excludes working-tree changes unless the request explicitly includes them.
+
+```bash
+git diff <start>..<end>
+```
+
+For `uncommitted changes`, compare the working tree with `HEAD` (or `git diff --cached` when scoped to staged changes). This excludes earlier branch commits. In uncommitted or staged-only mode, run a read-only check against local Git history—comparing `HEAD` with the upstream or resolved merge target and with the latest prior Bugbot report's `Reviewed HEAD` when present—to see whether the branch has unpushed or newly committed commits outside the scanned diff. When such commits exist, record them (count and short SHAs) under `Scope -> Assumptions` and include a concise scope notice in the handoff summary so unreviewed commits do not silently bypass detection.
 
 ```bash
 git diff HEAD
 ```
 
-For either mode, also inventory untracked, non-ignored files with `git ls-files --others --exclude-standard`. Treat each returned path as an added file and review its full contents. Do not include ignored files.
+For modes that include the working tree (`branch changes` and full `uncommitted changes`), also inventory untracked, non-ignored files with `git ls-files --others --exclude-standard`. Treat each returned path as an added file and review its full contents. Do not include ignored files.
 
 Do not recursively review Bugbot's own prior report artifacts as production changes. When a persisted report falls inside the resolved change set and the user did not explicitly include review documentation, classify it as `Not production-relevant` in the report inventory and continue.
 
-Record the baseline and reviewed HEAD commit IDs, the complete file inventory, and a SHA-256 fingerprint of the tracked binary diff plus sorted untracked paths and content hashes. Capture this before writing the report. Exclude the new report and prior review artifacts outside the requested scope; include review documentation the user explicitly asked to review. Recheck the inputs before handoff. If they changed, reconcile the affected traces or mark their coverage incomplete rather than combining evidence from different snapshots.
+Record the baseline and reviewed HEAD commit IDs (and range end commit for `commit range`), the complete file inventory, and a SHA-256 fingerprint of the tracked binary diff plus sorted untracked paths and content hashes when the working tree is in scope. Capture this before writing the report. Exclude the new report and prior review artifacts outside the requested scope; include review documentation the user explicitly asked to review. Recheck the inputs before handoff. If they changed, reconcile the affected traces or mark their coverage incomplete rather than combining evidence from different snapshots.
 
 If the repository, baseline, or complete change set cannot be resolved, stop and return a concise explanation without fabricating a report. Once a reviewable change set has been obtained, always persist the result. If later evidence gaps prevent complete coverage, mark the report `Incomplete`, name the exact uncovered candidates, and never present the partial review as complete.
 
@@ -79,6 +85,8 @@ Use the diff inventory to identify the behaviors the change can affect before ju
 For stateful or asynchronous behavior, identify the state owner, the identity or scope in which it is valid, and the events that change it. Trace relevant event sequences through intermediate observable results as well as the final state. Choose sequences supported by the changed code: for example, switching objects during pending work, leaving and re-entering a view, cancellation racing completion, or the same resource acquiring a new identifier. Include platform or layout variants when they change these transitions. Do not impose an exhaustive cross-product or a framework-specific checklist on unrelated changes.
 
 Challenge the assumptions joining those steps. A selected object need not be the currently open object; a mounted component need not be visible; a fulfilled request need not still belong to the current owner. Determine which invariant or lifecycle boundary actually prevents incorrect behavior. For stateless changes, trace the relevant input/output and failure contracts instead.
+
+When the change set touches stateful orchestration, async lifecycles, shared queues or locks, multi-step timeouts, shared fallback helpers, or security/capability guards, read [references/invariant-lenses.md](references/invariant-lenses.md) and apply only the lenses matching the changed constructs. Treat every lens strictly as a candidate generator; every candidate still requires causal proof under the Finding Bar.
 
 ### Recursive Defect Sweep
 
@@ -91,9 +99,14 @@ Use a bounded recursive frontier derived from the change set:
 
 Account for each meaningful frontier item in the report's `Detection Coverage Ledger` as `Finding B#`, `Reviewed - no bug found`, `Not production-relevant`, or `Not covered`. A material unresolved candidate makes the report incomplete.
 
-For a substantive `Reviewed - no bug found` entry, record the examined trigger or event sequence and the concrete evidence that excludes the suspected failure. Reading a file, accepting a comment, or passing a type check does not establish behavior correctness. If a consequential assumption about a dependency or platform remains unresolved, record the missing evidence and next step as `Not covered`, not a confirmed finding or a dismissal. Static causal evidence can be sufficient; lack of browser execution alone does not make every review incomplete. Runtime access and new tests remain subject to the user's authorization and repository rules.
+For a substantive `Reviewed - no bug found` entry, record the examined trigger or event sequence and the concrete evidence that excludes the suspected failure. Reading a file, accepting a comment, or passing a type check does not establish behavior correctness. Dismissing a suspected cross-object or stale-state leak on shared or unkeyed mutable state—especially when the diff relaxes a gating predicate—requires universal rather than single-path exclusion: citing one normal-path clearing call is insufficient. Exclusion evidence must account for both (a) non-normal exit paths (such as abort, error, or empty payload) where the consumer remains mounted or active, and (b) all writers across the codebase that mutate that shared state without traversing the cited clearing path. If a consequential assumption about a dependency or platform remains unresolved, record the missing evidence and next step as `Not covered`, not a confirmed finding or a dismissal. Static causal evidence can be sufficient; lack of browser execution alone does not make every review incomplete. Runtime access and new tests remain subject to the user's authorization and repository rules.
 
-For large change sets, work in coherent behavior groups while maintaining the full inventory and cross-group contracts. Context or time limits do not justify silently dropping groups or declaring them reviewed; report their exact remaining coverage if completion is blocked.
+For large or multi-subsystem change sets (for example spanning multiple feature roots or roughly 15 or more substantive files):
+
+- Partition the file inventory into coherent runtime behavior groups before seeding candidates, tracing each group deeply rather than compressing multiple subsystems into one shallow pass while maintaining the full inventory and cross-group contracts.
+- Run an explicit out-of-diff sweep across the codebase for every modified shared store/cache field, wrapper or delegate, lock or focus controller, and event handler so external callers and writers outside the diff are not missed.
+- Where the host environment supports read-only helper agents, independent behavior groups may be traced in parallel and reconciled with cross-group seams into one unified report while keeping detection strictly read-only.
+- Context or time limits never justify silently dropping groups or declaring them reviewed; report the exact remaining coverage and mark the report `Incomplete` if completion is blocked.
 
 Do not cap the number of findings or stop after the most severe or easiest bugs. Include every distinct finding discovered before the frontier reaches its fixed point.
 
@@ -108,7 +121,9 @@ Report a finding only when all of these are true:
 
 Investigate logical errors, broken contracts, stale call sites, changed invariants, unsafe external effects, resource leaks, concurrency and ordering faults, significant performance regressions, and security vulnerabilities when the diff makes them relevant.
 
-Do not report style, naming, typos, TODOs, speculative concerns, harmless intentional behavior changes, generic requests for error handling, or minor performance and security notes. Ignore issues that the configured compiler or linter reliably blocks before production; report them only when repository evidence shows the affected path is not checked.
+Do not report style, naming, typos, TODOs, speculative concerns, harmless intentional behavior changes, generic requests for error handling, or minor performance and security notes. Do not misclassify concrete defects as suppressed noise: broken declared timeout or latency budgets (such as leaving an upstream hop unbounded under an explicit deadline), shared-queue head-of-line blocking that stalls live events or lifecycle resets, and security capability widenings (such as flipping an allowlist check to a negated denylist across default, omitted, or hidden callers) are valid production defect candidates when proven.
+
+Keep false positives out through verification: confirm actual caller wiring rather than trusting parameter or callback names, verify upstream or peer contracts when status codes, event phases, or wire protocols cross system or repository boundaries, and verify real invocation frequency, throttling, and input bounds before claiming performance defects. Ignore issues that the configured compiler or linter reliably blocks before production; report them only when repository evidence shows the affected path is not checked.
 
 ### Persistent Report
 
@@ -157,7 +172,7 @@ Before handoff, confirm that every indexed finding has one card, every `Finding 
 
 `Complete within reviewed scope` describes the accounted-for change and behavior coverage, not a guarantee that no bugs exist. Separate confirmed findings, evidence-backed dismissals, and remaining blind spots in the handoff.
 
-Return a short summary with the report path, report ID, recommendation, completion status, severity counts, and top risks. Do not reproduce the full report in chat or append a repair prompt.
+Return a short summary with the report path, report ID, recommendation, completion status, severity counts, top risks, and—when an uncommitted or staged-only scan found unreviewed commits on the branch—a concise scope notice naming them. Do not reproduce the full report in chat or append a repair prompt.
 
 ## Fix
 
