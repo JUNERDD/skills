@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.21] - 2026-11-20
+
+### Changed
+
+- Harden bugbot detection with size-independent repo-wide caller/writer sweeps and grep-hit exhaustion for shared controllers and mutable state.
+- Add exact-branch verification guardrails, concurrency-relaxation and state-backfill parity lenses, an async continuation context-capture lens, and cross-boundary contract discovery.
+- Require honest direct test-coverage reporting and bounded delta re-scan recommendations for untested concurrency or async state-machine repairs in bugbot fix summaries.
+
 ## [0.2.20] - 2026-11-19
 
 ### Changed

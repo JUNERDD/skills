@@ -68,7 +68,7 @@ Account for every changed area, its affected behaviors, and every meaningful can
 | --- | --- | --- | --- | --- | --- |
 | `[candidate]` | `[repository-relative path:start-end]` | `[input or ordered events, relevant identity/scope and intermediate outcome]` | `[contract and its source]` | `[Finding B# / Reviewed - no bug found / Not production-relevant / Not covered]` | `[static causal trace, existing test, or authorized runtime evidence; for dismissal, the invariant excluding failure; for uncovered work, blocker and concrete next step]` |
 
-`Reviewed - no bug found` describes the examined case and its exclusion evidence, not exhaustive safety. For shared or unkeyed mutable state, a `Reviewed - no bug found` dismissal must name both the checked non-normal exit paths (abort, error, empty payload) and the codebase writers checked outside the cited clearing path. A material unresolved dependency or platform assumption belongs in `Not covered`. Runtime absence alone is not a blocker when static evidence resolves the behavior.
+`Reviewed - no bug found` describes the examined case and its exclusion evidence, not exhaustive safety; verify the exact branch's preconditions and visible state rather than dismissing by analogy to another lifecycle transition or operational mode. For shared or unkeyed mutable state, a `Reviewed - no bug found` dismissal must name both the checked non-normal exit paths (abort, error, empty payload) and the codebase writers checked outside the cited clearing path. Uninspected caller/writer clusters from a shared-invariant sweep or material unresolved dependency/platform assumptions belong in `Not covered` and `Blind Spots`. Runtime absence alone is not a blocker when static evidence resolves the behavior.
 
 ## Evidence Appendix
 
@@ -105,8 +105,9 @@ If none exist, write `None identified.`
 - `[yes | no]` The reviewed input snapshot is identified and consistent with the evidence.
 - `[yes | no]` Every changed area, affected behavior, and meaningful recursive candidate appears in `Detection Coverage Ledger`.
 - `[yes | no]` Relevant entry, exit, replacement, intermediate, and terminal behavior is accounted for; inapplicable transitions are not required.
-- `[yes | no]` Substantive no-bug conclusions name examined cases and concrete exclusion evidence.
+- `[yes | no]` Substantive no-bug conclusions verify the exact branch's preconditions and visible state with concrete exclusion evidence (no superficial lifecycle analogies or mode conflation).
 - `[yes | no]` Any dismissal of a shared or unkeyed mutable-state leak accounts for non-normal exit paths (abort, error, empty payload) and all codebase writers outside the cited clearing path.
+- `[yes | no]` Any modified shared lock/focus/ownership controller, delegate/callback wrapper, cancellation path, event handler, or shared mutable state triggered a repository-wide sweep with grep-hit exhaustion (or listed uninspected caller/writer clusters in `Not covered` and `Blind Spots`).
 - `[yes | no]` Every `Finding B#` ledger row maps to a finding card.
 - `[yes | no]` Every `Not covered` row names a blocker and next step, and completion is `Incomplete`.
 - `[yes | no]` Severity counts match the finding cards.

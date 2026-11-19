@@ -28,7 +28,7 @@ Treat the source report as fixed input. Never rewrite it to mark findings resolv
 
 Repair automatically after valid confirmation; do not ask for another approval for ordinary in-scope local edits or verification. Ask again before dependency changes, destructive actions, external mutations, or scope expansion.
 
-Reuse verification that already covers the selected repair. Add tests for an observable failure or contract gap, and finish after relevant checks and required repository gates pass. Repeat or broaden verification only when another edit, failure, or unresolved concern warrants it.
+Reuse verification that already covers the selected repair. Add tests for an observable failure or contract gap, and finish after relevant checks and required repository gates pass. Repeat or broaden verification only when another edit, failure, or unresolved concern warrants it. Do not claim verification safety from passing unrelated test suites or from self-review by the author or solution prescriber; state direct automated test coverage of the modified paths honestly, including when it is zero.
 
 If verification fails, diagnose and adjust only while new evidence supports another correction within the confirmed scope. Do not repeat a failed approach blindly. Stop and report the remaining failure when the next attempt would broaden behavior, require new authority, or lack an evidence-backed in-scope correction.
 
@@ -38,7 +38,7 @@ Do not stage, commit, push, rebase, switch branches, deploy, publish, or modify 
 
 Targeted verification may expose another defect. Do not repair it automatically unless it is the same root cause and an inseparable part of the confirmed repair. Report every distinct new finding as unconfirmed work. A later message whose contextual intent is to address that finding is sufficient; do not require special syntax.
 
-Do not start an automatic detect-fix-detect loop. A fresh full Bugbot review is a separate user-requested phase.
+Do not start an automatic unbounded detect-fix-detect loop. A fresh Bugbot review is a separate user-requested phase. When a repair alters concurrency, locking, ownership, or asynchronous state-machine logic in code with zero direct automated tests, explicitly include a bounded delta re-scan recommendation (in a fresh, independent context scoped to the repair diff) in the repair summary rather than treating unrelated passing suites or author/prescriber self-review as verification safety.
 
 ## Output
 
@@ -47,6 +47,7 @@ Return a concise Markdown summary containing:
 - source Bugbot report ID and path
 - confirmed findings fixed, with affected files
 - selected findings not fixed and why
-- verification commands and outcomes
+- verification commands, outcomes, and direct test coverage (explicitly noting when modified paths have zero direct automated tests rather than claiming safety from unrelated passing suites)
+- bounded delta re-scan recommendation (fresh independent context on the repair diff) whenever the repair altered concurrency, locking, or async state machines with zero direct automated tests
 - distinct new or remaining issues that still require confirmation
 - confirmation that Git staging, commits, branches, remotes, and external systems were left unchanged
