@@ -4,6 +4,14 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.23] - 2026-11-20
+
+### Changed
+
+- Harden bugbot detection with corroborated diff-comment and baseline-equivalence checks, test-mirage auditing, one-hop out-of-diff observer and rollback sweeps, cross-repo helper path/warning propagation, and non-weakening repair guardrails against outdated synthetic tests.
+- Expand bugbot invariant lenses with passive-observer pause-vs-abandon and two-phase skeleton parity, bounded single-flight and handshake promise deadlines, conflated guard and return-union parity checks, and speculative or multi-phase persistence vs. rollback invalidation symmetry.
+- Harden thermobot review and fix workflows with baseline-verified already-over-350 waivers and pre-existing checks, explicit narrow-scope unreviewed-commit notices, one-hop passive-observer sweeps, cross-repo helper warning propagation, and test-mirage and invariant-preservation guardrails.
+
 ## [0.2.22] - 2026-11-20
 
 ### Changed

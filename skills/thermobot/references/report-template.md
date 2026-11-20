@@ -106,7 +106,7 @@ Account for every changed structural area and every candidate the sweep added, i
 - `Status`:
   - `Finding F#` (multiple findings allowed as `Finding F1, F2`; uppercase `F#`)
   - `Merged into F#` (uppercase `F#`)
-  - `Reviewed - no issue` (requires concrete, non-empty structural evidence in `Evidence / next step`—never dismiss by superficial analogy to legacy sibling code, mode conflation, or single-path citation on shared mutable state)
+  - `Reviewed - no issue` (requires concrete, non-empty structural evidence in `Evidence / next step`—never dismiss by superficial analogy to legacy sibling code, mode conflation, single-path citation on shared mutable state, unverified pre-existing claims without inspecting baseline code, diff-added or diff-modified comments without corroboration from baseline code, external or repository contracts, unchanged callers, or external requirements and design docs, or passing tests unchecked for test mirages such as pre-matching state, omitted post-reset call counts, over-mocked internal seams, or synthetic sequences skipping real wiring)
   - `Not review-relevant`
   - `Not covered` (requires a concrete, non-empty blocker plus next step in `Evidence / next step`, and forces `Completion` to start with `Incomplete`)
 
@@ -130,7 +130,7 @@ Add at least one row (one row per changed or untracked file in scope; for pasted
   - `excluded`: non-source classes (`test`, `config`, `docs`, `generated`, `vendored`), lockfiles, snapshots, fixtures, intentionally monolithic external formats, or prior Thermobot reports exempt from the 350-line source gate.
 - `Boundary diagnosis and decision`: write `<diagnosis>; <decision>` or `<decision>` directly, using explicit decision clauses (validated across all rows):
   - `Finding F#` (multiple allowed as `Finding F1, F2`) or `Merged into F#` (uppercase `F#`; valid on any threshold).
-  - `waived - <reason>` (requires a concrete reason; valid for cohesive `>= 350` files or `already over 350` files with shrinkage or non-growth touches).
+  - `waived - <reason>` (requires a concrete reason—never solely a diff-added or diff-modified comment—valid for cohesive `>= 350` files, or for `already over 350` files verified against actual baseline code via `git show <baseline>:<path>` or the diff base side to confirm shrinkage or non-growth touches neither added a responsibility, widened coupling or fan-out exposure, nor duplicated or entrenched a bad ownership boundary).
   - `excluded - <reason>` (requires a concrete reason; use with `Threshold: excluded`, never with `crossed 350` or `already over 350`).
   - `reviewed - no issue` (valid only with `Threshold: under 350`).
   - `not covered - <blocker and next step>` (valid on any threshold, including `crossed 350` and `already over 350`, and requires `Completion` to start with `Incomplete`).

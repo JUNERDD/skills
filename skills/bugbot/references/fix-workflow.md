@@ -21,7 +21,7 @@ Treat the source report as fixed input. Never rewrite it to mark findings resolv
 1. Work in the confirmed repository and read its applicable instructions.
 2. Inspect Git status and preserve unrelated user changes, staged state, and untracked files.
 3. Reverify each selected finding against the current code and its causal path. Mark stale, already-fixed, or disproved findings without editing for them.
-4. Apply the smallest cohesive repair that removes the verified root cause while preserving intended behavior and public contracts.
+4. Apply the smallest cohesive repair that removes the verified root cause while preserving intended behavior and public contracts. Never weaken production invariants or add anti-invariant guards solely to preserve outdated synthetic test expectations that depended on the buggy behavior; update the obsolete test expectation instead (or escalate when test edits fall outside authorized scope).
 5. Include directly necessary tests when they are part of proving the confirmed repair. Do not turn a local fix into a broad refactor.
 6. Run targeted tests, type checks, lint, builds, or non-destructive runtime checks in proportion to the affected behavior.
 7. Inspect the resulting diff and confirm that each selected root cause is removed, no unrelated file changed, and the Git index, branches, and remotes were untouched.
