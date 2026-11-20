@@ -4,6 +4,15 @@ All notable changes to this skill collection are documented in this file.
 
 This project uses SemVer for the collection version. GitHub release tags use the `vX.Y.Z` form.
 
+## [0.2.22] - 2026-11-20
+
+### Changed
+
+- Harden thermobot review scope, snapshots, and sweep gates with branch-base resolution, unreviewed-commit and unstaged-change notices, review snapshot identity and drift checks, upfront subsystem partitioning, grep-hit exhaustion, diff-boundary anchoring, simplification invariant guardrails, and an exact >= 350-line maintained-source threshold.
+- Enable implicit invocation for follow-up thermobot report repairs while keeping fresh reviews explicit-only, add maintenance-task and delegated-authorization guards, allow Blocker/Major cross-boundary carry-forward without wrong-layer workarounds, and require honest direct test-coverage reporting (including 0%) plus bounded fresh-context delta re-scan recommendations for untested stateful or concurrency refactors.
+- Harden scripts/check_report.py against backtick hijacking, cross-column matching, fenced blocks, pipe overflow, placeholder leaks, and Must-review now edge cases, backed by 33 regression tests.
+- Synchronize README and English/Chinese website catalog guidance with the updated thermobot workflow.
+
 ## [0.2.21] - 2026-11-20
 
 ### Changed
