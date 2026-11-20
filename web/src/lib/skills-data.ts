@@ -929,19 +929,19 @@ export const SKILLS: SkillDetail[] = [
     lead:
       "A two-phase structural quality gate: a strict persisted review, then report-scoped, behavior-preserving repair in the same skill.",
     overview:
-      "Use this skill for strict maintainability review; it replaces the former `thermo-review` and `receiving-thermo-review` skills. Review sweeps the requested scope until a recursive candidate frontier reaches a fixed point or is marked incomplete, treats 350 lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique report directory (an entry README, one file per finding, and separate ledgers kept consistent by a bundled checker); that directory is review's only write. Fix reads only the report files the selected findings need, verifies each against current code, pushes back on stale or incorrect claims, applies the smallest cohesive behavior-preserving repair, and checks behavior parity before returning a disposition ledger. A request to review and fix continues into repair once the report is persisted, and a later message with clear intent to act on the report starts the fix phase without a separate receiving skill. Invocation is explicit-only: a user must invoke `$thermobot`; matching prompts do not activate it automatically.",
+      "Use this skill for strict maintainability review; it replaces the former `thermo-review` and `receiving-thermo-review` skills. Review resolves the requested scope (including branch-base resolution, snapshot identity, and notices for unreviewed commits or unstaged work outside narrower scans), sweeps a recursive candidate frontier with exhaustive caller and owner checks (marking any `Not covered` area `Incomplete`), treats `>= 350` lines in maintained source as a trigger for cohesion, dependency, and ownership diagnosis, and persists every distinct finding in a unique report directory (an entry README, one file per finding, and separate ledgers kept consistent by a bundled checker); that directory is review's only write. Fix checks snapshot drift, reads only the report files the selected findings need, verifies each against current code, pushes back on stale or incorrect claims, applies the smallest cohesive behavior-preserving repair without wrong-layer workarounds, and verifies behavior parity with honest direct test-coverage reporting (including `0%`) before returning a disposition ledger. A request to review and fix continues into repair once the report is persisted, and a later message with clear intent to act on an identifiable Thermobot report starts the fix phase without a separate receiving skill. Fresh structural reviews require an explicit `$thermobot` or Thermobot request; implicit invocation exists solely to recognize follow-up repair intent on a Thermobot report and never auto-triggers fresh reviews on generic prompts.",
     bestFor: [
       "Reviewing whether a diff makes the implementation more tangled, oversized, indirect, or hard to extend.",
       "Finding missed code-judo simplifications, cohesive responsibility splits, canonical-ownership moves, and clearer type boundaries.",
       "Producing a report directory that stays navigable on large reviews, then resolving all or selected findings through verified fixes, evidence-backed waivers, or carry-forward decisions.",
     ],
     workflow: [
-      "Set the review scope and baseline, preferring staged changes, then the working tree plus untracked files, when the user does not name a scope.",
-      "Inventory changed files and line counts; for 350-line candidates, map responsibilities, dependency seams, and canonical owners.",
-      "Seed a recursive candidate frontier from file growth, branches, helpers, abstractions, types, ownership boundaries, orchestration, tests, and duplicated blocks, then trace each candidate inward and outward.",
-      "Add newly exposed candidates until the frontier reaches a fixed point or uncovered areas are explicitly marked.",
+      "Set the review scope and baseline (including branch-base resolution, snapshot identity, and notices for unreviewed commits or unstaged work outside narrower scans), preferring staged changes, then the working tree plus untracked files, when the user does not name a scope.",
+      "Inventory changed files and line counts; for >= 350-line maintained-source candidates, map responsibilities, dependency seams, and canonical owners.",
+      "Seed a recursive candidate frontier from file growth, branches, helpers, abstractions, types, ownership boundaries, orchestration, tests, and duplicated blocks, then trace each candidate inward and outward across callers and owners.",
+      "Add newly exposed candidates until the frontier reaches a fixed point, or mark any `Not covered` area explicitly and set the report `Incomplete`.",
       "Persist a unique report directory (README index, one file per finding, coverage and file ledgers) and confirm its consistency with the bundled checker.",
-      "When repair is authorized, read only the selected findings' files, reverify them, push back on stale or incorrect claims, apply cohesive behavior-preserving fixes, and run targeted plus required checks.",
+      "When repair is authorized, check snapshot drift, read only the selected findings' files, reverify them, push back on stale or incorrect claims, apply cohesive behavior-preserving fixes without wrong-layer workarounds, verify behavior parity with honest direct test-coverage reporting (including 0%), and recommend a bounded fresh-context delta re-scan for untested stateful or concurrency refactors.",
     ],
     outputs: [
       "A report directory: an entry README with the findings index and gate recommendation, one file per finding, and separate coverage and file ledgers.",
@@ -950,9 +950,10 @@ export const SKILLS: SkillDetail[] = [
     ],
     guardrails: [
       "Keep the review phase read-only apart from its report; repair only within the user's authorization.",
+      "Start fresh structural reviews only for explicit `$thermobot` or Thermobot requests; implicit invocation exists solely for follow-up intent on an identifiable Thermobot report, not generic code reviews.",
       "Do not treat passing tests as proof that the implementation is structurally sound.",
-      "Do not accept dense formatting, arbitrary relocation, or another count-only tactic as a 350-line remedy.",
-      "Do not hide user-visible behavior changes behind structural cleanup.",
+      "Do not accept dense formatting, arbitrary relocation, wrong-layer workarounds, or another count-only tactic as a >= 350-line remedy.",
+      "Do not hide user-visible behavior changes behind structural cleanup, and report direct test coverage honestly (including 0%).",
       "Do not rewrite the source report, stage or commit fixes, or start an automatic review-fix-review loop.",
       "Use `code-review` instead when correctness, security, privacy, data loss, or merge safety is the main question.",
     ],
@@ -960,7 +961,7 @@ export const SKILLS: SkillDetail[] = [
       {
         label: "Workflow",
         path: "skills/thermobot/SKILL.md",
-        description: "Phase routing, structural standards, 350-line gate, recursive sweep, and report rules.",
+        description: "Phase routing, structural standards, >= 350-line gate, recursive sweep, and report rules.",
       },
       {
         label: "Report template",
